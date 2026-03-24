@@ -1,0 +1,100 @@
+{
+  "name": "vscode-uxp-debugger",
+  "displayName": "UXP Debugger",
+  "description": "Attach to Adobe UXP plugins for debugging via the built-in JS debugger",
+  "version": "0.1.0",
+  "publisher": "your-publisher-id",
+  "license": "MIT",
+  "engines": {
+    "vscode": "^1.85.0"
+  },
+  "categories": [
+    "Debuggers"
+  ],
+  "activationEvents": [
+    "onDebugResolve:uxp",
+    "onCommand:uxp.attach",
+    "onCommand:uxp.discover"
+  ],
+  "main": "./dist/extension.js",
+  "contributes": {
+    "commands": [
+      {
+        "command": "uxp.attach",
+        "title": "UXP: Attach to Adobe UXP Plugin"
+      },
+      {
+        "command": "uxp.discover",
+        "title": "UXP: Discover Running UXP Targets"
+      }
+    ],
+    "debuggers": [
+      {
+        "type": "uxp",
+        "label": "UXP Debug",
+        "configurationAttributes": {
+          "attach": {
+            "required": [],
+            "properties": {
+              "host": {
+                "type": "string",
+                "description": "Host where the UXP host application is running",
+                "default": "localhost"
+              },
+              "port": {
+                "type": "number",
+                "description": "CDP port exposed by the UXP host application",
+                "default": 0
+              },
+              "webRoot": {
+                "type": "string",
+                "description": "Local root of the UXP plugin source code",
+                "default": "${workspaceFolder}"
+              },
+              "hostApp": {
+                "type": "string",
+                "description": "Adobe host application to target (e.g. photoshop, xd, indesign)",
+                "default": ""
+              },
+              "pluginId": {
+                "type": "string",
+                "description": "Specific UXP plugin ID to attach to",
+                "default": ""
+              }
+            }
+          }
+        },
+        "configurationSnippets": [
+          {
+            "label": "UXP: Attach to Plugin",
+            "description": "Attach to a running Adobe UXP plugin",
+            "body": {
+              "type": "uxp",
+              "request": "attach",
+              "name": "Attach to UXP Plugin",
+              "host": "localhost",
+              "webRoot": "^\"\\${workspaceFolder}\""
+            }
+          }
+        ]
+      }
+    ]
+  },
+  "scripts": {
+    "vscode:prepublish": "npm run compile",
+    "compile": "esbuild src/extension.ts --bundle --outfile=dist/extension.js --external:vscode --format=cjs --platform=node --sourcemap",
+    "watch": "esbuild src/extension.ts --bundle --outfile=dist/extension.js --external:vscode --format=cjs --platform=node --sourcemap --watch",
+    "lint": "eslint src --ext ts",
+    "test": "node --experimental-vm-modules node_modules/.bin/jest"
+  },
+  "devDependencies": {
+    "@types/node": "^20.11.0",
+    "@types/vscode": "^1.85.0",
+    "@types/ws": "^8.5.10",
+    "esbuild": "^0.20.0",
+    "typescript": "^5.3.0"
+  },
+  "dependencies": {
+    "ws": "^8.16.0"
+  }
+}
