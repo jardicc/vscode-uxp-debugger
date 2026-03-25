@@ -4,10 +4,20 @@
     {
       "type": "npm",
       "script": "watch",
-      "problemMatcher": [],
       "isBackground": true,
       "label": "npm: watch",
-      "group": "build"
+      "group": "build",
+      "problemMatcher": {
+        "pattern": {
+          "regexp": "^✘ \\[ERROR\\] (.+)$",
+          "message": 1
+        },
+        "background": {
+          "activeOnStart": true,
+          "beginsPattern": "^\\[watch\\] build started",
+          "endsPattern": "^\\[watch\\] build finished"
+        }
+      }
     },
     {
       "type": "npm",

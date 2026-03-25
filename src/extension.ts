@@ -25,7 +25,13 @@ export function activate(context: vscode.ExtensionContext): void {
     vscode.commands.registerCommand("uxp.attach", async () => {
       try {
         // 1. Discover available UXP targets
-        const targets = await discoverUxpTargets(outputChannel);
+        // Also probe any user-configured port (set via the "port" field in launch.json
+        // or via the uxp-debugger.port workspace setting, matching the .debug file port).
+        const configuredPort: number | undefined = vscode.workspace
+          .getConfiguration("uxp-debugger")
+          .get<number>("port");
+        const extraPorts = configuredPort ? [configuredPort] : [];
+        const targets = await discoverUxpTargets(outputChannel, extraPorts);
 
         if (targets.length === 0) {
           vscode.window.showWarningMessage(
@@ -45,18 +51,21 @@ export function activate(context: vscode.ExtensionContext): void {
         );
 
         // 3. Start the CDP proxy that sits between js-debug and the UXP host
-        activeCdpProxy = new CdpProxyServer(target.webSocketUrl, outputChannel);
+        activeCdpProxy = new CdpProxyServer(target.webSocketUrl, target.label, outputChannel);
         const proxyPort = await activeCdpProxy.start();
         outputChannel.appendLine(`CDP proxy listening on port ${proxyPort}`);
 
-        // 4. Build a debug configuration that the built-in JS debugger understands
+        // 4. Build a debug configuration that the built-in JS debugger understands.
+        // pwa-node uses isNode=true → fetches both /json/version and /json/list.
+        // Our proxy has no webSocketDebuggerUrl in /json/version, so js-debug
+        // falls through to /json/list, picks up our page target, and connects
+        // to its webSocketDebuggerUrl directly as a single CDP debug session.
         const debugConfig: vscode.DebugConfiguration = {
-          type: "pwa-chrome",
+          type: "pwa-node",
           request: "attach",
           name: `UXP – ${target.label}`,
           port: proxyPort,
           webRoot: target.webRoot ?? "${workspaceFolder}",
-          // Path-mapping can be extended here as needed
           sourceMaps: true,
           trace: true,
         };
@@ -102,7 +111,7 @@ export function activate(context: vscode.ExtensionContext): void {
   // Clean up the proxy when a debug session ends
   context.subscriptions.push(
     vscode.debug.onDidTerminateDebugSession(async (session) => {
-      if (session.configuration?.type === "pwa-chrome" && activeCdpProxy) {
+      if (session.configuration?.type === "pwa-node" && activeCdpProxy) {
         outputChannel.appendLine("Debug session ended – stopping CDP proxy.");
         await activeCdpProxy.stop();
         activeCdpProxy = undefined;

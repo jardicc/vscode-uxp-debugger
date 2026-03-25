@@ -30,13 +30,15 @@ import WebSocket from "ws";
  */
 export class CdpProxyServer {
   private readonly targetWsUrl: string;
+  private readonly targetLabel: string;
   private readonly log: vscode.OutputChannel;
   private httpServer: http.Server | undefined;
   private targetWs: WebSocket | undefined;
   private clientWs: WebSocket | undefined;
 
-  constructor(targetWsUrl: string, log: vscode.OutputChannel) {
+  constructor(targetWsUrl: string, targetLabel: string, log: vscode.OutputChannel) {
     this.targetWsUrl = targetWsUrl;
+    this.targetLabel = targetLabel;
     this.log = log;
   }
 
@@ -51,16 +53,46 @@ export class CdpProxyServer {
    */
   async start(): Promise<number> {
     return new Promise<number>((resolve, reject) => {
-      this.httpServer = http.createServer((_req, res) => {
-        // Respond to /json/version so js-debug thinks this is a real Chrome target
+      // A stable fake ID used consistently across /json/list and the WS upgrade path.
+      const targetId = "uxp-proxy-page-0001";
+
+      this.httpServer = http.createServer((req, res) => {
+        const url = req.url ?? "/";
         res.writeHead(200, { "Content-Type": "application/json" });
-        res.end(
-          JSON.stringify({
-            Browser: "Adobe UXP/1.0",
-            "Protocol-Version": "1.3",
-            "WebKit-Version": "0.0",
-          })
-        );
+
+        if (url.startsWith("/json/version")) {
+          // Return browser info WITHOUT a webSocketDebuggerUrl so that
+          // js-debug does not attempt a browser-level CDP connection.
+          // We always connect as a page target via /json/list.
+          res.end(
+            JSON.stringify({
+              Browser: "Adobe UXP",
+              "Protocol-Version": "1.3",
+            })
+          );
+        } else if (url.startsWith("/json/list") || url === "/json" || url === "/json/") {
+          // Match the format returned by a real plugin port (e.g. 9917/json/list).
+          const addr = this.httpServer!.address();
+          const port = addr && typeof addr === "object" ? addr.port : 0;
+          const wsUrl = `ws://127.0.0.1:${port}/devtools/page/${targetId}`;
+          res.end(
+            JSON.stringify([
+              {
+                description: "Adobe UXP",
+                devtoolsFrontendUrl: `devtools://devtools/bundled/inspector.html?experiments=true&ws=127.0.0.1:${port}/devtools/page/${targetId}`,
+                documentName: "",
+                faviconUrl: "https://wwwimages2.adobe.com/favicon.ico",
+                id: targetId,
+                title: this.targetLabel,
+                type: "page",
+                url: "",
+                webSocketDebuggerUrl: wsUrl,
+              },
+            ])
+          );
+        } else {
+          res.end("{}");
+        }
       });
 
       // Upgrade handler – when js-debug opens a WebSocket to us

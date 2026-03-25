@@ -67,18 +67,28 @@
         "configurationSnippets": [
           {
             "label": "UXP: Attach to Plugin",
-            "description": "Attach to a running Adobe UXP plugin",
+            "description": "Attach to a running Adobe UXP plugin. Pin the debug port by placing a .debug file next to manifest.json: { \"port\": 4243, \"breakOnStart\": false }",
             "body": {
               "type": "uxp",
               "request": "attach",
               "name": "Attach to UXP Plugin",
-              "host": "localhost",
+              "port": 4243,
               "webRoot": "^\"\\${workspaceFolder}\""
             }
           }
         ]
       }
-    ]
+    ],
+    "configuration": {
+      "title": "UXP Debugger",
+      "properties": {
+        "uxp-debugger.port": {
+          "type": "number",
+          "default": 4243,
+          "description": "Plugin debug port to probe during discovery. Must match the port in the plugin's .debug file (place next to manifest.json): { \"port\": 4243, \"breakOnStart\": false }"
+        }
+      }
+    }
   },
   "scripts": {
     "vscode:prepublish": "npm run compile",

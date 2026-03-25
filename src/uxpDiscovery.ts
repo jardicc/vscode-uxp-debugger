@@ -1,5 +1,6 @@
 import * as http from "http";
 import * as vscode from "vscode";
+import WebSocket from "ws";
 
 // ---------------------------------------------------------------------------
 // UXP Target descriptor
@@ -19,83 +20,188 @@ export interface UxpTarget {
 }
 
 // ---------------------------------------------------------------------------
-// Discovery
+// Port constants
 // ---------------------------------------------------------------------------
 
 /**
- * Default ports used by the UXP Developer Tool service.
- * Adobe's UXP Developer Tool typically exposes a JSON endpoint on these ports
- * that lists debuggable plugin targets (similar to Chrome's /json/list).
- *
- * These are the well-known ports for common host applications.
- * You can extend this list as needed.
+ * UDT (UXP Developer Tools) default service port.
+ * Exposes /json/version and a browser-level CDP WebSocket at
+ *   ws://127.0.0.1:14001/socket/browser_cdt/
+ * but does NOT expose /json/list.
  */
-const DEFAULT_DISCOVERY_PORTS = [14001, 14002, 14003];
+const UDT_PORT = 14001;
 
 /**
- * Timeout (ms) for each HTTP probe of a discovery port.
+ * Ports to probe directly for /json/list (plugin CDP endpoints).
+ *
+ * The plugin debug port is DYNAMIC unless fixed via a .debug file placed
+ * next to the plugin's manifest.json:
+ *   { "port": 4243, "breakOnStart": false }
+ *
+ * 4243 is the conventional default used in Adobe documentation.
+ * Additional well-known ports can be added here.
  */
-const PROBE_TIMEOUT_MS = 3000;
+const PLUGIN_PROBE_PORTS = [4243];
 
 /**
- * Discover all running UXP targets by probing known ports for the
- * CDP-compatible JSON listing.
+ * Timeout (ms) per HTTP probe attempt.
+ */
+const PROBE_TIMEOUT_MS = 2000;
+
+/**
+ * Timeout (ms) for the browser-level CDP WebSocket call.
+ */
+const WS_TIMEOUT_MS = 3000;
+
+// ---------------------------------------------------------------------------
+// Public API
+// ---------------------------------------------------------------------------
+
+/**
+ * Discover all running UXP plugin targets.
  *
- * The UXP Developer Tool / host apps expose an HTTP endpoint at
- * `http://localhost:<port>/json` (or `/json/list`) which returns an array
- * of debuggable targets, each with a `webSocketDebuggerUrl`.
+ * Two-phase strategy:
+ *  Phase 1 – Browser CDP via UDT (port 14001):
+ *    Connect to ws://127.0.0.1:14001/socket/browser_cdt/ and call
+ *    Target.getTargets(). If UXP surfaces plugin targets here we use them.
+ *
+ *  Phase 2 – Direct /json/list HTTP probe:
+ *    Probe PLUGIN_PROBE_PORTS for a standard CDP /json/list response.
+ *    This works when the developer has placed a .debug file next to
+ *    their plugin's manifest.json to pin the debug port.
+ *
+ * @param log          Extension output channel for diagnostic messages.
+ * @param extraPorts   Additional ports to probe (e.g. from launch.json config).
  */
 export async function discoverUxpTargets(
-  log: vscode.OutputChannel
+  log: vscode.OutputChannel,
+  extraPorts: number[] = []
 ): Promise<UxpTarget[]> {
   log.appendLine("Starting UXP target discovery…");
 
+  const seen = new Set<string>();
   const allTargets: UxpTarget[] = [];
 
-  // Probe all known ports in parallel
-  const results = await Promise.allSettled(
-    DEFAULT_DISCOVERY_PORTS.map((port) => probePort(port, log))
-  );
+  const addTarget = (t: UxpTarget) => {
+    if (!seen.has(t.webSocketUrl)) {
+      seen.add(t.webSocketUrl);
+      allTargets.push(t);
+    }
+  };
 
+  // Phase 1: browser-level CDP via UDT WebSocket
+  try {
+    const browserTargets = await discoverViaBrowserCdp(log);
+    browserTargets.forEach(addTarget);
+  } catch (err) {
+    log.appendLine(`  Phase 1 (browser CDP) skipped: ${(err as Error).message}`);
+  }
+
+  // Phase 2: direct /json/list on plugin debug ports
+  const portsToProbe = Array.from(new Set([...PLUGIN_PROBE_PORTS, ...extraPorts]));
+  const results = await Promise.allSettled(
+    portsToProbe.map((port) => probePluginPort(port, log))
+  );
   for (const result of results) {
     if (result.status === "fulfilled") {
-      allTargets.push(...result.value);
+      result.value.forEach(addTarget);
     }
   }
 
   log.appendLine(`Discovery complete – found ${allTargets.length} target(s).`);
+
+  if (allTargets.length === 0) {
+    log.appendLine(
+      "Tip: Pin the plugin debug port by placing a .debug file next to manifest.json:\n" +
+      '  { "port": 4243, "breakOnStart": false }'
+    );
+  }
+
   return allTargets;
 }
 
 // ---------------------------------------------------------------------------
-// Internal helpers
+// Phase 1 – Browser CDP via UDT WebSocket
 // ---------------------------------------------------------------------------
 
 /**
- * Probe a single port for CDP target information.
- * Tries both `/json/list` and `/json` paths, which are common conventions.
+ * Connect to the UDT browser-level CDP WebSocket on port 14001 and call
+ * Target.getTargets(). This may surface plugin targets without needing to
+ * know their dynamic port.
  */
-async function probePort(
+async function discoverViaBrowserCdp(
+  log: vscode.OutputChannel
+): Promise<UxpTarget[]> {
+  // First check that UDT is running by probing /json/version
+  const version = await httpGetJson<{ webSocketDebuggerUrl?: string }>(
+    `http://127.0.0.1:${UDT_PORT}/json/version`,
+    PROBE_TIMEOUT_MS
+  );
+
+  const browserWsUrl = version.webSocketDebuggerUrl;
+  if (!browserWsUrl) {
+    throw new Error("UDT /json/version did not return a webSocketDebuggerUrl");
+  }
+
+  log.appendLine(`  Phase 1: connecting to UDT browser CDP at ${browserWsUrl}`);
+
+  const targetsResponse = await cdpCall<{
+    result: { targetInfos: CdpTargetInfo[] };
+  }>(browserWsUrl, { id: 1, method: "Target.getTargets" }, WS_TIMEOUT_MS);
+
+  const targetInfos = targetsResponse?.result?.targetInfos ?? [];
+  log.appendLine(`  Phase 1: Target.getTargets returned ${targetInfos.length} target(s)`);
+
+  return targetInfos
+    .filter((t) => t.type === "page" && t.webSocketDebuggerUrl)
+    .map((t) => ({
+      label: t.title || t.targetId,
+      hostApp: "Photoshop", // UDT currently connects to PS only
+      pluginId: t.targetId,
+      webSocketUrl: t.webSocketDebuggerUrl!,
+    }));
+}
+
+interface CdpTargetInfo {
+  targetId: string;
+  type: string;
+  title: string;
+  url: string;
+  webSocketDebuggerUrl?: string;
+}
+
+// ---------------------------------------------------------------------------
+// Phase 2 – Direct /json/list probe
+// ---------------------------------------------------------------------------
+
+/**
+ * Probe a single port for a CDP /json/list target array.
+ * This works when the plugin has a .debug file that pins the debug port.
+ */
+async function probePluginPort(
   port: number,
   log: vscode.OutputChannel
 ): Promise<UxpTarget[]> {
   for (const path of ["/json/list", "/json"]) {
     try {
-      const raw = await httpGet(`http://localhost:${port}${path}`, PROBE_TIMEOUT_MS);
-      const data = JSON.parse(raw);
-      if (Array.isArray(data)) {
+      const data = await httpGetJson<unknown[]>(
+        `http://127.0.0.1:${port}${path}`,
+        PROBE_TIMEOUT_MS
+      );
+      if (Array.isArray(data) && data.length > 0) {
+        log.appendLine(`  Phase 2: found ${data.length} target(s) on port ${port}`);
         return parseTargets(data, port);
       }
     } catch {
-      // Non-responsive or non-JSON – skip silently
+      // port not open or not a CDP endpoint – ignore
     }
   }
-  log.appendLine(`  Port ${port}: no UXP targets.`);
+  log.appendLine(`  Phase 2: no targets on port ${port}`);
   return [];
 }
 
 /**
- * Parse the raw CDP target list into our UxpTarget format.
+ * Parse a raw /json/list array into UxpTarget descriptors.
  */
 function parseTargets(entries: unknown[], port: number): UxpTarget[] {
   const targets: UxpTarget[] = [];
@@ -119,7 +225,7 @@ function parseTargets(entries: unknown[], port: number): UxpTarget[] {
 
     targets.push({
       label: title,
-      hostApp: inferHostApp(port),
+      hostApp: "Photoshop", // plugin ports are PS-only for now
       pluginId: id,
       webSocketUrl: wsUrl,
     });
@@ -128,39 +234,60 @@ function parseTargets(entries: unknown[], port: number): UxpTarget[] {
   return targets;
 }
 
-/**
- * Very simple heuristic to guess the host application from the port.
- * In production this should be replaced by information from the
- * target metadata or UXP Developer Tool APIs.
- */
-function inferHostApp(port: number): string {
-  switch (port) {
-    case 14001:
-      return "Photoshop";
-    case 14002:
-      return "XD";
-    case 14003:
-      return "InDesign";
-    default:
-      return "Unknown";
-  }
+// ---------------------------------------------------------------------------
+// CDP WebSocket helper — send one command and return the response
+// ---------------------------------------------------------------------------
+
+function cdpCall<T>(
+  wsUrl: string,
+  message: object,
+  timeoutMs: number
+): Promise<T> {
+  return new Promise((resolve, reject) => {
+    const ws = new WebSocket(wsUrl);
+    const timer = setTimeout(() => {
+      ws.terminate();
+      reject(new Error(`CDP call timed out after ${timeoutMs}ms`));
+    }, timeoutMs);
+
+    ws.on("open", () => ws.send(JSON.stringify(message)));
+    ws.on("message", (data) => {
+      clearTimeout(timer);
+      ws.close();
+      try {
+        resolve(JSON.parse(data.toString()) as T);
+      } catch (e) {
+        reject(e);
+      }
+    });
+    ws.on("error", (err) => {
+      clearTimeout(timer);
+      reject(err);
+    });
+  });
 }
 
 // ---------------------------------------------------------------------------
-// Minimal HTTP GET helper (no external dependencies)
+// Minimal HTTP GET helper
 // ---------------------------------------------------------------------------
 
-function httpGet(url: string, timeoutMs: number): Promise<string> {
+function httpGetJson<T>(url: string, timeoutMs: number): Promise<T> {
   return new Promise((resolve, reject) => {
     const req = http.get(url, { timeout: timeoutMs }, (res) => {
       if (res.statusCode !== 200) {
-        res.resume(); // drain
+        res.resume();
         reject(new Error(`HTTP ${res.statusCode}`));
         return;
       }
       const chunks: Buffer[] = [];
       res.on("data", (chunk: Buffer) => chunks.push(chunk));
-      res.on("end", () => resolve(Buffer.concat(chunks).toString("utf-8")));
+      res.on("end", () => {
+        try {
+          resolve(JSON.parse(Buffer.concat(chunks).toString("utf-8")) as T);
+        } catch (e) {
+          reject(e);
+        }
+      });
       res.on("error", reject);
     });
     req.on("timeout", () => {
