@@ -1,6 +1,6 @@
 import * as http from "http";
 import * as vscode from "vscode";
-import WebSocket from "ws";
+import WebSocket, { WebSocketServer } from "ws";
 
 // ---------------------------------------------------------------------------
 // CDP Proxy Server
@@ -36,6 +36,13 @@ export class CdpProxyServer {
   private targetWs: WebSocket | undefined;
   private clientWs: WebSocket | undefined;
 
+  /** IDs used for proxy-initiated CDP messages (not forwarded back to js-debug). */
+  private nextInternalId = -1000;
+  private readonly internalIds = new Set<number>();
+
+  /** Tracks pending Runtime.evaluate request IDs to intercept error responses. */
+  private readonly pendingEvaluateIds = new Set<number>();
+
   constructor(targetWsUrl: string, targetLabel: string, log: vscode.OutputChannel) {
     this.targetWsUrl = targetWsUrl;
     this.targetLabel = targetLabel;
@@ -52,9 +59,11 @@ export class CdpProxyServer {
    * and forward traffic to/from the UXP target.
    */
   async start(): Promise<number> {
+    // Fetch the real target ID from the UXP host's /json/list endpoint.
+    const targetId = await this.fetchTargetId();
+    this.log.appendLine(`Using target ID: ${targetId}`);
+
     return new Promise<number>((resolve, reject) => {
-      // A stable fake ID used consistently across /json/list and the WS upgrade path.
-      const targetId = "uxp-proxy-page-0001";
 
       this.httpServer = http.createServer((req, res) => {
         const url = req.url ?? "/";
@@ -142,7 +151,7 @@ export class CdpProxyServer {
     head: Buffer
   ): void {
     // Create a WebSocket server just for this single connection
-    const wss = new WebSocket.Server({ noServer: true });
+    const wss = new WebSocketServer({ noServer: true });
 
     wss.handleUpgrade(_req, socket, head, (clientWs) => {
       this.clientWs = clientWs;
@@ -153,6 +162,14 @@ export class CdpProxyServer {
 
       this.targetWs.on("open", () => {
         this.log.appendLine(`Connected to UXP target: ${this.targetWsUrl}`);
+
+        // Enable the Runtime domain so that Runtime.evaluate works.
+        // UXP may ignore this, but some runtimes require it.
+        const enableId = this.nextInternalId--;
+        this.internalIds.add(enableId);
+        this.targetWs?.send(
+          JSON.stringify({ id: enableId, method: "Runtime.enable", params: {} })
+        );
       });
 
       // ------ Forward: UXP target → js-debug (client) ------
@@ -213,11 +230,43 @@ export class CdpProxyServer {
     try {
       const msg = JSON.parse(raw);
 
-      // Example: rewrite script URLs so that js-debug can map them to local files.
-      // UXP might report URLs like "uxp://pluginId/index.js" which have no
-      // meaning on the local filesystem.  We translate them to relative paths
-      // so that the webRoot / sourceMapPathOverrides in the debug config
-      // can resolve them.
+      // Swallow responses to proxy-internal requests (e.g. Runtime.enable)
+      if (msg.id !== undefined && this.internalIds.has(msg.id)) {
+        this.internalIds.delete(msg.id);
+        this.log.appendLine(`[CDP] Swallowed internal response id=${msg.id}`);
+        return null;
+      }
+
+      // If UXP returned an error for a Runtime.evaluate request,
+      // send back a synthetic result so the debug console shows a
+      // helpful message instead of crashing or being silent.
+      if (
+        msg.id !== undefined &&
+        this.pendingEvaluateIds.has(msg.id) &&
+        msg.error
+      ) {
+        this.pendingEvaluateIds.delete(msg.id);
+        const errText = msg.error.message || "Evaluation not supported";
+        this.log.appendLine(
+          `[CDP] Runtime.evaluate failed (id=${msg.id}): ${errText}`
+        );
+        return JSON.stringify({
+          id: msg.id,
+          result: {
+            result: {
+              type: "string",
+              value: `[UXP] ${errText}`,
+            },
+          },
+        });
+      }
+
+      // Clean up successful evaluate tracking
+      if (msg.id !== undefined && this.pendingEvaluateIds.has(msg.id)) {
+        this.pendingEvaluateIds.delete(msg.id);
+      }
+
+      // Rewrite script URLs so that js-debug can map them to local files.
       if (msg.method === "Debugger.scriptParsed" && typeof msg.params?.url === "string") {
         msg.params.url = this.normalizeScriptUrl(msg.params.url);
         return JSON.stringify(msg);
@@ -234,10 +283,18 @@ export class CdpProxyServer {
    * the UXP target. Return `null` to swallow the message entirely.
    */
   private rewriteFromClient(raw: string): string | null {
-    // Pass through by default.  Override this to handle any domains
-    // or methods that UXP does not support, and return synthetic
-    // responses instead.
-    return raw;
+    try {
+      const msg = JSON.parse(raw);
+
+      // Track Runtime.evaluate requests so we can intercept UXP errors.
+      if (msg.method === "Runtime.evaluate" && msg.id !== undefined) {
+        this.pendingEvaluateIds.add(msg.id);
+      }
+
+      return raw;
+    } catch {
+      return raw;
+    }
   }
 
   // -----------------------------------------------------------------------
@@ -260,6 +317,54 @@ export class CdpProxyServer {
       return withoutScheme || url;
     }
     return url;
+  }
+
+  // -----------------------------------------------------------------------
+  // Target ID fetching
+  // -----------------------------------------------------------------------
+
+  /**
+   * Fetch `/json/list` from the real UXP host and return the `id` of the
+   * matching target entry. Rejects if the ID cannot be determined.
+   */
+  private fetchTargetId(): Promise<string> {
+    const parsed = new URL(this.targetWsUrl);
+    const listUrl = `http://${parsed.hostname}:${parsed.port}/json/list`;
+
+    return new Promise<string>((resolve, reject) => {
+      const req = http.get(listUrl, { timeout: 2000 }, (res) => {
+        if (res.statusCode !== 200) {
+          res.resume();
+          reject(new Error(`/json/list returned HTTP ${res.statusCode}`));
+          return;
+        }
+        const chunks: Buffer[] = [];
+        res.on("data", (chunk: Buffer) => chunks.push(chunk));
+        res.on("end", () => {
+          try {
+            const entries = JSON.parse(Buffer.concat(chunks).toString("utf-8"));
+            if (Array.isArray(entries)) {
+              // Try to find the entry whose webSocketDebuggerUrl matches ours
+              const match = entries.find(
+                (e: Record<string, unknown>) => e.webSocketDebuggerUrl === this.targetWsUrl
+              );
+              const entry = match ?? entries[0];
+              if (entry && typeof entry.id === "string") {
+                resolve(entry.id);
+                return;
+              }
+            }
+          } catch { /* parse error */ }
+          reject(new Error("Could not determine target ID from /json/list"));
+        });
+        res.on("error", (err) => reject(err));
+      });
+      req.on("timeout", () => {
+        req.destroy();
+        reject(new Error("/json/list request timed out"));
+      });
+      req.on("error", (err) => reject(err));
+    });
   }
 
   // -----------------------------------------------------------------------
