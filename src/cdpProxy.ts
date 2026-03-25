@@ -36,12 +36,17 @@ export class CdpProxyServer {
   private targetWs: WebSocket | undefined;
   private clientWs: WebSocket | undefined;
 
-  /** IDs used for proxy-initiated CDP messages (not forwarded back to js-debug). */
-  private nextInternalId = -1000;
-  private readonly internalIds = new Set<number>();
+  /** IDs used for proxy-initiated CDP messages (not forwarded back to js-debug).
+   *  Must be positive – UXP uses jsoncpp which deserializes `id` as UInt and
+   *  rejects negative values with "LargestInt out of UInt range". */
+  private nextInternalId = 900_000;
+  private readonly internalIds = new Map<number, string>();
 
   /** Tracks pending Runtime.evaluate request IDs to intercept error responses. */
   private readonly pendingEvaluateIds = new Set<number>();
+
+  /** The uniqueId from the latest Runtime.executionContextCreated event. */
+  private executionContextUniqueId: string | undefined;
 
   constructor(targetWsUrl: string, targetLabel: string, log: vscode.OutputChannel) {
     this.targetWsUrl = targetWsUrl;
@@ -165,8 +170,8 @@ export class CdpProxyServer {
 
         // Enable the Runtime domain so that Runtime.evaluate works.
         // UXP may ignore this, but some runtimes require it.
-        const enableId = this.nextInternalId--;
-        this.internalIds.add(enableId);
+        const enableId = this.nextInternalId++;
+        this.internalIds.set(enableId, "Runtime.enable");
         this.targetWs?.send(
           JSON.stringify({ id: enableId, method: "Runtime.enable", params: {} })
         );
@@ -232,8 +237,9 @@ export class CdpProxyServer {
 
       // Swallow responses to proxy-internal requests (e.g. Runtime.enable)
       if (msg.id !== undefined && this.internalIds.has(msg.id)) {
+        const method = this.internalIds.get(msg.id);
         this.internalIds.delete(msg.id);
-        this.log.appendLine(`[CDP] Swallowed internal response id=${msg.id}`);
+        this.log.appendLine(`[CDP] Swallowed internal response id=${msg.id} method=${method}`);
         return null;
       }
 
@@ -266,6 +272,15 @@ export class CdpProxyServer {
         this.pendingEvaluateIds.delete(msg.id);
       }
 
+      // Capture the uniqueId from execution context creation.
+      if (
+        msg.method === "Runtime.executionContextCreated" &&
+        typeof msg.params?.context?.uniqueId === "string"
+      ) {
+        this.executionContextUniqueId = msg.params.context.uniqueId;
+        this.log.appendLine(`[CDP] Captured executionContext uniqueId: ${this.executionContextUniqueId}`);
+      }
+
       // Rewrite script URLs so that js-debug can map them to local files.
       if (msg.method === "Debugger.scriptParsed" && typeof msg.params?.url === "string") {
         msg.params.url = this.normalizeScriptUrl(msg.params.url);
@@ -282,20 +297,38 @@ export class CdpProxyServer {
    * Rewrite / filter a CDP message coming FROM js-debug BEFORE it reaches
    * the UXP target. Return `null` to swallow the message entirely.
    */
-  private rewriteFromClient(raw: string): string | null {
-    try {
-      const msg = JSON.parse(raw);
+	private rewriteFromClient(raw: string): string | null {
+		try {
+			const msg = JSON.parse(raw);
 
-      // Track Runtime.evaluate requests so we can intercept UXP errors.
-      if (msg.method === "Runtime.evaluate" && msg.id !== undefined) {
-        this.pendingEvaluateIds.add(msg.id);
-      }
+			// UXP does not support NodeWorker — swallow the request and send a
+			// synthetic success response so that js-debug does not stall.
+			if (msg.method === "NodeWorker.enable" && msg.id !== undefined) {
+				this.log.appendLine(`[CDP] Swallowed unsupported method NodeWorker.enable (id=${msg.id})`);
+				this.clientWs?.send(JSON.stringify({id: msg.id, result: {}}));
+				return null;
+			}
 
-      return raw;
-    } catch {
-      return raw;
-    }
-  }
+			// Track Runtime.evaluate requests so we can intercept UXP errors.
+			// Append the captured uniqueContextId so UXP can resolve the context.
+			if (msg.method === "Runtime.evaluate" && msg.id !== undefined) {
+				this.pendingEvaluateIds.add(msg.id);
+				if (!this.executionContextUniqueId) {
+					throw new Error("No execution context uniqueId captured yet");
+				}
+				msg.params = msg.params ?? {};
+				if (msg.params.contextId !== undefined) {
+					delete msg.params.contextId;
+				}
+				msg.params.uniqueContextId = this.executionContextUniqueId;
+				return JSON.stringify(msg);
+			}
+
+			return raw;
+		} catch {
+			return raw;
+		}
+	}
 
   // -----------------------------------------------------------------------
   // URL normalization
