@@ -51,7 +51,11 @@ export function activate(context: vscode.ExtensionContext): void {
         );
 
         // 3. Start the CDP proxy that sits between js-debug and the UXP host
-        activeCdpProxy = new CdpProxyServer(target.webSocketUrl, target.label, outputChannel);
+        const workspaceFolder = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath ?? "";
+		    const webRoot = (target.webRoot ?? workspaceFolder) + "\\dist"; // ! do not append "dist"
+        outputChannel.appendLine(`Using webRoot: ${webRoot}`);
+
+        activeCdpProxy = new CdpProxyServer(target.webSocketUrl, target.label, webRoot, outputChannel);
         const proxyPort = await activeCdpProxy.start();
         outputChannel.appendLine(`CDP proxy listening on port ${proxyPort}`);
 
@@ -65,9 +69,20 @@ export function activate(context: vscode.ExtensionContext): void {
           request: "attach",
           name: `UXP – ${target.label}`,
           port: proxyPort,
-          webRoot: target.webRoot ?? "${workspaceFolder}",
+          webRoot: webRoot,
           sourceMaps: true,
           trace: true,
+          resolveSourceMapLocations: null,
+          // TODO - because source map has relative path inside, maybe I should just start with "*" and rewrite everything?
+          sourceMapPathOverrides: {
+            "webpack-internal:///./src/*": `${webRoot}/src/*`,
+            "webpack-internal:///./*": `${webRoot}/*`,
+            "webpack-internal:///*": "*",
+            "webpack:///./~/*": `${webRoot}/node_modules/*`,
+            "webpack:///./*": `${webRoot}/*`,
+            "webpack:///*": "*",
+            "webpack:///src/*": `${webRoot}/*`,
+          },
         };
 
         // 5. Delegate to the built-in JS debugger

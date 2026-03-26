@@ -31,6 +31,7 @@ export interface UxpTarget {
  */
 const UDT_PORT = 14001;
 
+
 /**
  * Ports to probe directly for /json/list (plugin CDP endpoints).
  *
@@ -41,7 +42,7 @@ const UDT_PORT = 14001;
  * 4243 is the conventional default used in Adobe documentation.
  * Additional well-known ports can be added here.
  */
-const PLUGIN_PROBE_PORTS = [4243];
+const PLUGIN_PROBE_PORTS = [9222];
 
 /**
  * Timeout (ms) per HTTP probe attempt.
@@ -90,12 +91,12 @@ export async function discoverUxpTargets(
   };
 
   // Phase 1: browser-level CDP via UDT WebSocket
-  try {
-    const browserTargets = await discoverViaBrowserCdp(log);
-    browserTargets.forEach(addTarget);
-  } catch (err) {
-    log.appendLine(`  Phase 1 (browser CDP) skipped: ${(err as Error).message}`);
-  }
+  //try {
+  //  const browserTargets = await discoverViaBrowserCdp(log);
+  //  browserTargets.forEach(addTarget);
+  //} catch (err) {
+  //  log.appendLine(`  Phase 1 (browser CDP) skipped: ${(err as Error).message}`);
+  //}
 
   // Phase 2: direct /json/list on plugin debug ports
   const portsToProbe = Array.from(new Set([...PLUGIN_PROBE_PORTS, ...extraPorts]));
@@ -124,6 +125,7 @@ export async function discoverUxpTargets(
 // Phase 1 – Browser CDP via UDT WebSocket
 // ---------------------------------------------------------------------------
 
+// ! This does not seem to be supported by UXP at all. But needs to verify from Adobe
 /**
  * Connect to the UDT browser-level CDP WebSocket on port 14001 and call
  * Target.getTargets(). This may surface plugin targets without needing to

@@ -31,6 +31,7 @@ import WebSocket, { WebSocketServer } from "ws";
 export class CdpProxyServer {
   private readonly targetWsUrl: string;
   private readonly targetLabel: string;
+  private readonly webRoot: string;
   private readonly log: vscode.OutputChannel;
   private httpServer: http.Server | undefined;
   private targetWs: WebSocket | undefined;
@@ -48,9 +49,10 @@ export class CdpProxyServer {
   /** The uniqueId from the latest Runtime.executionContextCreated event. */
   private executionContextUniqueId: string | undefined;
 
-  constructor(targetWsUrl: string, targetLabel: string, log: vscode.OutputChannel) {
+  constructor(targetWsUrl: string, targetLabel: string, webRoot: string, log: vscode.OutputChannel) {
     this.targetWsUrl = targetWsUrl;
     this.targetLabel = targetLabel;
+    this.webRoot = webRoot;
     this.log = log;
   }
 
@@ -281,9 +283,24 @@ export class CdpProxyServer {
         this.log.appendLine(`[CDP] Captured executionContext uniqueId: ${this.executionContextUniqueId}`);
       }
 
-      // Rewrite script URLs so that js-debug can map them to local files.
+      // Rewrite script URLs and inline source maps so that js-debug can
+      // map them to local files.
       if (msg.method === "Debugger.scriptParsed" && typeof msg.params?.url === "string") {
         msg.params.url = this.normalizeScriptUrl(msg.params.url);
+
+        // Fix the sourceRoot inside inline source maps so that relative
+        // source paths (e.g. "../src/shared/store.ts") resolve to the
+        // correct local files under webRoot.
+        if (
+          this.webRoot &&
+          typeof msg.params.sourceMapURL === "string" &&
+          msg.params.sourceMapURL.startsWith("data:")
+        ) {
+          msg.params.sourceMapURL = this.rewriteInlineSourceMapRoot(
+            msg.params.sourceMapURL
+          );
+        }
+
         return JSON.stringify(msg);
       }
 
@@ -329,6 +346,58 @@ export class CdpProxyServer {
 			return raw;
 		}
 	}
+
+  // -----------------------------------------------------------------------
+  // Source-map rewriting
+  // -----------------------------------------------------------------------
+  // ! This is bad for perfromance. Find out a way to avoid this if possible.
+  /**
+   * Rewrite the `sourceRoot` inside an inline (data-URL) source map so that
+   * relative `sources` entries resolve to the correct local files.
+   *
+   * Webpack source maps typically contain paths like `../src/shared/store.ts`
+   * which are relative to the output directory (one level below the project
+   * root).  By setting `sourceRoot` to `<webRoot>/_/` we ensure that
+   * `../<path>` resolves back to `<webRoot>/<path>`.
+   */
+  private rewriteInlineSourceMapRoot(dataUrl: string): string {
+    try {
+      // data:application/json;base64,<payload>
+      // data:application/json;charset=utf-8;base64,<payload>
+      // Do not change if this is not data URL or does not look like an inline source map.
+      const requiredPrefix = "data:application/json";
+      if (!dataUrl.slice(0, requiredPrefix.length).toLowerCase().startsWith(requiredPrefix)) {
+        this.log.appendLine(`[CDP] Not an inline source map: ${dataUrl}`);
+        return dataUrl;
+      }
+      const commaIdx = dataUrl.indexOf(",");
+      if (commaIdx === -1) { return dataUrl; }
+      const header = dataUrl.slice(0, commaIdx);  // everything before the comma
+      const payload = dataUrl.slice(commaIdx + 1);
+
+      const json = Buffer.from(payload, "base64").toString("utf-8");
+      const map = JSON.parse(json);
+
+      // Use a file:// URL so that js-debug resolves paths as local files.
+      // The dummy `_` segment is consumed by the `../` in the source entries.
+      const root = "file:///" + this.webRoot.replace(/\\/g, "/") + "/_/";
+      const oldRoot = map.sourceRoot;
+      map.sourceRoot = root;
+
+      this.log.appendLine(
+        `[CDP] Rewrote sourceRoot: ${JSON.stringify(oldRoot)} → ${JSON.stringify(root)}`
+      );
+
+      const newJson = JSON.stringify(map);
+      const newPayload = Buffer.from(newJson, "utf-8").toString("base64");
+      return header + "," + newPayload;
+    } catch (e) {
+      this.log.appendLine(
+        `[CDP] Failed to rewrite inline source map: ${e instanceof Error ? e.message : e}`
+      );
+      return dataUrl;
+    }
+  }
 
   // -----------------------------------------------------------------------
   // URL normalization
