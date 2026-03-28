@@ -1,0 +1,93 @@
+# UXP Debug Architecture Notes
+# Zdroj: adobe-uxp/devtools-cli (GitHub) + vlastní měření portů
+
+==============================================================================
+1. JAK devtools-cli NAJDE ENDPOINT PRO FRONTEND DEBUGGER
+==============================================================================
+
+Architektura má dva hlavní toky:
+
+--- FÁZE A: Nativní Vulcan discovery (najít port UDT Service) ---
+
+Řetězec volání:
+  UDTClient → DevToolsMgr → DevToolsHelper → DevToolNativeLib → nativní C++ Node.js addon
+
+- `DevToolNativeLib.js` načítá precompilovaný `.node` binary přes `node-gyp-build`.
+- Addon exportuje třídu `VulcanAdapter`.
+- `VulcanAdapter` komunikuje přes Adobe Vulcan IPC (viz níže).
+- `VulcanAdapter.getServicePort(callback)` → UDT Service odpoví JSON `{ "port": <číslo> }`.
+- Timeout: 5000 ms, pak rejection s "Cound not connect to the UXP Developer Service."
+
+Relevantní kód (packages/uxp-devtools-helper/src/DevToolsHelper.js):
+  getServicePort() {
+      this._devToolsNative.getServicePort((type, data) => {
+          const payload = JSON.parse(data.payload);
+          prom.resolve(payload.port);  // ← port UDT Service
+      });
+  }
+
+--- FÁZE B: UDT Service jako broker (najít konkrétní plugin CDP endpoint) ---
+
+UDT Service (default port 14001) vystavuje:
+  - GET /json/version  → vrací webSocketDebuggerUrl: "ws://127.0.0.1:14001/socket/browser_cdt/"
+  - GET /json/list     → záměrně vrací prázdný {} (nepodporuje listing plugin targetů!)
+  - WebSocket /socket/browser_cdt/  → browser-level CDP (pro Puppeteer/WebDriver)
+  - WebSocket /socket/cli           → UxpCliClient (CLI příkazy)
+  - WebSocket /socket/cdt/<sessionId> → CDTClient (CDP proxy pro konkrétní plugin)
+
+Flow při "Plugin → debug":
+  1. CLI pošle příkaz: { command: "Plugin", action: "debug", pluginSessionId: "..." }
+  2. AppClient._handlePluginDebugRequest() sestaví odpověď:
+       wsdebugUrl: "ws=127.0.0.1:14001/socket/cdt/<clientSessionId>"
+       chromeDevToolsUrl: "devtools://devtools/bundled/inspector.html?...&ws=..."
+  3. Inspector frontend se napojí na ws://127.0.0.1:14001/socket/cdt/<sessionId>
+  4. UDT Service relay-uje CDP zprávy: CDTClient ↔ AppClient ↔ Photoshop
+
+CDP traffic relay (UDT Service jako MITM):
+  Inspector →[WS]→ CDTClient (UDT) →[WS]→ AppClient (UDT) →[WS]→ Photoshop UXP
+  Photoshop UXP →[WS]→ AppClient (UDT) →[WS]→ CDTClient (UDT) →[WS]→ Inspector
+
+
+==============================================================================
+2. JAK KOMUNIKUJE PHOTOSHOP S INSPECTOR TOOL – VULCAN API A PORT
+==============================================================================
+
+POZOR: "Vulcan" zde je Adobe Vulcan IPC – NIKOLIV Vulkan graphics API (Khronos).
+Adobe Vulcan je proprietární meziprocesový komunikační framework sdílený mezi
+všemi Adobe aplikacemi (Photoshop, Illustrator, XD, InDesign...).
+
+--- Celková architektura ---
+
+┌─────────────┐   Adobe Vulcan IPC   ┌──────────────────┐   WebSocket     ┌─────────────┐
+│  Photoshop  │ ◄──────────────────► │  UDT Service     │ ◄─────────────► │  Inspector   │
+│  (UXP host) │    (C++ .node addon)  │  Node.js :14001  │ /socket/cdt/.. │  (Electron)  │
+│             │ ──[WS AppClient]────► │                  │                 │              │
+└─────────────┘                       └──────────────────┘                 └─────────────┘
+
+--- Startup flow ---
+
+1. UDT Service startuje na portu (default 14001).
+2. UDT Service zavolá `VulcanAdapter.setServerDetails(true, port)` →
+   broadcastuje port přes Adobe Vulcan do všech běžících Adobe aplikací.
+3. Photoshop přijme Vulcan zprávu a připojí se k UDT Service jako AppClient
+   (WebSocket na ws://127.0.0.1:14001/).
+4. AppClient pošle "initRuntimeClient" → server žádá "App → info" →
+   Photoshop odpoví: { appId, appVersion, uxpVersion, platform, sandbox, ... }
+
+--- CLI/Inspector discovery flow ---
+
+1. CLI/Inspector volá `VulcanAdapter.getServicePort()` →
+   přes Vulcan IPC zjistí port UDT Service.
+2. Připojí se na ws://127.0.0.1:<port>/socket/cli nebo /socket/cdt/<id>
+
+--- Vulcan slouží POUZE pro ---
+  - Service discovery (oznámení/zjištění portu UDT Service)
+  - App discovery (`getAppsList()` → seznam běžících Adobe aplikací)
+  - Samotný CDP debugging traffic jde čistě přes WebSockety (ne přes Vulcan!)
+
+--- AppClient identifikátor ---
+  kUDTClientAppId = "UTDC"   ← CLI/Inspector klient
+  kUDTServerAppId = "UTDS"   ← UDT Service server
+
+--- Podporované host aplikace ---
+  kSupportedUxpHostAppsIds = ["PS", "UXPS"]   (Photoshop, UXPS sandbox)
