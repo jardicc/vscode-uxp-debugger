@@ -1,4 +1,5 @@
 import * as http from "http";
+import * as path from "path";
 import * as vscode from "vscode";
 import WebSocket, { WebSocketServer } from "ws";
 
@@ -32,6 +33,8 @@ export class CdpProxyServer {
   private readonly targetWsUrl: string;
   private readonly targetLabel: string;
   private readonly webRoot: string;
+  private readonly projectDir: string;
+  private readonly pluginDir: string;
   private readonly log: vscode.OutputChannel;
   private httpServer: http.Server | undefined;
   private targetWs: WebSocket | undefined;
@@ -49,10 +52,12 @@ export class CdpProxyServer {
   /** The uniqueId from the latest Runtime.executionContextCreated event. */
   private executionContextUniqueId: string | undefined;
 
-  constructor(targetWsUrl: string, targetLabel: string, webRoot: string, log: vscode.OutputChannel) {
+  constructor(targetWsUrl: string, targetLabel: string, webRoot: string, projectDir: string, pluginDir: string, log: vscode.OutputChannel) {
     this.targetWsUrl = targetWsUrl;
     this.targetLabel = targetLabel;
     this.webRoot = webRoot;
+    this.projectDir = projectDir;
+    this.pluginDir = pluginDir;
     this.log = log;
   }
 
@@ -296,8 +301,15 @@ export class CdpProxyServer {
           typeof msg.params.sourceMapURL === "string" &&
           msg.params.sourceMapURL.startsWith("data:")
         ) {
+          // Derive the subdirectory from the normalized script URL.
+          // normalize() resolves "./" and "../" segments first, then dirname()
+          // extracts the directory. e.g. "./bundle/index.js" → "bundle"
+          const cleanUrl = path.posix.normalize(msg.params.url as string);
+          const dir = path.posix.dirname(cleanUrl);
+          const scriptSubdir = (dir === "/" || dir === ".") ? "" : dir.replace(/^\//, "");
           msg.params.sourceMapURL = this.rewriteInlineSourceMapRoot(
-            msg.params.sourceMapURL
+            msg.params.sourceMapURL,
+            scriptSubdir
           );
         }
 
@@ -357,10 +369,10 @@ export class CdpProxyServer {
    *
    * Webpack source maps typically contain paths like `../src/shared/store.ts`
    * which are relative to the output directory (one level below the project
-   * root).  By setting `sourceRoot` to `<webRoot>/_/` we ensure that
-   * `../<path>` resolves back to `<webRoot>/<path>`.
+   * root).  By setting `sourceRoot` to `<projectDir>/_/` we ensure that
+   * `../<path>` resolves back to `<projectDir>/<path>`.
    */
-  private rewriteInlineSourceMapRoot(dataUrl: string): string {
+  private rewriteInlineSourceMapRoot(dataUrl: string, scriptSubdir = ""): string {
     try {
       // data:application/json;base64,<payload>
       // data:application/json;charset=utf-8;base64,<payload>
@@ -379,8 +391,9 @@ export class CdpProxyServer {
       const map = JSON.parse(json);
 
       // Use a file:// URL so that js-debug resolves paths as local files.
-      // The dummy `_` segment is consumed by the `../` in the source entries.
-      const root = "file:///" + this.webRoot.replace(/\\/g, "/") + "/_/";
+      // Include the script's subdirectory so relative source entries resolve correctly.
+      const baseDir = this.pluginDir.replace(/\\/g, "/") + (scriptSubdir ? "/" + scriptSubdir : "");
+      const root = "file:///" + baseDir + "/";
       const oldRoot = map.sourceRoot;
       map.sourceRoot = root;
 

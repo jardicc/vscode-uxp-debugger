@@ -14,7 +14,8 @@
   "activationEvents": [
     "onDebugResolve:uxp",
     "onCommand:uxp.attach",
-    "onCommand:uxp.discover"
+    "onCommand:uxp.discover",
+    "onCommand:uxp.setManifestPath"
   ],
   "main": "./dist/extension.js",
   "contributes": {
@@ -26,6 +27,10 @@
       {
         "command": "uxp.discover",
         "title": "UXP: Discover Running UXP Targets"
+      },
+      {
+        "command": "uxp.setManifestPath",
+        "title": "UXP: Set Manifest Path"
       }
     ],
     "debuggers": [
