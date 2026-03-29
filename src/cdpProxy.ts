@@ -33,7 +33,6 @@ export class CdpProxyServer {
   private readonly targetWsUrl: string;
   private readonly targetLabel: string;
   private readonly webRoot: string;
-  private readonly projectDir: string;
   private readonly pluginDir: string;
   private readonly log: vscode.OutputChannel;
   private httpServer: http.Server | undefined;
@@ -52,11 +51,10 @@ export class CdpProxyServer {
   /** The uniqueId from the latest Runtime.executionContextCreated event. */
   private executionContextUniqueId: string | undefined;
 
-  constructor(targetWsUrl: string, targetLabel: string, webRoot: string, projectDir: string, pluginDir: string, log: vscode.OutputChannel) {
+  constructor(targetWsUrl: string, targetLabel: string, webRoot: string, pluginDir: string, log: vscode.OutputChannel) {
     this.targetWsUrl = targetWsUrl;
     this.targetLabel = targetLabel;
     this.webRoot = webRoot;
-    this.projectDir = projectDir;
     this.pluginDir = pluginDir;
     this.log = log;
   }

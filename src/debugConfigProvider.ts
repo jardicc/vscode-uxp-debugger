@@ -71,7 +71,7 @@ export class UxpDebugConfigProvider
    * For now we keep it simple and delegate to the command.
    */
   async resolveDebugConfiguration(
-    folder: vscode.WorkspaceFolder | undefined,
+    _folder: vscode.WorkspaceFolder | undefined,
     config: vscode.DebugConfiguration,
     _token?: vscode.CancellationToken
   ): Promise<vscode.DebugConfiguration | undefined> {

@@ -104,7 +104,7 @@ export function activate(context: vscode.ExtensionContext): void {
         const webRoot = projectDir;
         outputChannel.appendLine(`Using webRoot: ${webRoot}`);
 
-        activeCdpProxy = new CdpProxyServer(target.webSocketUrl, target.label, webRoot, projectDir, pluginDir, outputChannel);
+        activeCdpProxy = new CdpProxyServer(target.webSocketUrl, target.label, webRoot, pluginDir, outputChannel);
         const proxyPort = await activeCdpProxy.start();
         outputChannel.appendLine(`CDP proxy listening on port ${proxyPort}`);
 

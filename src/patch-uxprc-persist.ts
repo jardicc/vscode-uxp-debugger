@@ -143,7 +143,7 @@ console.log("App dir:", appDir);
 console.log("");
 
 const bundleOk = patchBundle(appDir);
-const sourceOk = patchSource(appDir);
+patchSource(appDir);
 
 console.log("");
 if (bundleOk) {

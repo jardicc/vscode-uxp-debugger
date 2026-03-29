@@ -2,7 +2,6 @@ import * as fs from "fs";
 import * as http from "http";
 import * as path from "path";
 import * as vscode from "vscode";
-import WebSocket from "ws";
 
 // ---------------------------------------------------------------------------
 // UXP Target descriptor
@@ -26,13 +25,9 @@ export interface UxpTarget {
 // ---------------------------------------------------------------------------
 
 /**
- * UDT (UXP Developer Tools) default service port.
- * Exposes /json/version and a browser-level CDP WebSocket at
- *   ws://127.0.0.1:14001/socket/browser_cdt/
- * but does NOT expose /json/list.
+ * UDT (UXP Developer Tools) service port — used for the relay WebSocket.
  */
 const UDT_PORT = 14001;
-
 
 /**
  * Ports to probe directly for /json/list (plugin CDP endpoints).
@@ -50,11 +45,6 @@ const PLUGIN_PROBE_PORTS = [9222];
  * Timeout (ms) per HTTP probe attempt.
  */
 const PROBE_TIMEOUT_MS = 2000;
-
-/**
- * Timeout (ms) for the browser-level CDP WebSocket call.
- */
-const WS_TIMEOUT_MS = 3000;
 
 // ---------------------------------------------------------------------------
 // Public API
@@ -123,56 +113,6 @@ export async function discoverUxpTargets(
   return allTargets;
 }
 
-// ---------------------------------------------------------------------------
-// Phase 1 – Browser CDP via UDT WebSocket
-// ---------------------------------------------------------------------------
-
-// ! This does not seem to be supported by UXP at all. But needs to verify from Adobe
-/**
- * Connect to the UDT browser-level CDP WebSocket on port 14001 and call
- * Target.getTargets(). This may surface plugin targets without needing to
- * know their dynamic port.
- */
-async function discoverViaBrowserCdp(
-  log: vscode.OutputChannel
-): Promise<UxpTarget[]> {
-  // First check that UDT is running by probing /json/version
-  const version = await httpGetJson<{ webSocketDebuggerUrl?: string }>(
-    `http://127.0.0.1:${UDT_PORT}/json/version`,
-    PROBE_TIMEOUT_MS
-  );
-
-  const browserWsUrl = version.webSocketDebuggerUrl;
-  if (!browserWsUrl) {
-    throw new Error("UDT /json/version did not return a webSocketDebuggerUrl");
-  }
-
-  log.appendLine(`  Phase 1: connecting to UDT browser CDP at ${browserWsUrl}`);
-
-  const targetsResponse = await cdpCall<{
-    result: { targetInfos: CdpTargetInfo[] };
-  }>(browserWsUrl, { id: 1, method: "Target.getTargets" }, WS_TIMEOUT_MS);
-
-  const targetInfos = targetsResponse?.result?.targetInfos ?? [];
-  log.appendLine(`  Phase 1: Target.getTargets returned ${targetInfos.length} target(s)`);
-
-  return targetInfos
-    .filter((t) => t.type === "page" && t.webSocketDebuggerUrl)
-    .map((t) => ({
-      label: t.title || t.targetId,
-      hostApp: "Photoshop", // UDT currently connects to PS only
-      pluginId: t.targetId,
-      webSocketUrl: t.webSocketDebuggerUrl!,
-    }));
-}
-
-interface CdpTargetInfo {
-  targetId: string;
-  type: string;
-  title: string;
-  url: string;
-  webSocketDebuggerUrl?: string;
-}
 
 // ---------------------------------------------------------------------------
 // Phase 2 – Direct /json/list probe
@@ -236,39 +176,6 @@ function parseTargets(entries: unknown[], port: number): UxpTarget[] {
   }
 
   return targets;
-}
-
-// ---------------------------------------------------------------------------
-// CDP WebSocket helper — send one command and return the response
-// ---------------------------------------------------------------------------
-
-function cdpCall<T>(
-  wsUrl: string,
-  message: object,
-  timeoutMs: number
-): Promise<T> {
-  return new Promise((resolve, reject) => {
-    const ws = new WebSocket(wsUrl);
-    const timer = setTimeout(() => {
-      ws.terminate();
-      reject(new Error(`CDP call timed out after ${timeoutMs}ms`));
-    }, timeoutMs);
-
-    ws.on("open", () => ws.send(JSON.stringify(message)));
-    ws.on("message", (data) => {
-      clearTimeout(timer);
-      ws.close();
-      try {
-        resolve(JSON.parse(data.toString()) as T);
-      } catch (e) {
-        reject(e);
-      }
-    });
-    ws.on("error", (err) => {
-      clearTimeout(timer);
-      reject(err);
-    });
-  });
 }
 
 // ---------------------------------------------------------------------------
