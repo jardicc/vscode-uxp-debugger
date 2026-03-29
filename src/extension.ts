@@ -2,8 +2,9 @@ import * as vscode from "vscode";
 import * as path from "path";
 import * as fs from "fs";
 import { UxpDebugConfigProvider } from "./debugConfigProvider";
-import { discoverUxpTargets, UxpTarget } from "./uxpDiscovery";
+import { discoverUxpTargets, readUxpRc, UxpTarget } from "./uxpDiscovery";
 import { CdpProxyServer } from "./cdpProxy";
+import { patchAsarFile } from "./patch-asar";
 
 /** Active CDP proxy instance (one per debug session). */
 let activeCdpProxy: CdpProxyServer | undefined;
@@ -69,11 +70,22 @@ export function activate(context: vscode.ExtensionContext): void {
         }
 
         // 3. Discover available UXP targets
+        //    Phase 2: direct port probing (existing)
         const targets = await discoverUxpTargets(outputChannel, extraPorts);
+
+        //    Phase 3: .uxprc file from devtools-cli (UDT Service relay)
+        const uxpRcTargets = readUxpRc(pluginDir, outputChannel);
+        const seen = new Set(targets.map((t) => t.webSocketUrl));
+        for (const t of uxpRcTargets) {
+          if (!seen.has(t.webSocketUrl)) {
+            targets.push(t);
+          }
+        }
 
         if (targets.length === 0) {
           vscode.window.showWarningMessage(
-            "No running UXP targets found. Make sure an Adobe host application is running with a loaded UXP plugin."
+            "No running UXP targets found. Make sure an Adobe host application is running with a loaded UXP plugin, " +
+            "or use 'uxp plugin load' from devtools-cli to generate a .uxprc session file."
           );
           return;
         }
@@ -152,6 +164,78 @@ export function activate(context: vscode.ExtensionContext): void {
         title: "Discovered UXP Targets",
         placeHolder: "Available targets (read-only list)",
       });
+    })
+  );
+
+  // ---- Command: uxp.patchAsar -------------------------------------------
+  context.subscriptions.push(
+    vscode.commands.registerCommand("uxp.patchAsar", async () => {
+      const defaultUri = vscode.Uri.file(
+        String.raw`C:\Program Files\Adobe\Adobe UXP Developer Tools\resources`,
+      );
+      const uris = await vscode.window.showOpenDialog({
+        defaultUri,
+        canSelectFiles: true,
+        canSelectFolders: false,
+        canSelectMany: false,
+        filters: { "ASAR archive": ["asar"] },
+        title: "Select app.asar to patch",
+        openLabel: "Patch",
+      });
+      if (!uris || uris.length === 0) {
+        return;
+      }
+      const asarPath = uris[0].fsPath;
+      outputChannel.show(true);
+      outputChannel.appendLine(`[patch] Patching: ${asarPath}`);
+
+      try {
+        let result: Awaited<ReturnType<typeof patchAsarFile>>;
+        await vscode.window.withProgress(
+          {
+            location: vscode.ProgressLocation.Notification,
+            title: `UXP Patch: patching ${path.basename(asarPath)}…`,
+            cancellable: false,
+          },
+          async () => {
+            result = await patchAsarFile(asarPath);
+          },
+        );
+        /* eslint-disable @typescript-eslint/no-non-null-assertion */
+        outputChannel.appendLine(`[patch] ${result!.summary}`);
+        const { bundleStatus, sourceStatus, summary } = result!;
+        /* eslint-enable */
+
+        const name = path.basename(asarPath);
+        if (bundleStatus === "already" &&
+            (sourceStatus === "already" || sourceStatus === "skipped")) {
+          vscode.window.showInformationMessage(
+            `UXP Patch: ${name} is already patched — no changes made.`,
+          );
+        } else if (bundleStatus === "patched" || sourceStatus === "patched") {
+          vscode.window.showInformationMessage(
+            `UXP Patch: ${name} patched successfully. ${summary}`,
+          );
+        } else {
+          vscode.window.showErrorMessage(
+            `UXP Patch: Failed for ${name}. ${summary}`,
+          );
+        }
+      } catch (err: unknown) {
+        const code = (err as NodeJS.ErrnoException).code;
+        const isPermError = code === "EACCES" || code === "EPERM";
+        const message = err instanceof Error ? err.message : String(err);
+        outputChannel.appendLine(`[patch] Error: ${message}`);
+        if (isPermError) {
+          vscode.window.showErrorMessage(
+            `UXP Patch: Permission denied — run VS Code as Administrator to patch ${path.basename(asarPath)}.`,
+          );
+        } else {
+          vscode.window.showErrorMessage(
+            `UXP Patch: Failed to patch ${path.basename(asarPath)}: ${message}`,
+          );
+        }
+      }
     })
   );
 

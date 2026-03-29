@@ -15,7 +15,8 @@
     "onDebugResolve:uxp",
     "onCommand:uxp.attach",
     "onCommand:uxp.discover",
-    "onCommand:uxp.setManifestPath"
+    "onCommand:uxp.setManifestPath",
+    "onCommand:uxp.patchAsar"
   ],
   "main": "./dist/extension.js",
   "contributes": {
@@ -31,6 +32,10 @@
       {
         "command": "uxp.setManifestPath",
         "title": "UXP: Set Manifest Path"
+      },
+      {
+        "command": "uxp.patchAsar",
+        "title": "UXP: Patch app.asar (Persist .uxprc)"
       }
     ],
     "debuggers": [

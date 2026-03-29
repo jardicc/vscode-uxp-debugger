@@ -71,8 +71,17 @@ export class CdpProxyServer {
    * and forward traffic to/from the UXP target.
    */
   async start(): Promise<number> {
-    // Fetch the real target ID from the UXP host's /json/list endpoint.
-    const targetId = await this.fetchTargetId();
+    // Determine target ID based on connection type.
+    let targetId: string;
+    if (this.targetWsUrl.includes("/socket/cdt/")) {
+      // UDT Service relay – extract session ID from URL path.
+      // /json/list is not available on the UDT Service port (returns {}).
+      targetId = this.targetWsUrl.split("/").pop() || "uxp-target";
+      this.log.appendLine(`UDT relay mode – using session ID as target: ${targetId}`);
+    } else {
+      // Direct plugin port – fetch real target ID from /json/list.
+      targetId = await this.fetchTargetId();
+    }
     this.log.appendLine(`Using target ID: ${targetId}`);
 
     return new Promise<number>((resolve, reject) => {
@@ -81,6 +90,7 @@ export class CdpProxyServer {
         const url = req.url ?? "/";
         res.writeHead(200, { "Content-Type": "application/json" });
 
+        // Return custom made synthetic responses for the two "discovery" endpoints that js-debug calls
         if (url.startsWith("/json/version")) {
           // Return browser info WITHOUT a webSocketDebuggerUrl so that
           // js-debug does not attempt a browser-level CDP connection.
