@@ -50,6 +50,12 @@ export class CdpProxyServer {
   /** The uniqueId from the latest Runtime.executionContextCreated event. */
   private executionContextUniqueId: string | undefined;
 
+  /** Timer handle for the "no execution context" warning. */
+  private noContextTimer: ReturnType<typeof setTimeout> | undefined;
+
+  /** How long (ms) to wait for an execution context before warning the user. */
+  private static readonly CONTEXT_TIMEOUT_MS = 8_000;
+
   constructor(targetWsUrl: string, targetLabel: string, pluginDir: string, log: vscode.OutputChannel) {
     this.targetWsUrl = targetWsUrl;
     this.targetLabel = targetLabel;
@@ -108,6 +114,10 @@ export class CdpProxyServer {
    * Gracefully shut down the proxy and close all WebSocket connections.
    */
   async stop(): Promise<void> {
+    if (this.noContextTimer) {
+      clearTimeout(this.noContextTimer);
+      this.noContextTimer = undefined;
+    }
     this.clientWs?.close();
     this.targetWs?.close();
     return new Promise<void>((resolve) => {
@@ -191,6 +201,22 @@ export class CdpProxyServer {
 
       this.targetWs.on("open", () => {
         this.log.appendLine(`Connected to UXP target: ${this.targetWsUrl}`);
+
+        // Start a timer — if we don't receive an execution context within
+        // the timeout the plugin is probably not loaded in the host app.
+        this.noContextTimer = setTimeout(() => {
+          if (!this.executionContextUniqueId) {
+            this.log.appendLine(
+              "[CDP] Warning: no execution context received within " +
+              `${CdpProxyServer.CONTEXT_TIMEOUT_MS / 1000}s — plugin may not be loaded. Disconnecting.`
+            );
+            vscode.window.showWarningMessage(
+              "UXP Debugger: Connected to the relay but no response from the plugin. " +
+              "Make sure the plugin is loaded in the host application (e.g. via UDT 'uxp plugin load')."
+            );
+            this.stop();
+          }
+        }, CdpProxyServer.CONTEXT_TIMEOUT_MS);
 
         // Enable the Runtime domain so that Runtime.evaluate works.
         // UXP may ignore this, but some runtimes require it.
@@ -302,6 +328,10 @@ export class CdpProxyServer {
         typeof msg.params?.context?.uniqueId === "string"
       ) {
         this.executionContextUniqueId = msg.params.context.uniqueId;
+        if (this.noContextTimer) {
+          clearTimeout(this.noContextTimer);
+          this.noContextTimer = undefined;
+        }
         this.log.appendLine(`[CDP] Captured executionContext uniqueId: ${this.executionContextUniqueId}`);
       }
 

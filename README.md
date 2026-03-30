@@ -32,10 +32,14 @@ Alternatively, add a `launch.json` entry:
 
 ```json
 {
-  "type": "uxp",
-  "request": "attach",
-  "name": "Attach to UXP Plugin",
-  "webRoot": "${workspaceFolder}"
+	"configurations": [
+		{
+			"type": "uxp",
+			"request": "attach",
+			"name": "Attach to UXP Plugin",
+			"webRoot": "${workspaceFolder}"
+		}
+	]
 }
 ```
 

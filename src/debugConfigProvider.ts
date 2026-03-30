@@ -1,26 +1,5 @@
 import * as vscode from "vscode";
 
-// ---------------------------------------------------------------------------
-// Debug Configuration Provider for the "uxp" debug type
-// ---------------------------------------------------------------------------
-
-/**
- * This provider is registered for the `uxp` debug type declared in
- * package.json.  It participates in two phases:
- *
- *  1. **provideDebugConfigurations** – called when the user opens the
- *     debug configuration dropdown and clicks "Add Configuration…".
- *     We return a sensible default snippet.
- *
- *  2. **resolveDebugConfiguration** – called before a "uxp" debug session
- *     starts.  This is where we intercept the config, perform UXP-specific
- *     setup (discovery, proxy start), and then *replace* the debug type
- *     with `pwa-chrome` so that the built-in JS debugger handles the
- *     actual protocol work.
- *
- * This follows the same pattern used by expo/vscode-expo and
- * mpotthoff/vscode-android-webview-debug.
- */
 export class UxpDebugConfigProvider implements vscode.DebugConfigurationProvider {
   private readonly log: vscode.OutputChannel;
 
@@ -85,9 +64,19 @@ export class UxpDebugConfigProvider implements vscode.DebugConfigurationProvider
       `Resolving UXP debug config: ${JSON.stringify(config)}`
     );
 
-    // Trigger the uxp.attach command which handles discovery, proxy, and
-    // starting the delegated debug session.
-    await vscode.commands.executeCommand("uxp.attach");
+    // Return config so VS Code performs variable substitution before
+    // calling resolveDebugConfigurationWithSubstitutedVariables.
+    return config;
+  }
+
+  async resolveDebugConfigurationWithSubstitutedVariables(
+    _folder: vscode.WorkspaceFolder | undefined,
+    config: vscode.DebugConfiguration,
+    _token?: vscode.CancellationToken
+  ): Promise<vscode.DebugConfiguration | undefined> {
+    // manifestPath is now fully resolved by VS Code (e.g. ${workspaceFolder} → absolute path).
+    const manifestPath: string | undefined = config.manifestPath;
+    await vscode.commands.executeCommand("uxp.attach", manifestPath);
 
     // Return undefined to cancel the original "uxp" session.
     // The real session was already started by the command above.

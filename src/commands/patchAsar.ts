@@ -3,9 +3,10 @@ import * as vscode from "vscode";
 import { patchAsarFile } from "../patch-asar";
 
 export async function patchAsarCommand(outputChannel: vscode.OutputChannel): Promise<void> {
-  const defaultUri = vscode.Uri.file(
-    String.raw`C:\Program Files\Adobe\Adobe UXP Developer Tools\resources`,
-  );
+  const defaultPath = process.platform === "darwin"
+    ? "/Applications/Adobe UXP Developer Tools/Contents/Resources"
+    : String.raw`C:\Program Files\Adobe\Adobe UXP Developer Tools\resources`;
+  const defaultUri = vscode.Uri.file(defaultPath);
   const uris = await vscode.window.showOpenDialog({
     defaultUri,
     canSelectFiles: true,
@@ -60,8 +61,11 @@ export async function patchAsarCommand(outputChannel: vscode.OutputChannel): Pro
     const message = err instanceof Error ? err.message : String(err);
     outputChannel.appendLine(`[patch] Error: ${message}`);
     if (isPermError) {
+      const tip = process.platform === "darwin"
+        ? "try fixing file permissions (e.g. sudo chown -R $(whoami) <path>)"
+        : "run VS Code as Administrator";
       vscode.window.showErrorMessage(
-        `UXP Patch: Permission denied \u2014 run VS Code as Administrator to patch ${path.basename(asarPath)}.`,
+        `UXP Patch: Permission denied \u2014 ${tip} to patch ${path.basename(asarPath)}.`,
       );
     } else {
       vscode.window.showErrorMessage(

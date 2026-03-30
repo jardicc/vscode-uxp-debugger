@@ -29,8 +29,8 @@ export function activate(context: vscode.ExtensionContext): void {
 
   // ---- Command: uxp.attach ------------------------------------------------
   context.subscriptions.push(
-    vscode.commands.registerCommand("uxp.attach", () =>
-      attachCommand(context, outputChannel)
+    vscode.commands.registerCommand("uxp.attach", (manifestPath?: string) =>
+      attachCommand(context, outputChannel, manifestPath)
     )
   );
 

@@ -4,7 +4,9 @@
  * Makes loadPlugin always persist session to .uxprc AND return it at runtime.
  *
  * Usage:  node patch-asar.js [path-to-app.asar]
- * Default: C:\Program Files\Adobe\Adobe UXP Developer Tools\resources\app
+ * Default:
+ *   Windows: C:\Program Files\Adobe\Adobe UXP Developer Tools\resources\app
+ *   macOS:   /Applications/Adobe UXP Developer Tools/Contents/Resources/app
  *
  * If the argument is a directory (not .asar), falls back to direct file patching.
  *
@@ -12,7 +14,7 @@
  * All other files are streamed directly from the old archive (64 KB buffer).
  *
  * Safe to run multiple times (idempotent). Creates .bak backup on first run.
- * Run as Administrator if patching under Program Files.
+ * Run as Administrator (Windows) or with sudo (macOS) if patching in a protected location.
  */
 
 import * as nodeFs from "fs";
@@ -30,8 +32,9 @@ const fs: typeof nodeFs = (() => {
 })();
 
 const PATCH_MARKER = "/* __UXPRC_PERSIST__ */";
-const DEFAULT_APP =
-    String.raw`C:\Program Files\Adobe\Adobe UXP Developer Tools\resources\app`;
+const DEFAULT_APP = process.platform === "darwin"
+    ? "/Applications/Adobe UXP Developer Tools/Contents/Resources/app"
+    : String.raw`C:\Program Files\Adobe\Adobe UXP Developer Tools\resources\app`;
 
 // ==================== Public API types ====================
 

@@ -144,7 +144,8 @@ async function doAttach(
 
 export async function attachCommand(
   context: vscode.ExtensionContext,
-  outputChannel: vscode.OutputChannel
+  outputChannel: vscode.OutputChannel,
+  manifestPathArg?: string
 ): Promise<void> {
   try {
     // Guard: if a debug session is already active, ask the user
@@ -159,6 +160,36 @@ export async function attachCommand(
       }
       await activeCdpProxy.stop();
       activeCdpProxy = undefined;
+    }
+
+    // If a manifest path was provided (e.g. from launch.json), skip the
+    // history QuickPick and go straight to discovery.
+    if (manifestPathArg) {
+      if (!fs.existsSync(manifestPathArg)) {
+        vscode.window.showErrorMessage(
+          `UXP: manifest.json not found at: ${manifestPathArg}`
+        );
+        return;
+      }
+      const pluginDir = path.dirname(manifestPathArg);
+      outputChannel.appendLine(`Plugin directory (from launch.json): ${pluginDir}`);
+
+      const targets = await discoverTargets(pluginDir, outputChannel);
+      if (targets.length === 0) {
+        vscode.window.showWarningMessage(
+          "No running UXP targets found. Make sure an Adobe host application is running with a loaded UXP plugin, " +
+          "or use 'uxp plugin load' from devtools-cli to generate a .uxprc session file."
+        );
+        return;
+      }
+
+      const target = await pickTarget(targets);
+      if (!target) {
+        return;
+      }
+
+      await doAttach(manifestPathArg, target, context, outputChannel);
+      return;
     }
 
     const history = loadHistory(context);
