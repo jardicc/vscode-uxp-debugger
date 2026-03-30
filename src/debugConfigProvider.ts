@@ -21,9 +21,7 @@ import * as vscode from "vscode";
  * This follows the same pattern used by expo/vscode-expo and
  * mpotthoff/vscode-android-webview-debug.
  */
-export class UxpDebugConfigProvider
-  implements vscode.DebugConfigurationProvider
-{
+export class UxpDebugConfigProvider implements vscode.DebugConfigurationProvider {
   private readonly log: vscode.OutputChannel;
 
   constructor(log: vscode.OutputChannel) {

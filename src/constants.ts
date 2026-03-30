@@ -1,0 +1,1 @@
+export const MANIFEST_HISTORY_KEY = "uxp.manifestPathHistory";

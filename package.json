@@ -14,7 +14,6 @@
   "activationEvents": [
     "onDebugResolve:uxp",
     "onCommand:uxp.attach",
-    "onCommand:uxp.discover",
     "onCommand:uxp.setManifestPath",
     "onCommand:uxp.patchAsar"
   ],
@@ -24,10 +23,6 @@
       {
         "command": "uxp.attach",
         "title": "UXP: Attach to Adobe UXP Plugin"
-      },
-      {
-        "command": "uxp.discover",
-        "title": "UXP: Discover Running UXP Targets"
       },
       {
         "command": "uxp.setManifestPath",
