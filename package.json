@@ -87,11 +87,6 @@
     "configuration": {
       "title": "UXP Debugger",
       "properties": {
-        "uxp-debugger.port": {
-          "type": "number",
-          "default": 4243,
-          "description": "Plugin debug port to probe during discovery. Must match the port in the plugin's .debug file (place next to manifest.json): { \"port\": 4243, \"breakOnStart\": false }"
-        }
       }
     }
   },

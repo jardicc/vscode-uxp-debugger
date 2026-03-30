@@ -45,15 +45,17 @@ export function readDebugPort(
  * Discover UXP plugin targets via the `.debug.json` file next to manifest.json.
  *
  * Reads the port from `.debug.json` and probes that port's CDP `/json/list`
- * endpoint. If `.debug.json` has no valid port, `fallbackPort` is probed
- * instead (e.g. a port configured in extension settings).
+ * endpoint. Returns an array of UxpTarget descriptors with WebSocket URLs for debugging.
+ *
+ * This method is effective when the plugin has a .debug file that pins the debug port.
+ * It will not find plugins that are debuggable but don't have a .debug.json (e.g. PS plugins
+ * without a pinned port, or any plugins running in UDT Service relay sessions).
  */
 export async function discoverViaDebugJson(
   manifestDir: string,
-  log: vscode.OutputChannel,
-  fallbackPort?: number
+  log: vscode.OutputChannel
 ): Promise<UxpTarget[]> {
-  const port = readDebugPort(manifestDir, log) ?? fallbackPort;
+  const port = readDebugPort(manifestDir, log);
   if (port === undefined) {
     return [];
   }

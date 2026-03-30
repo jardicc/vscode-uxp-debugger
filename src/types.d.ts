@@ -14,3 +14,20 @@ export interface UxpTarget {
   /** Optional local root for source-map path mapping. */
   webRoot?: string;
 }
+
+// ---------------------------------------------------------------------------
+// Persisted target history entry
+// ---------------------------------------------------------------------------
+
+export interface TargetHistoryEntry {
+  /** Absolute path to the plugin's manifest.json. */
+  manifestPath: string;
+  /** Label of the target at the time it was used. */
+  targetLabel: string;
+  /** Host application name (e.g. "Photoshop"). */
+  hostApp: string;
+  /** Plugin / session ID used for matching on reconnect. */
+  pluginId: string;
+  /** Unix timestamp (ms) of last successful attach. */
+  lastUsed: number;
+}
