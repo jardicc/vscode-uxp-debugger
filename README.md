@@ -1,61 +1,160 @@
 # UXP Debugger – VS Code Extension
 
-Attach the VS Code debugger to Adobe UXP plugins (Photoshop, InDesign, XD, …) without writing a full custom debug adapter.
+Attach the VS Code debugger to Adobe UXP plugins (Photoshop, InDesign, XD, …) with full source-map support.
 
-## Architecture
+---
 
-This extension does **not** implement its own debug adapter. Instead it:
+## Requirements
 
-1. **Discovers** running UXP plugin targets by probing well-known CDP ports.
-2. **Starts a lightweight CDP proxy** that translates UXP-specific quirks so that the standard Chrome DevTools Protocol flow works correctly.
-3. **Delegates** to the built-in VS Code JS debugger (`pwa-chrome` attach mode) via `vscode.debug.startDebugging(…)`.
+- **VS Code** 1.85 or newer
+- **Adobe UXP Developer Tools (UDT)** installed
+- Some Adobe application to load UXP plugin into
+- The UXP plugin loaded in the host application (via UDT)
 
-This approach is inspired by [expo/vscode-expo](https://github.com/expo/vscode-expo), [microsoft/vscode-cdp-proxy](https://github.com/nicolo-ribaudo/vscode-cdp-proxy), and [vscode-android-webview-debug](https://github.com/nicolo-ribaudo/nicolo-ribaudo.github.io).
+---
 
-## Quick Start
+## Setup
+
+### 1. Install the extension
+
+Install the `.vsix` file from the Releases page via **Extensions → ⋯ → Install from VSIX…**, or:
 
 ```bash
-npm install
-npm run compile
+code --install-extension vscode-uxp-debugger-*.vsix
 ```
 
-Then press **F5** to launch the Extension Development Host.
+### 2. Patch the UXP Developer Tools (one-time)
 
-### Usage
+The extension discovers running plugin sessions via a `.uxprc` file that UDT writes next to your `manifest.json`. By default UDT does **not** write this file — a one-time patch to `app.asar` enables it.
 
-1. Start an Adobe application (e.g. Photoshop) with a UXP plugin loaded.
-2. Open the Command Palette and run **UXP: Attach to Adobe UXP Plugin**.
-3. Select the target from the quick-pick list.
-4. The built-in JS debugger session starts automatically.
+1. Open the Command Palette (`Ctrl+Shift+P` / `Cmd+Shift+P`) and run:
+   **`UXP: Patch app.asar (Persist .uxprc)`**
+2. A file dialog opens to the default UDT location:
+   - **Windows:** `C:\Program Files\Adobe\Adobe UXP Developer Tools\resources`
+   - **macOS:** `/Applications/Adobe UXP Developer Tools/Contents/Resources`
+3. Select `app.asar` and click **Patch**.
+4. If you get a _Permission denied_ error:
+   - **Windows:** Restart VS Code as Administrator, then run the command again. Or patch file in unprotected directory, then copy back.
+   - **macOS:** Fix the file ownership: `sudo chown -R $(whoami) "/Applications/Adobe UXP Developer Tools"`
+5. The patch is **idempotent** — safe to run multiple times. A `.bak` backup is created on the first run.
 
-Alternatively, add a `launch.json` entry:
+After patching, restart the UXP Developer Tools application.
+
+If something goes wrong with UDT delete `app.asar` and rename `app.asar.bak` to `app.asar` so original file will be restored. If there are still issues 
+please uninstall with Creative Cloud Desktop app. Check the UDT directory for remaining files and remove them if any. Then install UDT again.
+
+### Alternative Method. Load the plugin via UDT CLI (for experts)
+
+Use the `uxp` CLI (not included with UDT) to load your plugin into the host app. This generates the `.uxprc` session file that the debugger reads.
+
+Run in first terminal
+```bash
+uxp service start
+```
+
+And in second terminal
+```bash
+uxp plugin load
+```
+
+Run this from your plugin directory (where `manifest.json` is). The `.uxprc` file will appear next to `manifest.json` after the plugin is loaded.
+
+This option is not very ergonomic. Has several disadvantages and I recommend it only for experts if there are special requirements.
+
+---
+
+## Attaching the Debugger
+
+### Option A — Command Palette
+
+1. Make sure the host application (e.g. Photoshop) is running with your plugin loaded.
+2. Open the Command Palette and run **`UXP: Attach to Adobe UXP Plugin`**.
+3. **First time:** choose **"Select new target…"** and pick your `manifest.json`.
+4. **Subsequent runs:** your recent targets appear in the list — just pick one.
+5. If multiple debug targets are found, a second pick list lets you select the right one.
+6. The debug session starts automatically.
+
+The extension remembers up to **20** recently used targets, sorted by last use. Entries whose `manifest.json` has been deleted are removed automatically.
+
+### Option B — `launch.json`
+
+Add a configuration to `.vscode/launch.json`:
 
 ```json
 {
-  "type": "uxp",
-  "request": "attach",
-  "name": "Attach to UXP Plugin",
-  "webRoot": "${workspaceFolder}"
+  "configurations": [
+    {
+      "type": "uxp",
+      "request": "attach",
+      "name": "Attach to UXP Plugin",
+      "manifestPath": "${workspaceFolder}/manifest.json"
+    }
+  ]
 }
 ```
+
+Press **F5** (or choose the configuration from the Run & Debug panel). VS Code substitutes `${workspaceFolder}` and other variables before passing the path to the extension.
+
+### Option C — `.debug.json` (fixed port) - not recommended
+
+If you prefer not to use the UDT relay, you can pin a fixed CDP debug port by placing manually a `.debug.json` file next to `manifest.json`:
+
+```json
+{ "port": 9917 }
+```
+
+The extension will probe that port directly via `/json/list` instead of using the UDT relay. Both methods can coexist.
+
+This will work only in older versions of host apps.
+
+---
+
+## Troubleshooting
+
+| Symptom | Cause | Fix |
+|---|---|---|
+| _"No running UXP targets found"_ | Plugin not loaded, or wrong `manifest.json` | Run `uxp plugin load` and make sure the host app is open |
+| _"Connected to the relay but no response from the plugin"_ — session disconnects after 8 s | Plugin load succeeded but the UXP runtime never sent a ready signal | Reload the plugin via `uxp plugin load` and try again |
+| _"manifest.json not found"_ | Path in `launch.json` is wrong | Check the `manifestPath` value; make sure `${workspaceFolder}` resolves to the right folder |
+| _"A UXP debug session is already active"_ | Tried to attach while already debugging | Click **Detach and reconnect** to replace the existing session, or cancel |
+| _"Failed to start the JS debug session"_ | Internal `pwa-node` attach error | Check the **UXP Debugger** output channel for details |
+| _"Permission denied"_ during patch | `app.asar` owned by another user | Windows: run VS Code as Administrator. macOS: `sudo chown -R $(whoami) "/Applications/Adobe UXP Developer Tools"` |
+| `.uxprc` not created after `uxp plugin load` | `app.asar` not yet patched | Run **UXP: Patch app.asar** (see Setup §2) |
+
+---
+
+## How It Works
+
+The extension does **not** implement a custom debug adapter. Instead it:
+
+1. **Discovers** running targets via two methods:
+   - **`.uxprc`** — reads the UDT session file and connects via `ws://127.0.0.1:14001/socket/cdt/<sessionId>`
+   - **`.debug.json`** — reads a pinned port and probes `http://127.0.0.1:<port>/json/list`
+2. **Starts a lightweight CDP proxy** between VS Code and the UXP endpoint, translating protocol quirks (source-map root rewriting, `Runtime.evaluate` context patching, `NodeWorker.enable` suppression).
+3. **Delegates** to the built-in VS Code JS debugger (`pwa-node` attach mode) which handles all actual protocol work.
+
+---
 
 ## Project Structure
 
 ```
 src/
-  extension.ts          – entry point, registers commands and providers
-  uxpDiscovery.ts       – probes localhost ports for CDP target listings
-  cdpProxy.ts           – WebSocket MITM proxy between js-debug and UXP
-  debugConfigProvider.ts – DebugConfigurationProvider for "uxp" type
+  extension.ts                      Entry point; registers commands and debug provider
+  debugConfigProvider.ts            Handles launch.json "uxp" type; substitutes variables
+  cdpProxy.ts                       CDP proxy (WebSocket + HTTP); message rewriting
+  uiHelpers.ts                      pickTarget() QuickPick
+  constants.ts / types.d.ts         Shared constants and types
+  patch-asar.ts                     ASAR patch logic (idempotent, streaming)
+  commands/
+    attach.ts                       Main attach flow + target history
+    patchAsar.ts                    Patch command UI
+    setManifestPath.ts              Manifest path picker
+  endpointDetection/
+    discoverViaDebugJson.ts         .debug.json → /json/list probe
+    discoverViaUxpRc.ts             .uxprc → UDT relay WebSocket
 ```
 
-## Key Design Decisions
-
-| Decision | Rationale |
-|---|---|
-| No custom debug adapter | The built-in JS debugger (`js-debug`) already speaks CDP. Reusing it avoids duplicating thousands of lines of protocol handling. |
-| CDP proxy layer | UXP may not be 100 % Chrome-compatible. The proxy lets us patch messages without forking js-debug. |
-| Public VS Code API only | We never import `ms-vscode.js-debug` internals — only call `vscode.debug.startDebugging()`. |
+---
 
 ## License
 

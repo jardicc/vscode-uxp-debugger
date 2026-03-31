@@ -1,4 +1,5 @@
 import * as http from "http";
+import * as path from "path";
 import * as vscode from "vscode";
 import WebSocket, { WebSocketServer } from "ws";
 
@@ -31,7 +32,7 @@ import WebSocket, { WebSocketServer } from "ws";
 export class CdpProxyServer {
   private readonly targetWsUrl: string;
   private readonly targetLabel: string;
-  private readonly webRoot: string;
+  private readonly pluginDir: string;
   private readonly log: vscode.OutputChannel;
   private httpServer: http.Server | undefined;
   private targetWs: WebSocket | undefined;
@@ -49,10 +50,16 @@ export class CdpProxyServer {
   /** The uniqueId from the latest Runtime.executionContextCreated event. */
   private executionContextUniqueId: string | undefined;
 
-  constructor(targetWsUrl: string, targetLabel: string, webRoot: string, log: vscode.OutputChannel) {
+  /** Timer handle for the "no execution context" warning. */
+  private noContextTimer: ReturnType<typeof setTimeout> | undefined;
+
+  /** How long (ms) to wait for an execution context before warning the user. */
+  private static readonly CONTEXT_TIMEOUT_MS = 8_000;
+
+  constructor(targetWsUrl: string, targetLabel: string, pluginDir: string, log: vscode.OutputChannel) {
     this.targetWsUrl = targetWsUrl;
     this.targetLabel = targetLabel;
-    this.webRoot = webRoot;
+    this.pluginDir = pluginDir;
     this.log = log;
   }
 
@@ -66,50 +73,21 @@ export class CdpProxyServer {
    * and forward traffic to/from the UXP target.
    */
   async start(): Promise<number> {
-    // Fetch the real target ID from the UXP host's /json/list endpoint.
-    const targetId = await this.fetchTargetId();
+    // Determine target ID based on connection type.
+    let targetId: string;
+    if (this.targetWsUrl.includes("/socket/cdt/")) {
+      // UDT Service relay – extract session ID from URL path.
+      // /json/list is not available on the UDT Service port (returns {}).
+      targetId = this.targetWsUrl.split("/").pop() || "uxp-target";
+      this.log.appendLine(`UDT relay mode – using session ID as target: ${targetId}`);
+    } else {
+      // Direct plugin port – fetch real target ID from /json/list.
+      targetId = await this.fetchTargetId();
+    }
     this.log.appendLine(`Using target ID: ${targetId}`);
 
-    return new Promise<number>((resolve, reject) => {
-
-      this.httpServer = http.createServer((req, res) => {
-        const url = req.url ?? "/";
-        res.writeHead(200, { "Content-Type": "application/json" });
-
-        if (url.startsWith("/json/version")) {
-          // Return browser info WITHOUT a webSocketDebuggerUrl so that
-          // js-debug does not attempt a browser-level CDP connection.
-          // We always connect as a page target via /json/list.
-          res.end(
-            JSON.stringify({
-              Browser: "Adobe UXP",
-              "Protocol-Version": "1.3",
-            })
-          );
-        } else if (url.startsWith("/json/list") || url === "/json" || url === "/json/") {
-          // Match the format returned by a real plugin port (e.g. 9917/json/list).
-          const addr = this.httpServer!.address();
-          const port = addr && typeof addr === "object" ? addr.port : 0;
-          const wsUrl = `ws://127.0.0.1:${port}/devtools/page/${targetId}`;
-          res.end(
-            JSON.stringify([
-              {
-                description: "Adobe UXP",
-                devtoolsFrontendUrl: `devtools://devtools/bundled/inspector.html?experiments=true&ws=127.0.0.1:${port}/devtools/page/${targetId}`,
-                documentName: "",
-                faviconUrl: "https://wwwimages2.adobe.com/favicon.ico",
-                id: targetId,
-                title: this.targetLabel,
-                type: "page",
-                url: "",
-                webSocketDebuggerUrl: wsUrl,
-              },
-            ])
-          );
-        } else {
-          res.end("{}");
-        }
-      });
+    const startServerRes = new Promise<number>((resolve, reject) => {
+      this.httpServer = http.createServer((req, res) => this.handleHttpRequest(req, res, targetId));
 
       // Upgrade handler – when js-debug opens a WebSocket to us
       this.httpServer.on("upgrade", (req, socket, head) => {
@@ -128,12 +106,18 @@ export class CdpProxyServer {
         }
       });
     });
+
+    return startServerRes;
   }
 
   /**
    * Gracefully shut down the proxy and close all WebSocket connections.
    */
   async stop(): Promise<void> {
+    if (this.noContextTimer) {
+      clearTimeout(this.noContextTimer);
+      this.noContextTimer = undefined;
+    }
     this.clientWs?.close();
     this.targetWs?.close();
     return new Promise<void>((resolve) => {
@@ -148,6 +132,54 @@ export class CdpProxyServer {
   // -----------------------------------------------------------------------
   // Internals
   // -----------------------------------------------------------------------
+
+  /**
+   * Handle an incoming HTTP request from js-debug.
+   * Returns synthetic CDP discovery responses for /json/version and /json/list.
+   */
+  private handleHttpRequest(
+    req: http.IncomingMessage,
+    res: http.ServerResponse,
+    targetId: string
+  ): void {
+    const url = req.url ?? "/";
+    res.writeHead(200, { "Content-Type": "application/json" });
+
+    // Return custom made synthetic responses for the two "discovery" endpoints that js-debug calls
+    if (url.startsWith("/json/version")) {
+      // Return browser info WITHOUT a webSocketDebuggerUrl so that
+      // js-debug does not attempt a browser-level CDP connection.
+      // We always connect as a page target via /json/list.
+      res.end(
+        JSON.stringify({
+          Browser: "Adobe UXP",
+          "Protocol-Version": "1.3",
+        })
+      );
+    } else if (url.startsWith("/json/list") || url === "/json" || url === "/json/") {
+      // Match the format returned by a real plugin port (e.g. 9917/json/list).
+      const addr = this.httpServer!.address();
+      const port = addr && typeof addr === "object" ? addr.port : 0;
+      const wsUrl = `ws://127.0.0.1:${port}/devtools/page/${targetId}`;
+      res.end(
+        JSON.stringify([
+          {
+            description: "Adobe UXP",
+            devtoolsFrontendUrl: `devtools://devtools/bundled/inspector.html?experiments=true&ws=127.0.0.1:${port}/devtools/page/${targetId}`,
+            documentName: "",
+            faviconUrl: "https://wwwimages2.adobe.com/favicon.ico",
+            id: targetId,
+            title: this.targetLabel,
+            type: "page",
+            url: "",
+            webSocketDebuggerUrl: wsUrl,
+          },
+        ])
+      );
+    } else {
+      res.end("{}");
+    }
+  }
 
   /**
    * Handle the WebSocket upgrade request from js-debug.
@@ -169,6 +201,22 @@ export class CdpProxyServer {
 
       this.targetWs.on("open", () => {
         this.log.appendLine(`Connected to UXP target: ${this.targetWsUrl}`);
+
+        // Start a timer — if we don't receive an execution context within
+        // the timeout the plugin is probably not loaded in the host app.
+        this.noContextTimer = setTimeout(() => {
+          if (!this.executionContextUniqueId) {
+            this.log.appendLine(
+              "[CDP] Warning: no execution context received within " +
+              `${CdpProxyServer.CONTEXT_TIMEOUT_MS / 1000}s — plugin may not be loaded. Disconnecting.`
+            );
+            vscode.window.showWarningMessage(
+              "UXP Debugger: Connected to the relay but no response from the plugin. " +
+              "Make sure the plugin is loaded in the host application (e.g. via UDT 'uxp plugin load')."
+            );
+            this.stop();
+          }
+        }, CdpProxyServer.CONTEXT_TIMEOUT_MS);
 
         // Enable the Runtime domain so that Runtime.evaluate works.
         // UXP may ignore this, but some runtimes require it.
@@ -280,6 +328,10 @@ export class CdpProxyServer {
         typeof msg.params?.context?.uniqueId === "string"
       ) {
         this.executionContextUniqueId = msg.params.context.uniqueId;
+        if (this.noContextTimer) {
+          clearTimeout(this.noContextTimer);
+          this.noContextTimer = undefined;
+        }
         this.log.appendLine(`[CDP] Captured executionContext uniqueId: ${this.executionContextUniqueId}`);
       }
 
@@ -292,12 +344,18 @@ export class CdpProxyServer {
         // source paths (e.g. "../src/shared/store.ts") resolve to the
         // correct local files under webRoot.
         if (
-          this.webRoot &&
           typeof msg.params.sourceMapURL === "string" &&
           msg.params.sourceMapURL.startsWith("data:")
         ) {
+          // Derive the subdirectory from the normalized script URL.
+          // normalize() resolves "./" and "../" segments first, then dirname()
+          // extracts the directory. e.g. "./bundle/index.js" → "bundle"
+          const cleanUrl = path.posix.normalize(msg.params.url as string);
+          const dir = path.posix.dirname(cleanUrl);
+          const scriptSubdir = (dir === "/" || dir === ".") ? "" : dir.replace(/^\//, "");
           msg.params.sourceMapURL = this.rewriteInlineSourceMapRoot(
-            msg.params.sourceMapURL
+            msg.params.sourceMapURL,
+            scriptSubdir
           );
         }
 
@@ -357,10 +415,10 @@ export class CdpProxyServer {
    *
    * Webpack source maps typically contain paths like `../src/shared/store.ts`
    * which are relative to the output directory (one level below the project
-   * root).  By setting `sourceRoot` to `<webRoot>/_/` we ensure that
-   * `../<path>` resolves back to `<webRoot>/<path>`.
+   * root).  By setting `sourceRoot` to `<projectDir>/_/` we ensure that
+   * `../<path>` resolves back to `<projectDir>/<path>`.
    */
-  private rewriteInlineSourceMapRoot(dataUrl: string): string {
+  private rewriteInlineSourceMapRoot(dataUrl: string, scriptSubdir = ""): string {
     try {
       // data:application/json;base64,<payload>
       // data:application/json;charset=utf-8;base64,<payload>
@@ -379,8 +437,9 @@ export class CdpProxyServer {
       const map = JSON.parse(json);
 
       // Use a file:// URL so that js-debug resolves paths as local files.
-      // The dummy `_` segment is consumed by the `../` in the source entries.
-      const root = "file:///" + this.webRoot.replace(/\\/g, "/") + "/_/";
+      // Include the script's subdirectory so relative source entries resolve correctly.
+      const baseDir = this.pluginDir.replace(/\\/g, "/") + (scriptSubdir ? "/" + scriptSubdir : "");
+      const root = "file:///" + baseDir + "/";
       const oldRoot = map.sourceRoot;
       map.sourceRoot = root;
 

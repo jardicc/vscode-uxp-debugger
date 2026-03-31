@@ -1,22 +1,42 @@
 {
-  "name": "vscode-uxp-debugger",
+  "name": "uxpdebugger",
   "displayName": "UXP Debugger",
-  "description": "Attach to Adobe UXP plugins for debugging via the built-in JS debugger",
+  "description": "Attach to Adobe UXP plugins for debugging in VSCode. Supports inlined sourcemaps",
   "version": "0.1.0",
-  "publisher": "your-publisher-id",
+  "author": "Jaroslav Bereza",
+  "publisher": "JaroslavBereza",
+  "pricing": "Free",
   "license": "MIT",
   "engines": {
     "vscode": "^1.85.0"
   },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/jardicc/vscode-uxp-debugger"
+  },
   "categories": [
     "Debuggers"
+  ],
+  "keywords": [
+    "uxp",
+    "adobe",
+    "photoshop",
+    "indesign",
+    "debugger",
+    "plugin",
+    "cdp",
+    "chrome devtools protocol",
+    "UXP Developer Tools",
+    "UDT"
   ],
   "activationEvents": [
     "onDebugResolve:uxp",
     "onCommand:uxp.attach",
-    "onCommand:uxp.discover"
+    "onCommand:uxp.setManifestPath",
+    "onCommand:uxp.patchAsar"
   ],
   "main": "./dist/extension.js",
+  "icon": "./resources/icon.png",
   "contributes": {
     "commands": [
       {
@@ -24,8 +44,12 @@
         "title": "UXP: Attach to Adobe UXP Plugin"
       },
       {
-        "command": "uxp.discover",
-        "title": "UXP: Discover Running UXP Targets"
+        "command": "uxp.setManifestPath",
+        "title": "UXP: Set Manifest Path"
+      },
+      {
+        "command": "uxp.patchAsar",
+        "title": "UXP: Patch app.asar (Persist .uxprc)"
       }
     ],
     "debuggers": [
@@ -36,30 +60,10 @@
           "attach": {
             "required": [],
             "properties": {
-              "host": {
+              "manifestPath": {
                 "type": "string",
-                "description": "Host where the UXP host application is running",
-                "default": "localhost"
-              },
-              "port": {
-                "type": "number",
-                "description": "CDP port exposed by the UXP host application",
-                "default": 0
-              },
-              "webRoot": {
-                "type": "string",
-                "description": "Local root of the UXP plugin source code",
-                "default": "${workspaceFolder}"
-              },
-              "hostApp": {
-                "type": "string",
-                "description": "Adobe host application to target (e.g. photoshop, xd, indesign)",
-                "default": ""
-              },
-              "pluginId": {
-                "type": "string",
-                "description": "Specific UXP plugin ID to attach to",
-                "default": ""
+                "description": "Absolute path to the plugin's manifest.json. Supports VS Code variables like ${workspaceFolder}.",
+                "default": "${workspaceFolder}/manifest.json"
               }
             }
           }
@@ -67,13 +71,12 @@
         "configurationSnippets": [
           {
             "label": "UXP: Attach to Plugin",
-            "description": "Attach to a running Adobe UXP plugin. Pin the debug port by placing a .debug file next to manifest.json: { \"port\": 4243, \"breakOnStart\": false }",
+            "description": "Attach to a running Adobe UXP plugin. Place a .debug.json or .uxprc file next to manifest.json for endpoint discovery.",
             "body": {
               "type": "uxp",
               "request": "attach",
               "name": "Attach to UXP Plugin",
-              "port": 4243,
-              "webRoot": "^\"\\${workspaceFolder}\""
+              "manifestPath": "^\"\\${workspaceFolder}/manifest.json\""
             }
           }
         ]
@@ -82,11 +85,6 @@
     "configuration": {
       "title": "UXP Debugger",
       "properties": {
-        "uxp-debugger.port": {
-          "type": "number",
-          "default": 4243,
-          "description": "Plugin debug port to probe during discovery. Must match the port in the plugin's .debug file (place next to manifest.json): { \"port\": 4243, \"breakOnStart\": false }"
-        }
       }
     }
   },
@@ -95,6 +93,7 @@
     "compile": "esbuild src/extension.ts --bundle --outfile=dist/extension.js --external:vscode --format=cjs --platform=node --sourcemap",
     "watch": "esbuild src/extension.ts --bundle --outfile=dist/extension.js --external:vscode --format=cjs --platform=node --sourcemap --watch",
     "lint": "eslint src --ext ts",
+    "build": "vsce package",
     "test": "node --experimental-vm-modules node_modules/.bin/jest"
   },
   "devDependencies": {
