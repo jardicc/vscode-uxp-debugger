@@ -36,6 +36,7 @@
     "onCommand:uxp.patchAsar"
   ],
   "main": "./dist/extension.js",
+  "icon": "./resources/icon.png",
   "contributes": {
     "commands": [
       {
