@@ -1,5 +1,5 @@
 import * as path from "path";
-import {MANIFEST_HISTORY_KEY} from "../constants";
+import {MANIFEST_HISTORY_KEY, MAX_HISTORY_ENTRIES} from "../constants";
 import * as vscode from "vscode";
 
 // ---------------------------------------------------------------------------
@@ -64,8 +64,8 @@ export async function selectManifestPath(
   // Update history: move selected path to front, keep max 10 unique entries
   let newHistory = history.filter((p) => p !== selectedPath);
   newHistory.unshift(selectedPath);
-  if (newHistory.length > 10) {
-	newHistory = newHistory.slice(0, 10);
+  if (newHistory.length > MAX_HISTORY_ENTRIES) {
+	newHistory = newHistory.slice(0, MAX_HISTORY_ENTRIES);
   }
   await context.globalState.update(MANIFEST_HISTORY_KEY, newHistory);
 

@@ -1,12 +1,13 @@
 import * as fs from "fs";
+import * as net from "net";
 import * as path from "path";
 import * as vscode from "vscode";
-import { TARGET_HISTORY_KEY } from "../constants";
+import { TARGET_HISTORY_KEY, UDT_SERVICE_PORT } from "../constants";
 import { UxpTarget, TargetHistoryEntry } from "../types";
 import { discoverViaDebugJson } from "../endpointDetection/discoverViaDebugJson";
 import { discoverViaUxpRc } from "../endpointDetection/discoverViaUxpRc";
 import { CdpProxyServer } from "../cdpProxy";
-import { pickTarget } from "../uiHelpers";
+import { pickTarget, pickHistoryOrNew } from "../uiHelpers";
 
 /** Active CDP proxy instance (one per debug session). */
 let activeCdpProxy: CdpProxyServer | undefined;
@@ -51,6 +52,53 @@ async function saveHistoryEntry(
     history = history.slice(0, MAX_HISTORY);
   }
   await context.globalState.update(TARGET_HISTORY_KEY, history);
+}
+
+// ---------------------------------------------------------------------------
+// UDT Service liveness check
+// ---------------------------------------------------------------------------
+
+/**
+ * Check whether UDT is listening on its well-known port.
+ * Resolves `true` if UDT is reachable, `false` otherwise.
+ */
+function isUdtRunning(): Promise<boolean> {
+  return new Promise((resolve) => {
+    const socket = new net.Socket();
+    socket.setTimeout(1500);
+    socket.once("connect", () => {
+      socket.destroy();
+      resolve(true);
+    });
+    socket.once("timeout", () => {
+      socket.destroy();
+      resolve(false);
+    });
+    socket.once("error", () => {
+      resolve(false);
+    });
+    socket.connect(UDT_SERVICE_PORT, "127.0.0.1");
+  });
+}
+
+/**
+ * Show an appropriate "no targets" message, checking whether UDT is running
+ * to give the user more actionable guidance.
+ */
+async function showNoTargetsMessage(outputChannel: vscode.OutputChannel): Promise<void> {
+  const udtAlive = await isUdtRunning();
+  if (!udtAlive) {
+    outputChannel.appendLine("UDT Service is not reachable on port " + UDT_SERVICE_PORT);
+    vscode.window.showErrorMessage(
+      "UXP Developer Tools (UDT) does not appear to be running. " +
+      "Please launch UDT before attempting to attach and check its settings that port is set to " + UDT_SERVICE_PORT + "."
+    );
+  } else {
+    vscode.window.showWarningMessage(
+      "No running UXP targets found. Make sure an Adobe host application is running with a loaded UXP plugin. " +
+      "Otherwise click 'Load Button' in UXP Developer Tools to load plugin, then try attaching again."
+    );
+  }
 }
 
 // ---------------------------------------------------------------------------
@@ -139,7 +187,112 @@ async function doAttach(
 }
 
 // ---------------------------------------------------------------------------
-// Main attach command
+// Attach flows – one function per entry point
+// ---------------------------------------------------------------------------
+
+/**
+ * Flow 1: Attach via launch.json – manifest path is provided as an argument.
+ * Discovers targets from that manifest directory and lets the user pick one.
+ */
+async function attachViaLaunchJson(
+  manifestPath: string,
+  context: vscode.ExtensionContext,
+  outputChannel: vscode.OutputChannel
+): Promise<void> {
+  if (!fs.existsSync(manifestPath)) {
+    vscode.window.showErrorMessage(
+      `UXP: manifest.json not found at: ${manifestPath}`
+    );
+    return;
+  }
+  const pluginDir = path.dirname(manifestPath);
+  outputChannel.appendLine(`Plugin directory (from launch.json): ${pluginDir}`);
+
+  const targets = await discoverTargets(pluginDir, outputChannel);
+  if (targets.length === 0) {
+    await showNoTargetsMessage(outputChannel);
+    return;
+  }
+
+  const target = await pickTarget(targets);
+  if (!target) {
+    return;
+  }
+
+  await doAttach(manifestPath, target, context, outputChannel);
+}
+
+/**
+ * Flow 2: Reconnect to a previously used target from history.
+ * Tries to match the saved pluginId / label, falls back to user pick.
+ */
+async function attachViaHistory(
+  entry: TargetHistoryEntry,
+  context: vscode.ExtensionContext,
+  outputChannel: vscode.OutputChannel
+): Promise<void> {
+  const pluginDir = path.dirname(entry.manifestPath);
+  outputChannel.appendLine(`Plugin directory (from history): ${pluginDir}`);
+
+  const targets = await discoverTargets(pluginDir, outputChannel);
+
+  // Try to find the same target by pluginId first, then by label
+  let target = targets.find((t) => t.pluginId === entry.pluginId)
+            ?? targets.find((t) => t.label === entry.targetLabel);
+
+  if (!target && targets.length === 1) {
+    target = targets[0];
+  } else if (!target && targets.length > 1) {
+    target = await pickTarget(targets);
+  }
+
+  if (!target) {
+    await showNoTargetsMessage(outputChannel);
+    return;
+  }
+
+  await doAttach(entry.manifestPath, target, context, outputChannel);
+}
+
+/**
+ * Flow 3: Browse for a new manifest.json via file picker, then discover
+ * targets and let the user pick one.
+ */
+async function attachViaFilePicker(
+  context: vscode.ExtensionContext,
+  outputChannel: vscode.OutputChannel
+): Promise<void> {
+  const manifestUri = await vscode.window.showOpenDialog({
+    canSelectFiles: true,
+    canSelectFolders: false,
+    canSelectMany: false,
+    filters: { JSON: ["json"] },
+    title: "Select manifest.json",
+  });
+  if (!manifestUri || manifestUri.length === 0) {
+    return;
+  }
+
+  const manifestPath = manifestUri[0].fsPath;
+  const pluginDir = path.dirname(manifestPath);
+  outputChannel.appendLine(`Plugin directory (from file picker): ${pluginDir}`);
+
+  const targets = await discoverTargets(pluginDir, outputChannel);
+  if (targets.length === 0) {
+    await showNoTargetsMessage(outputChannel);
+    return;
+  }
+
+  const target = await pickTarget(targets);
+  if (!target) {
+    return;
+  }
+
+  await doAttach(manifestPath, target, context, outputChannel);
+}
+
+// ---------------------------------------------------------------------------
+// Main attach command – dispatches to the appropriate flow
 // ---------------------------------------------------------------------------
 
 export async function attachCommand(
@@ -162,152 +315,34 @@ export async function attachCommand(
       activeCdpProxy = undefined;
     }
 
-    // If a manifest path was provided (e.g. from launch.json), skip the
-    // history QuickPick and go straight to discovery.
+    // Flow 1: manifest path from launch.json
     if (manifestPathArg) {
-      if (!fs.existsSync(manifestPathArg)) {
-        vscode.window.showErrorMessage(
-          `UXP: manifest.json not found at: ${manifestPathArg}`
-        );
-        return;
-      }
-      const pluginDir = path.dirname(manifestPathArg);
-      outputChannel.appendLine(`Plugin directory (from launch.json): ${pluginDir}`);
-
-      const targets = await discoverTargets(pluginDir, outputChannel);
-      if (targets.length === 0) {
-        vscode.window.showWarningMessage(
-          "No running UXP targets found. Make sure an Adobe host application is running with a loaded UXP plugin, " +
-          "or use 'uxp plugin load' from devtools-cli to generate a .uxprc session file."
-        );
-        return;
-      }
-
-      const target = await pickTarget(targets);
-      if (!target) {
-        return;
-      }
-
-      await doAttach(manifestPathArg, target, context, outputChannel);
+      await attachViaLaunchJson(manifestPathArg, context, outputChannel);
       return;
     }
 
-    const history = loadHistory(context);
-    // Also persist the pruned list (stale entries removed)
-    await context.globalState.update(TARGET_HISTORY_KEY, history);
-
-    interface HistoryPickItem extends vscode.QuickPickItem {
-      entry?: TargetHistoryEntry;
+    if (!await isUdtRunning()) {
+      await showNoTargetsMessage(outputChannel);
+      return;
     }
 
-    const items: HistoryPickItem[] = [
-      {
-        label: "$(add) Select new target\u2026",
-        description: "Browse for manifest.json and discover targets",
-        alwaysShow: true,
-      },
-      ...history.map((e) => {
-        const dir = path.basename(path.dirname(e.manifestPath));
-        const ago = formatTimeAgo(e.lastUsed);
-        return {
-          label: e.targetLabel,
-          description: `${e.hostApp} \u2013 ${dir}`,
-          detail: `${e.manifestPath}  \u00b7  ${ago}`,
-          entry: e,
-        };
-      }),
-    ];
+    // Flow 2 / 3: interactive – show history QuickPick
+    const history = loadHistory(context);
+    await context.globalState.update(TARGET_HISTORY_KEY, history);
 
-    const picked = await vscode.window.showQuickPick(items, {
-      title: "UXP Attach",
-      placeHolder: history.length > 0
-        ? "Pick a recent target or select a new one"
-        : "No recent targets \u2013 select a new manifest.json",
-    });
-
+    const picked = await pickHistoryOrNew(history);
     if (!picked) {
       return;
     }
 
-    if (picked.entry) {
-      // ---- Reconnect to a previously used target ----
-      const entry = picked.entry;
-      const pluginDir = path.dirname(entry.manifestPath);
-      outputChannel.appendLine(`Plugin directory (from history): ${pluginDir}`);
-
-      const targets = await discoverTargets(pluginDir, outputChannel);
-
-      // Try to find the same target by pluginId first, then by label
-      let target = targets.find((t) => t.pluginId === entry.pluginId)
-                ?? targets.find((t) => t.label === entry.targetLabel);
-
-      if (!target && targets.length === 1) {
-        target = targets[0];
-      } else if (!target && targets.length > 1) {
-        target = await pickTarget(targets);
-      }
-
-      if (!target) {
-        vscode.window.showWarningMessage(
-          "No running UXP targets found for this plugin. " +
-          "Make sure the Adobe host application is running with the plugin loaded."
-        );
-        return;
-      }
-
-      await doAttach(entry.manifestPath, target, context, outputChannel);
-    } else {
-      // ---- New target flow ----
-      const manifestUri = await vscode.window.showOpenDialog({
-        canSelectFiles: true,
-        canSelectFolders: false,
-        canSelectMany: false,
-        filters: { JSON: ["json"] },
-        title: "Select manifest.json",
-      });
-      if (!manifestUri || manifestUri.length === 0) {
-        return;
-      }
-      const manifestPath = manifestUri[0].fsPath;
-      const pluginDir = path.dirname(manifestPath);
-      outputChannel.appendLine(`Plugin directory (from manifest.json): ${pluginDir}`);
-
-      const targets = await discoverTargets(pluginDir, outputChannel);
-
-      if (targets.length === 0) {
-        vscode.window.showWarningMessage(
-          "No running UXP targets found. Make sure an Adobe host application is running with a loaded UXP plugin, " +
-          "or use 'uxp plugin load' from devtools-cli to generate a .uxprc session file."
-        );
-        return;
-      }
-
-      const target = await pickTarget(targets);
-      if (!target) {
-        return;
-      }
-
-      await doAttach(manifestPath, target, context, outputChannel);
+    if (picked.kind === "history") {
+      await attachViaHistory(picked.entry, context, outputChannel);
+    } else if (picked.kind === "new") {
+      await attachViaFilePicker(context, outputChannel);
     }
   } catch (err: unknown) {
     const message = err instanceof Error ? err.message : String(err);
     vscode.window.showErrorMessage(`UXP Attach failed: ${message}`);
     outputChannel.appendLine(`Error: ${message}`);
   }
-}
-
-// ---------------------------------------------------------------------------
-// Helpers
-// ---------------------------------------------------------------------------
-
-function formatTimeAgo(timestamp: number): string {
-  const diffMs = Date.now() - timestamp;
-  const minutes = Math.floor(diffMs / 60_000);
-  if (minutes < 1) { return "just now"; }
-  if (minutes < 60) { return `${minutes}m ago`; }
-  const hours = Math.floor(minutes / 60);
-  if (hours < 24) { return `${hours}h ago`; }
-  const days = Math.floor(hours / 24);
-  if (days < 30) { return `${days}d ago`; }
-  return new Date(timestamp).toLocaleDateString();
 }

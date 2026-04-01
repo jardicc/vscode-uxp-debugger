@@ -44,6 +44,8 @@ If something goes wrong with UDT delete `app.asar` and rename `app.asar.bak` to 
 please uninstall with Creative Cloud Desktop app. Check the UDT directory for remaining files and remove them if any. Then install UDT again.
 
 ### Alternative Method. Load the plugin via UDT CLI (for experts)
+<details>
+<summary>Show details</summary>
 
 Use the `uxp` CLI (not included with UDT) to load your plugin into the host app. This generates the `.uxprc` session file that the debugger reads.
 
@@ -60,6 +62,7 @@ uxp plugin load
 Run this from your plugin directory (where `manifest.json` is). The `.uxprc` file will appear next to `manifest.json` after the plugin is loaded.
 
 This option is not very ergonomic. Has several disadvantages and I recommend it only for experts if there are special requirements.
+</details>
 
 ---
 
@@ -96,7 +99,8 @@ Add a configuration to `.vscode/launch.json`:
 Press **F5** (or choose the configuration from the Run & Debug panel). VS Code substitutes `${workspaceFolder}` and other variables before passing the path to the extension.
 
 ### Option C — `.debug.json` (fixed port) - not recommended
-
+<details>
+<summary>Show details</summary>
 If you prefer not to use the UDT relay, you can pin a fixed CDP debug port by placing manually a `.debug.json` file next to `manifest.json`:
 
 ```json
@@ -106,6 +110,7 @@ If you prefer not to use the UDT relay, you can pin a fixed CDP debug port by pl
 The extension will probe that port directly via `/json/list` instead of using the UDT relay. Both methods can coexist.
 
 This will work only in older versions of host apps.
+</details>
 
 ---
 
@@ -114,7 +119,7 @@ This will work only in older versions of host apps.
 | Symptom | Cause | Fix |
 |---|---|---|
 | _"No running UXP targets found"_ | Plugin not loaded, or wrong `manifest.json` | Run `uxp plugin load` and make sure the host app is open |
-| _"Connected to the relay but no response from the plugin"_ — session disconnects after 8 s | Plugin load succeeded but the UXP runtime never sent a ready signal | Reload the plugin via `uxp plugin load` and try again |
+| _"Connected to the relay but no response from the plugin"_ — session disconnects after 8 s | Plugin load succeeded but the UXP runtime never sent a ready signal | Unload the plugin and load again via "Load button" in UDT and try again |
 | _"manifest.json not found"_ | Path in `launch.json` is wrong | Check the `manifestPath` value; make sure `${workspaceFolder}` resolves to the right folder |
 | _"A UXP debug session is already active"_ | Tried to attach while already debugging | Click **Detach and reconnect** to replace the existing session, or cancel |
 | _"Failed to start the JS debug session"_ | Internal `pwa-node` attach error | Check the **UXP Debugger** output channel for details |

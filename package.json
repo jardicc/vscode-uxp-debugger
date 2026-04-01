@@ -32,7 +32,6 @@
   "activationEvents": [
     "onDebugResolve:uxp",
     "onCommand:uxp.attach",
-    "onCommand:uxp.setManifestPath",
     "onCommand:uxp.patchAsar"
   ],
   "main": "./dist/extension.js",
@@ -42,10 +41,6 @@
       {
         "command": "uxp.attach",
         "title": "UXP: Attach to Adobe UXP Plugin"
-      },
-      {
-        "command": "uxp.setManifestPath",
-        "title": "UXP: Set Manifest Path"
       },
       {
         "command": "uxp.patchAsar",

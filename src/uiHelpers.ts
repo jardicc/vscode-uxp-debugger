@@ -1,5 +1,10 @@
+import * as path from "path";
 import * as vscode from "vscode";
-import {UxpTarget} from "./types";
+import {UxpTarget, TargetHistoryEntry} from "./types";
+
+// ---------------------------------------------------------------------------
+// Target picker (multiple discovered targets)
+// ---------------------------------------------------------------------------
 
 /**
  * Show a QuickPick so the user can choose which UXP target to attach to.
@@ -27,4 +32,74 @@ export async function pickTarget(
   }
 
   return targets.find((t) => t.webSocketUrl === picked.detail);
+}
+
+// ---------------------------------------------------------------------------
+// History / new-target picker
+// ---------------------------------------------------------------------------
+
+export type HistoryPickResult =
+  | { kind: "history"; entry: TargetHistoryEntry }
+  | { kind: "new" }
+  | undefined;
+
+/**
+ * Show a QuickPick that lets the user either reconnect to a recent target
+ * from history or browse for a new manifest.json.
+ */
+export async function pickHistoryOrNew(
+  history: TargetHistoryEntry[]
+): Promise<HistoryPickResult> {
+  interface HistoryPickItem extends vscode.QuickPickItem {
+    entry?: TargetHistoryEntry;
+  }
+
+  const items: HistoryPickItem[] = [
+    {
+      label: "$(add) Select new target\u2026",
+      description: "Browse for manifest.json and discover targets",
+      alwaysShow: true,
+    },
+    ...history.map((e) => {
+      const dir = path.basename(path.dirname(e.manifestPath));
+      const ago = formatTimeAgo(e.lastUsed);
+      return {
+        label: e.targetLabel,
+        description: `${e.hostApp} \u2013 ${dir}`,
+        detail: `${e.manifestPath}  \u00b7  ${ago}`,
+        entry: e,
+      };
+    }),
+  ];
+
+  const picked = await vscode.window.showQuickPick(items, {
+    title: "UXP Attach",
+    placeHolder: history.length > 0
+      ? "Pick a recent target or select a new one"
+      : "No recent targets \u2013 select a new manifest.json",
+  });
+
+  if (!picked) {
+    return undefined;
+  }
+
+  return picked.entry
+    ? { kind: "history", entry: picked.entry }
+    : { kind: "new" };
+}
+
+// ---------------------------------------------------------------------------
+// Helpers
+// ---------------------------------------------------------------------------
+
+function formatTimeAgo(timestamp: number): string {
+  const diffMs = Date.now() - timestamp;
+  const minutes = Math.floor(diffMs / 60_000);
+  if (minutes < 1) { return "just now"; }
+  if (minutes < 60) { return `${minutes}m ago`; }
+  const hours = Math.floor(minutes / 60);
+  if (hours < 24) { return `${hours}h ago`; }
+  const days = Math.floor(hours / 24);
+  if (days < 30) { return `${days}d ago`; }
+  return new Date(timestamp).toLocaleDateString();
 }
