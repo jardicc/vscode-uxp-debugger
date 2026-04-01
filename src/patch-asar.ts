@@ -332,12 +332,19 @@ function patchSourceContent(content: string): { patched: string; status: Content
 
 // ==================== ASAR patch mode ====================
 
-export async function patchAsarFile(asarPath: string): Promise<PatchAsarResult> {
+export type ProgressCallback = (message: string, increment?: number) => void;
+
+export async function patchAsarFile(
+    asarPath: string,
+    onProgress?: ProgressCallback,
+): Promise<PatchAsarResult> {
+    const report = onProgress ?? (() => {});
     console.log("Mode: .asar archive (streaming)");
     console.log("ASAR:", asarPath);
     console.log("");
 
     // 1. Parse header
+    report("Parsing archive header…", 1);
     const { header, dataOffset } = parseAsarHeader(asarPath);
 
     // 2. Collect all packed files in data-section order
@@ -347,6 +354,7 @@ export async function patchAsarFile(asarPath: string): Promise<PatchAsarResult> 
     console.log(`Archive contains ${files.length} packed files.`);
 
     // 3. Find target files, extract & patch just those
+    report("Locating target files…", 1);
     const bundleFile = files.find(
         (f) =>
             f.entryPath.startsWith("dist/main.") &&
@@ -363,6 +371,7 @@ export async function patchAsarFile(asarPath: string): Promise<PatchAsarResult> 
     let sourceStatus: SourcePatchStatus = "skipped";
 
     if (bundleFile) {
+        report("Patching webpack bundle…", 1);
         console.log(
             `[bundle] Found: ${bundleFile.entryPath} (${bundleFile.oldSize} bytes)`,
         );
@@ -388,6 +397,7 @@ export async function patchAsarFile(asarPath: string): Promise<PatchAsarResult> 
     }
 
     if (sourceFile) {
+        report("Patching PluginLoadCommand.js…", 1);
         console.log(
             `[source] Found: ${sourceFile.entryPath} (${sourceFile.oldSize} bytes)`,
         );
@@ -409,11 +419,13 @@ export async function patchAsarFile(asarPath: string): Promise<PatchAsarResult> 
     }
 
     if (patches.size === 0) {
+        report("Already patched.", 1);
         console.log("\nNo changes needed (already patched).");
         return { bundleStatus, sourceStatus, summary: "Already patched — no changes made." };
     }
 
     // 4. Update header entries — sizes and integrity hashes
+    report("Recomputing integrity hashes…", 1);
     for (const file of files) {
         const patchedBuf = patches.get(file.entryPath);
         if (patchedBuf) {
@@ -439,13 +451,31 @@ export async function patchAsarFile(asarPath: string): Promise<PatchAsarResult> 
     const sizePickle = writePickleUint32(headerPickle.length);
 
     // 7. Write new .asar (streaming)
+    const WRITE_BUDGET = 94; // used for progress reporting
+    const totalWriteBytes = sizePickle.length + headerPickle.length
+        + files.reduce((acc, f) => acc + f.entry.size, 0);
+    let bytesWritten = 0;
+    let lastReportedPct = 0;
+    const reportWrite = (chunkBytes: number): void => {
+        bytesWritten += chunkBytes;
+        const pct = Math.floor((bytesWritten / totalWriteBytes) * WRITE_BUDGET);
+        // Only report progress on whole percentage increments to avoid spamming updates into UI.
+        if (pct > lastReportedPct) {
+            report("Writing patched archive…", pct - lastReportedPct);
+            lastReportedPct = pct;
+        }
+    };
+
+    report("Writing patched archive…");
     const tmpPath = asarPath + ".tmp";
     const bakPath = asarPath + ".bak";
 
     const out = fs.createWriteStream(tmpPath);
     try {
         await writeBuffer(out, sizePickle);
+        reportWrite(sizePickle.length);
         await writeBuffer(out, headerPickle);
+        reportWrite(headerPickle.length);
 
         for (const file of files) {
             const patchedBuf = patches.get(file.entryPath);
@@ -456,6 +486,7 @@ export async function patchAsarFile(asarPath: string): Promise<PatchAsarResult> 
                 const start = dataOffset + file.oldOffset;
                 await pipeChunk(asarPath, start, file.oldSize, out);
             }
+            reportWrite(file.entry.size);
         }
 
         await new Promise<void>((resolve, reject) => {
@@ -470,6 +501,7 @@ export async function patchAsarFile(asarPath: string): Promise<PatchAsarResult> 
     }
 
     // 8. Swap files: original → .bak, .tmp → original
+    report("Swapping files…", 1);
     if (!fs.existsSync(bakPath)) {
         fs.renameSync(asarPath, bakPath);
         console.log("Backup:", path.basename(bakPath));
