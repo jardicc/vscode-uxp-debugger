@@ -199,6 +199,7 @@ async function attachViaLaunchJson(
   context: vscode.ExtensionContext,
   outputChannel: vscode.OutputChannel
 ): Promise<void> {
+  manifestPath = path.normalize(manifestPath);
   if (!fs.existsSync(manifestPath)) {
     vscode.window.showErrorMessage(
       `UXP: manifest.json not found at: ${manifestPath}`
@@ -273,7 +274,7 @@ async function attachViaFilePicker(
     return;
   }
 
-  const manifestPath = manifestUri[0].fsPath;
+  const manifestPath = path.normalize(manifestUri[0].fsPath);
   const pluginDir = path.dirname(manifestPath);
   outputChannel.appendLine(`Plugin directory (from file picker): ${pluginDir}`);
 
@@ -339,6 +340,16 @@ export async function attachCommand(
       await attachViaHistory(picked.entry, context, outputChannel);
     } else if (picked.kind === "new") {
       await attachViaFilePicker(context, outputChannel);
+    } else if (picked.kind === "clearHistory") {
+      const confirm = await vscode.window.showWarningMessage(
+        "Clear all UXP attach history?",
+        { modal: true },
+        "Clear"
+      );
+      if (confirm === "Clear") {
+        await context.globalState.update(TARGET_HISTORY_KEY, []);
+        vscode.window.showInformationMessage("UXP attach history cleared.");
+      }
     }
   } catch (err: unknown) {
     const message = err instanceof Error ? err.message : String(err);

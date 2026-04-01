@@ -41,6 +41,7 @@ export async function pickTarget(
 export type HistoryPickResult =
   | { kind: "history"; entry: TargetHistoryEntry }
   | { kind: "new" }
+  | { kind: "clearHistory" }
   | undefined;
 
 /**
@@ -52,6 +53,7 @@ export async function pickHistoryOrNew(
 ): Promise<HistoryPickResult> {
   interface HistoryPickItem extends vscode.QuickPickItem {
     entry?: TargetHistoryEntry;
+    isClear?: boolean;
   }
 
   const items: HistoryPickItem[] = [
@@ -70,6 +72,9 @@ export async function pickHistoryOrNew(
         entry: e,
       };
     }),
+    ...(history.length > 0
+      ? [{ label: "$(trash) Clear history", isClear: true, alwaysShow: true }]
+      : []),
   ];
 
   const picked = await vscode.window.showQuickPick(items, {
@@ -83,9 +88,9 @@ export async function pickHistoryOrNew(
     return undefined;
   }
 
-  return picked.entry
-    ? { kind: "history", entry: picked.entry }
-    : { kind: "new" };
+  if (picked.entry) { return { kind: "history", entry: picked.entry }; }
+  if (picked.isClear) { return { kind: "clearHistory" }; }
+  return { kind: "new" };
 }
 
 // ---------------------------------------------------------------------------

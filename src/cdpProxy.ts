@@ -199,8 +199,20 @@ export class CdpProxyServer {
       // Connect to the real UXP target
       this.targetWs = new WebSocket(this.targetWsUrl);
 
+      // Buffer messages from js-debug until the target connection is open.
+      const pendingMessages: string[] = [];
+      let targetOpen = false;
+
       this.targetWs.on("open", () => {
         this.log.appendLine(`Connected to UXP target: ${this.targetWsUrl}`);
+        targetOpen = true;
+
+        // Flush any messages that arrived while we were connecting.
+        for (const queued of pendingMessages) {
+          this.logTraffic("js-debug → UXP (queued)", queued);
+          this.targetWs?.send(queued);
+        }
+        pendingMessages.length = 0;
 
         // Start a timer — if we don't receive an execution context within
         // the timeout the plugin is probably not loaded in the host app.
@@ -242,8 +254,12 @@ export class CdpProxyServer {
         const raw = data.toString();
         const rewritten = this.rewriteFromClient(raw);
         if (rewritten !== null) {
-          this.logTraffic("js-debug → UXP", rewritten);
-          this.targetWs?.send(rewritten);
+          if (targetOpen) {
+            this.logTraffic("js-debug → UXP", rewritten);
+            this.targetWs?.send(rewritten);
+          } else {
+            pendingMessages.push(rewritten);
+          }
         }
       });
 
