@@ -25,25 +25,32 @@ code --install-extension vscode-uxp-debugger-*.vsix
 
 ### 2. Patch the UXP Developer Tools (one-time)
 
-The extension discovers running plugin sessions via a `.uxprc` file that UDT writes next to your `manifest.json`. By default UDT does **not** write this file — a one-time patch to `app.asar` enables it.
+The extension discovers running plugin sessions via a `.uxprc` file that UDT writes next to your `manifest.json`. By default UDT does **not** write this file — a one-time patch to `app.asar` enables it. This file is in protected folder so we will use little trick to go around that.
 
-1. Open the Command Palette (`Ctrl+Shift+P` / `Cmd+Shift+P`) and run:
-   **`UXP: Patch app.asar (Persist .uxprc)`**
-2. A file dialog opens to the default UDT location:
+1. Make sure to quit UDT if it is running.
+2. On both Windows & MacOS you need to patch file `app.asar`. So go to the UDT location
    - **Windows:** `C:\Program Files\Adobe\Adobe UXP Developer Tools\resources`
    - **macOS:** `/Applications/Adobe UXP Developer Tools/Contents/Resources`
-3. Select `app.asar` and click **Patch**.
-4. If you get a _Permission denied_ error:
-   - **Windows:** Restart VS Code as Administrator, then run the command again. Or patch file in unprotected directory, then copy back.
-   - **macOS:** Fix the file ownership: `sudo chown -R $(whoami) "/Applications/Adobe UXP Developer Tools"`
-5. The patch is **idempotent** — safe to run multiple times. A `.bak` backup is created on the first run.
+3. Move `app.asar` file to your desktop using Explorer/Finder
+4. Most likely OS will ask you elevate permissions to do that so confirm the dialog
+5. Open the Command Palette in VSCode (`Ctrl+Shift+P` / `Cmd+Shift+P`) and run:
+   **`UXP: Patch app.asar (Persist .uxprc)`**
+7. Select `app.asar` in your desktop directory and wait for patcher to finish
+8. Now you should see `app.asar` (patched) and `app.asar.bak` (original file for backup reasons) on your desktop
+9. Move both files back into original location (OS will ask again for permission)
+   - **Windows:** `C:\Program Files\Adobe\Adobe UXP Developer Tools\resources`
+   - **macOS:** `/Applications/Adobe UXP Developer Tools/Contents/Resources`
+
+The patch is **idempotent** — safe to run multiple times. A `.bak` backup is created on the first run.
 
 After patching, restart the UXP Developer Tools application.
+
+#### Troubleshooting
 
 If something goes wrong with UDT delete `app.asar` and rename `app.asar.bak` to `app.asar` so original file will be restored. If there are still issues 
 please uninstall with Creative Cloud Desktop app. Check the UDT directory for remaining files and remove them if any. Then install UDT again.
 
-### Alternative Method. Load the plugin via UDT CLI (for experts)
+#### Alternative Method. Load the plugin via UDT CLI (for experts)
 <details>
 <summary>Show details</summary>
 
@@ -118,13 +125,13 @@ This will work only in older versions of host apps.
 
 | Symptom | Cause | Fix |
 |---|---|---|
-| _"No running UXP targets found"_ | Plugin not loaded, or wrong `manifest.json` | Run `uxp plugin load` and make sure the host app is open |
+| _"No running UXP targets found"_ | Plugin not loaded, or wrong `manifest.json` | Start UDT, load plugin and make sure the host app is open |
 | _"Connected to the relay but no response from the plugin"_ — session disconnects after 8 s | Plugin load succeeded but the UXP runtime never sent a ready signal | Unload the plugin and load again via "Load button" in UDT and try again |
 | _"manifest.json not found"_ | Path in `launch.json` is wrong | Check the `manifestPath` value; make sure `${workspaceFolder}` resolves to the right folder |
 | _"A UXP debug session is already active"_ | Tried to attach while already debugging | Click **Detach and reconnect** to replace the existing session, or cancel |
 | _"Failed to start the JS debug session"_ | Internal `pwa-node` attach error | Check the **UXP Debugger** output channel for details |
-| _"Permission denied"_ during patch | `app.asar` owned by another user | Windows: run VS Code as Administrator. macOS: `sudo chown -R $(whoami) "/Applications/Adobe UXP Developer Tools"` |
-| `.uxprc` not created after `uxp plugin load` | `app.asar` not yet patched | Run **UXP: Patch app.asar** (see Setup §2) |
+| _"Permission denied"_ during patch | `app.asar` owned by another user | Follow patching instructions above |
+| `.uxprc` not created after plugin load | `app.asar` not yet patched | Follow patching instructions above |
 
 ---
 
