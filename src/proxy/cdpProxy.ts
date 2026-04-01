@@ -1,7 +1,7 @@
 import * as http from "http";
-import * as path from "path";
 import * as vscode from "vscode";
 import WebSocket, { WebSocketServer } from "ws";
+import { CdpMessageRewriter } from "./cdpMessageRewriter";
 
 // ---------------------------------------------------------------------------
 // CDP Proxy Server
@@ -47,31 +47,8 @@ export class CdpProxyServer {
   /** Messages queued while (re)connecting to the UXP target. */
   private readonly pendingMessages: string[] = [];
 
-  /** IDs used for proxy-initiated CDP messages (not forwarded back to js-debug).
-   *  Must be positive – UXP uses jsoncpp which deserializes `id` as UInt and
-   *  rejects negative values with "LargestInt out of UInt range". */
-  private nextInternalId = 900_000;
-  private readonly internalIds = new Map<number, string>();
-
-  /** Tracks pending Runtime.evaluate request IDs to intercept error responses. */
-  private readonly pendingEvaluateIds = new Set<number>();
-
-  /** The uniqueId from the latest Runtime.executionContextCreated event. */
-  private executionContextUniqueId: string | undefined;
-
-  /** Timer handle for the "no execution context" warning. */
-  private noContextTimer: ReturnType<typeof setTimeout> | undefined;
-
-  /** Deferred context-destruction messages awaiting a possible reload. */
-  private deferredContextMessages: string[] = [];
-  private deferredContextTimer: ReturnType<typeof setTimeout> | undefined;
-
-  /** How long (ms) to wait for a new execution context after destruction
-   *  before forwarding the destruction event to js-debug (reload grace period). */
-  private static readonly CONTEXT_RELOAD_GRACE_MS = 2_000;
-
-  /** How long (ms) to wait for an execution context before warning the user. */
-  private static readonly CONTEXT_TIMEOUT_MS = 8_000;
+  /** Handles all CDP message rewriting and context-tracking state. */
+  private readonly rewriter: CdpMessageRewriter;
 
   /** Max number of reconnect attempts before giving up. */
   private static readonly MAX_RECONNECT_ATTEMPTS = 20;
@@ -84,6 +61,12 @@ export class CdpProxyServer {
     this.targetLabel = targetLabel;
     this.pluginDir = pluginDir;
     this.log = log;
+    this.rewriter = new CdpMessageRewriter(
+      pluginDir,
+      log,
+      (msg) => this.clientWs?.send(msg),
+      () => this.stop(),
+    );
   }
 
   // -----------------------------------------------------------------------
@@ -138,15 +121,7 @@ export class CdpProxyServer {
    */
   async stop(): Promise<void> {
     this.stopping = true;
-    if (this.noContextTimer) {
-      clearTimeout(this.noContextTimer);
-      this.noContextTimer = undefined;
-    }
-    if (this.deferredContextTimer) {
-      clearTimeout(this.deferredContextTimer);
-      this.deferredContextTimer = undefined;
-      this.deferredContextMessages.length = 0;
-    }
+    this.rewriter.dispose();
     this.clientWs?.close();
     this.targetWs?.close();
     return new Promise<void>((resolve) => {
@@ -230,7 +205,7 @@ export class CdpProxyServer {
       // ------ Forward: js-debug (client) → UXP target ------
       clientWs.on("message", (data) => {
         const raw = data.toString();
-        const rewritten = this.rewriteFromClient(raw);
+        const rewritten = this.rewriter.rewriteFromClient(raw);
         if (rewritten !== null) {
           if (this.targetOpen) {
             this.logTraffic("js-debug → UXP", rewritten);
@@ -278,23 +253,10 @@ export class CdpProxyServer {
 
       // Start a timer — if we don't receive an execution context within
       // the timeout the plugin is probably not loaded in the host app.
-      this.noContextTimer = setTimeout(() => {
-        if (!this.executionContextUniqueId) {
-          this.log.appendLine(
-            "[CDP] Warning: no execution context received within " +
-            `${CdpProxyServer.CONTEXT_TIMEOUT_MS / 1000}s — plugin may not be loaded. Disconnecting.`
-          );
-          vscode.window.showWarningMessage(
-            "UXP Debugger: Connected to the relay but no response from the plugin. " +
-            "Make sure the plugin is loaded in the host application (e.g. via UDT 'uxp plugin load')."
-          );
-          this.stop();
-        }
-      }, CdpProxyServer.CONTEXT_TIMEOUT_MS);
+      this.rewriter.startContextTimeout();
 
       // Enable the Runtime domain so that Runtime.evaluate works.
-      const enableId = this.nextInternalId++;
-      this.internalIds.set(enableId, "Runtime.enable");
+      const enableId = this.rewriter.allocateInternalId("Runtime.enable");
       this.targetWs?.send(
         JSON.stringify({ id: enableId, method: "Runtime.enable", params: {} })
       );
@@ -303,7 +265,7 @@ export class CdpProxyServer {
     // ------ Forward: UXP target → js-debug (client) ------
     this.targetWs.on("message", (data) => {
       const raw = data.toString();
-      const rewritten = this.rewriteFromTarget(raw);
+      const rewritten = this.rewriter.rewriteFromTarget(raw);
       if (rewritten !== null) {
         this.logTraffic("UXP → js-debug", rewritten);
         this.clientWs?.send(rewritten);
@@ -313,11 +275,7 @@ export class CdpProxyServer {
     this.targetWs.on("close", () => {
       this.log.appendLine("UXP target WebSocket closed.");
       this.targetOpen = false;
-      this.executionContextUniqueId = undefined;
-      if (this.noContextTimer) {
-        clearTimeout(this.noContextTimer);
-        this.noContextTimer = undefined;
-      }
+      this.rewriter.resetContextState();
       if (!this.stopping) {
         this.reconnectToTarget();
       }
@@ -369,267 +327,10 @@ export class CdpProxyServer {
       currentWs?.on("close", () => {
         this.log.appendLine("UXP target WebSocket closed.");
         this.targetOpen = false;
-        this.executionContextUniqueId = undefined;
-        if (this.noContextTimer) {
-          clearTimeout(this.noContextTimer);
-          this.noContextTimer = undefined;
-        }
+        this.rewriter.resetContextState();
         onCloseRetry();
       });
     }, CdpProxyServer.RECONNECT_DELAY_MS);
-  }
-
-  // -----------------------------------------------------------------------
-  // Message rewriting hooks
-  // -----------------------------------------------------------------------
-
-  /**
-   * Rewrite / filter a CDP message coming FROM the UXP target BEFORE it
-   * reaches js-debug. Return `null` to swallow the message entirely.
-   *
-   * This is the main extension point for UXP-specific quirks:
-   *  - Patch `Debugger.scriptParsed` URLs for correct source-map resolution
-   *  - Inject missing events that js-debug expects
-   *  - Translate non-standard domain methods
-   */
-  private rewriteFromTarget(raw: string): string | null {
-    try {
-      const msg = JSON.parse(raw);
-
-      // Swallow responses to proxy-internal requests (e.g. Runtime.enable)
-      if (msg.id !== undefined && this.internalIds.has(msg.id)) {
-        const method = this.internalIds.get(msg.id);
-        this.internalIds.delete(msg.id);
-        this.log.appendLine(`[CDP] Swallowed internal response id=${msg.id} method=${method}`);
-        return null;
-      }
-
-      // If UXP returned an error for a Runtime.evaluate request,
-      // send back a synthetic result so the debug console shows a
-      // helpful message instead of crashing or being silent.
-      if (
-        msg.id !== undefined &&
-        this.pendingEvaluateIds.has(msg.id) &&
-        msg.error
-      ) {
-        this.pendingEvaluateIds.delete(msg.id);
-        const errText = msg.error.message || "Evaluation not supported";
-        this.log.appendLine(
-          `[CDP] Runtime.evaluate failed (id=${msg.id}): ${errText}`
-        );
-        return JSON.stringify({
-          id: msg.id,
-          result: {
-            result: {
-              type: "string",
-              value: `[UXP] ${errText}`,
-            },
-          },
-        });
-      }
-
-      // Clean up successful evaluate tracking
-      if (msg.id !== undefined && this.pendingEvaluateIds.has(msg.id)) {
-        this.pendingEvaluateIds.delete(msg.id);
-      }
-
-      // Capture the uniqueId from execution context creation.
-      if (
-        msg.method === "Runtime.executionContextCreated" &&
-        typeof msg.params?.context?.uniqueId === "string"
-      ) {
-        this.executionContextUniqueId = msg.params.context.uniqueId;
-        if (this.noContextTimer) {
-          clearTimeout(this.noContextTimer);
-          this.noContextTimer = undefined;
-        }
-        // A new context arrived — this is a reload. Discard any deferred
-        // destruction messages so js-debug keeps running.
-        if (this.deferredContextTimer) {
-          clearTimeout(this.deferredContextTimer);
-          this.deferredContextTimer = undefined;
-          this.log.appendLine(
-            `[CDP] New context arrived — discarding ${this.deferredContextMessages.length} deferred destruction event(s) (reload)`
-          );
-          this.deferredContextMessages.length = 0;
-        }
-        this.log.appendLine(`[CDP] Captured executionContext uniqueId: ${this.executionContextUniqueId}`);
-      }
-
-      // Defer executionContextDestroyed / executionContextsCleared:
-      // Hold the message for a short grace period. If a new
-      // executionContextCreated arrives (reload), we discard it.
-      // Otherwise (unload / real termination), we forward it to js-debug.
-      if (
-        msg.method === "Runtime.executionContextDestroyed" ||
-        msg.method === "Runtime.executionContextsCleared"
-      ) {
-        this.log.appendLine(
-          `[CDP] Deferring ${msg.method} (grace period ${CdpProxyServer.CONTEXT_RELOAD_GRACE_MS}ms)`
-        );
-        this.executionContextUniqueId = undefined;
-        this.deferredContextMessages.push(raw);
-
-        // (Re)start the grace timer — only one timer is active at a time.
-        if (!this.deferredContextTimer) {
-          this.deferredContextTimer = setTimeout(() => {
-            this.deferredContextTimer = undefined;
-            // Grace period elapsed with no new context — forward to js-debug.
-            this.log.appendLine(
-              `[CDP] Grace period elapsed — forwarding ${this.deferredContextMessages.length} deferred destruction event(s)`
-            );
-            for (const deferred of this.deferredContextMessages) {
-              this.clientWs?.send(deferred);
-            }
-            this.deferredContextMessages.length = 0;
-          }, CdpProxyServer.CONTEXT_RELOAD_GRACE_MS);
-        }
-        return null;
-      }
-
-      // Rewrite script URLs and inline source maps so that js-debug can
-      // map them to local files.
-      if (msg.method === "Debugger.scriptParsed" && typeof msg.params?.url === "string") {
-        msg.params.url = this.normalizeScriptUrl(msg.params.url);
-
-        // Fix the sourceRoot inside inline source maps so that relative
-        // source paths (e.g. "../src/shared/store.ts") resolve to the
-        // correct local files under webRoot.
-        if (
-          typeof msg.params.sourceMapURL === "string" &&
-          msg.params.sourceMapURL.startsWith("data:")
-        ) {
-          // Derive the subdirectory from the normalized script URL.
-          // normalize() resolves "./" and "../" segments first, then dirname()
-          // extracts the directory. e.g. "./bundle/index.js" → "bundle"
-          const cleanUrl = path.posix.normalize(msg.params.url as string);
-          const dir = path.posix.dirname(cleanUrl);
-          const scriptSubdir = (dir === "/" || dir === ".") ? "" : dir.replace(/^\//, "");
-          msg.params.sourceMapURL = this.rewriteInlineSourceMapRoot(
-            msg.params.sourceMapURL,
-            scriptSubdir
-          );
-        }
-
-        return JSON.stringify(msg);
-      }
-
-      return raw;
-    } catch {
-      return raw;
-    }
-  }
-
-  /**
-   * Rewrite / filter a CDP message coming FROM js-debug BEFORE it reaches
-   * the UXP target. Return `null` to swallow the message entirely.
-   */
-	private rewriteFromClient(raw: string): string | null {
-		try {
-			const msg = JSON.parse(raw);
-
-			// UXP does not support NodeWorker — swallow the request and send a
-			// synthetic success response so that js-debug does not stall.
-			if (msg.method === "NodeWorker.enable" && msg.id !== undefined) {
-				this.log.appendLine(`[CDP] Swallowed unsupported method NodeWorker.enable (id=${msg.id})`);
-				this.clientWs?.send(JSON.stringify({id: msg.id, result: {}}));
-				return null;
-			}
-
-			// Track Runtime.evaluate requests so we can intercept UXP errors.
-			// Append the captured uniqueContextId so UXP can resolve the context.
-			if (msg.method === "Runtime.evaluate" && msg.id !== undefined) {
-				this.pendingEvaluateIds.add(msg.id);
-				if (!this.executionContextUniqueId) {
-					throw new Error("No execution context uniqueId captured yet");
-				}
-				msg.params = msg.params ?? {};
-				if (msg.params.contextId !== undefined) {
-					delete msg.params.contextId;
-				}
-				msg.params.uniqueContextId = this.executionContextUniqueId;
-				return JSON.stringify(msg);
-			}
-
-			return raw;
-		} catch {
-			return raw;
-		}
-	}
-
-  // -----------------------------------------------------------------------
-  // Source-map rewriting
-  // -----------------------------------------------------------------------
-  // ! This is bad for performance. Find out a way to avoid this if possible.
-  /**
-   * Rewrite the `sourceRoot` inside an inline (data-URL) source map so that
-   * relative `sources` entries resolve to the correct local files.
-   *
-   * Webpack source maps typically contain paths like `../src/shared/store.ts`
-   * which are relative to the output directory (one level below the project
-   * root).  By setting `sourceRoot` to `<projectDir>/_/` we ensure that
-   * `../<path>` resolves back to `<projectDir>/<path>`.
-   */
-  private rewriteInlineSourceMapRoot(dataUrl: string, scriptSubdir = ""): string {
-    try {
-      // data:application/json;base64,<payload>
-      // data:application/json;charset=utf-8;base64,<payload>
-      // Do not change if this is not data URL or does not look like an inline source map.
-      const requiredPrefix = "data:application/json";
-      if (!dataUrl.slice(0, requiredPrefix.length).toLowerCase().startsWith(requiredPrefix)) {
-        this.log.appendLine(`[CDP] Not an inline source map: ${dataUrl}`);
-        return dataUrl;
-      }
-      const commaIdx = dataUrl.indexOf(",");
-      if (commaIdx === -1) { return dataUrl; }
-      const header = dataUrl.slice(0, commaIdx);  // everything before the comma
-      const payload = dataUrl.slice(commaIdx + 1);
-
-      const json = Buffer.from(payload, "base64").toString("utf-8");
-      const map = JSON.parse(json);
-
-      // Use a file:// URL so that js-debug resolves paths as local files.
-      // Include the script's subdirectory so relative source entries resolve correctly.
-      const baseDir = this.pluginDir.replace(/\\/g, "/") + (scriptSubdir ? "/" + scriptSubdir : "");
-      const root = "file:///" + baseDir + "/";
-      const oldRoot = map.sourceRoot;
-      map.sourceRoot = root;
-
-      this.log.appendLine(
-        `[CDP] Rewrote sourceRoot: ${JSON.stringify(oldRoot)} → ${JSON.stringify(root)}`
-      );
-
-      const newJson = JSON.stringify(map);
-      const newPayload = Buffer.from(newJson, "utf-8").toString("base64");
-      return header + "," + newPayload;
-    } catch (e) {
-      this.log.appendLine(
-        `[CDP] Failed to rewrite inline source map: ${e instanceof Error ? e.message : e}`
-      );
-      return dataUrl;
-    }
-  }
-
-  // -----------------------------------------------------------------------
-  // URL normalization
-  // -----------------------------------------------------------------------
-
-  /**
-   * Normalize a UXP script URL to a form that the built-in JS debugger
-   * can map to local files.
-   *
-   * Common UXP URL schemes:
-   *   uxp://com.adobe.plugin/index.js  →  /index.js
-   *   file:///path/to/plugin/index.js  →  kept as-is
-   *   http(s)://...                    →  kept as-is
-   */
-  private normalizeScriptUrl(url: string): string {
-    if (url.startsWith("uxp://")) {
-      // Strip the scheme and plugin-id prefix, keep the relative path
-      const withoutScheme = url.replace(/^uxp:\/\/[^/]+/, "");
-      return withoutScheme || url;
-    }
-    return url;
   }
 
   // -----------------------------------------------------------------------

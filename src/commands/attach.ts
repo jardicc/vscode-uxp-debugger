@@ -6,7 +6,7 @@ import { TARGET_HISTORY_KEY, UDT_SERVICE_PORT } from "../constants";
 import { UxpTarget, TargetHistoryEntry } from "../types";
 import { discoverViaDebugJson } from "../endpointDetection/discoverViaDebugJson";
 import { discoverViaUxpRc } from "../endpointDetection/discoverViaUxpRc";
-import { CdpProxyServer } from "../cdpProxy";
+import { CdpProxyServer } from "../proxy/cdpProxy";
 import { pickTarget, pickHistoryOrNew } from "../uiHelpers";
 
 /** Active CDP proxy instance (one per debug session). */
