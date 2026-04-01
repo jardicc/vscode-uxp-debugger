@@ -38,6 +38,15 @@ export class CdpProxyServer {
   private targetWs: WebSocket | undefined;
   private clientWs: WebSocket | undefined;
 
+  /** Whether the proxy is intentionally stopping (suppress reconnect). */
+  private stopping = false;
+
+  /** Whether the target WebSocket is open and ready to receive messages. */
+  private targetOpen = false;
+
+  /** Messages queued while (re)connecting to the UXP target. */
+  private readonly pendingMessages: string[] = [];
+
   /** IDs used for proxy-initiated CDP messages (not forwarded back to js-debug).
    *  Must be positive – UXP uses jsoncpp which deserializes `id` as UInt and
    *  rejects negative values with "LargestInt out of UInt range". */
@@ -53,8 +62,22 @@ export class CdpProxyServer {
   /** Timer handle for the "no execution context" warning. */
   private noContextTimer: ReturnType<typeof setTimeout> | undefined;
 
+  /** Deferred context-destruction messages awaiting a possible reload. */
+  private deferredContextMessages: string[] = [];
+  private deferredContextTimer: ReturnType<typeof setTimeout> | undefined;
+
+  /** How long (ms) to wait for a new execution context after destruction
+   *  before forwarding the destruction event to js-debug (reload grace period). */
+  private static readonly CONTEXT_RELOAD_GRACE_MS = 2_000;
+
   /** How long (ms) to wait for an execution context before warning the user. */
   private static readonly CONTEXT_TIMEOUT_MS = 8_000;
+
+  /** Max number of reconnect attempts before giving up. */
+  private static readonly MAX_RECONNECT_ATTEMPTS = 20;
+
+  /** Delay (ms) between reconnect attempts. */
+  private static readonly RECONNECT_DELAY_MS = 1_500;
 
   constructor(targetWsUrl: string, targetLabel: string, pluginDir: string, log: vscode.OutputChannel) {
     this.targetWsUrl = targetWsUrl;
@@ -114,9 +137,15 @@ export class CdpProxyServer {
    * Gracefully shut down the proxy and close all WebSocket connections.
    */
   async stop(): Promise<void> {
+    this.stopping = true;
     if (this.noContextTimer) {
       clearTimeout(this.noContextTimer);
       this.noContextTimer = undefined;
+    }
+    if (this.deferredContextTimer) {
+      clearTimeout(this.deferredContextTimer);
+      this.deferredContextTimer = undefined;
+      this.deferredContextMessages.length = 0;
     }
     this.clientWs?.close();
     this.targetWs?.close();
@@ -196,77 +225,20 @@ export class CdpProxyServer {
       this.clientWs = clientWs;
       this.log.appendLine("js-debug connected to CDP proxy.");
 
-      // Connect to the real UXP target
-      this.targetWs = new WebSocket(this.targetWsUrl);
-
-      // Buffer messages from js-debug until the target connection is open.
-      const pendingMessages: string[] = [];
-      let targetOpen = false;
-
-      this.targetWs.on("open", () => {
-        this.log.appendLine(`Connected to UXP target: ${this.targetWsUrl}`);
-        targetOpen = true;
-
-        // Flush any messages that arrived while we were connecting.
-        for (const queued of pendingMessages) {
-          this.logTraffic("js-debug → UXP (queued)", queued);
-          this.targetWs?.send(queued);
-        }
-        pendingMessages.length = 0;
-
-        // Start a timer — if we don't receive an execution context within
-        // the timeout the plugin is probably not loaded in the host app.
-        this.noContextTimer = setTimeout(() => {
-          if (!this.executionContextUniqueId) {
-            this.log.appendLine(
-              "[CDP] Warning: no execution context received within " +
-              `${CdpProxyServer.CONTEXT_TIMEOUT_MS / 1000}s — plugin may not be loaded. Disconnecting.`
-            );
-            vscode.window.showWarningMessage(
-              "UXP Debugger: Connected to the relay but no response from the plugin. " +
-              "Make sure the plugin is loaded in the host application (e.g. via UDT 'uxp plugin load')."
-            );
-            this.stop();
-          }
-        }, CdpProxyServer.CONTEXT_TIMEOUT_MS);
-
-        // Enable the Runtime domain so that Runtime.evaluate works.
-        // UXP may ignore this, but some runtimes require it.
-        const enableId = this.nextInternalId++;
-        this.internalIds.set(enableId, "Runtime.enable");
-        this.targetWs?.send(
-          JSON.stringify({ id: enableId, method: "Runtime.enable", params: {} })
-        );
-      });
-
-      // ------ Forward: UXP target → js-debug (client) ------
-      this.targetWs.on("message", (data) => {
-        const raw = data.toString();
-        const rewritten = this.rewriteFromTarget(raw);
-        if (rewritten !== null) {
-          this.logTraffic("UXP → js-debug", rewritten);
-          clientWs.send(rewritten);
-        }
-      });
+      this.connectToTarget();
 
       // ------ Forward: js-debug (client) → UXP target ------
       clientWs.on("message", (data) => {
         const raw = data.toString();
         const rewritten = this.rewriteFromClient(raw);
         if (rewritten !== null) {
-          if (targetOpen) {
+          if (this.targetOpen) {
             this.logTraffic("js-debug → UXP", rewritten);
             this.targetWs?.send(rewritten);
           } else {
-            pendingMessages.push(rewritten);
+            this.pendingMessages.push(rewritten);
           }
         }
-      });
-
-      // ------ Connection lifecycle ------
-      this.targetWs.on("close", () => {
-        this.log.appendLine("UXP target WebSocket closed.");
-        clientWs.close();
       });
 
       clientWs.on("close", () => {
@@ -274,14 +246,137 @@ export class CdpProxyServer {
         this.targetWs?.close();
       });
 
-      this.targetWs.on("error", (err) => {
-        this.log.appendLine(`UXP target WS error: ${err.message}`);
-      });
-
       clientWs.on("error", (err) => {
         this.log.appendLine(`js-debug client WS error: ${err.message}`);
       });
     });
+  }
+
+  // -----------------------------------------------------------------------
+  // Target WebSocket connection (with reconnect support)
+  // -----------------------------------------------------------------------
+
+  /**
+   * Open a WebSocket to the UXP target. On close, automatically reconnect
+   * (with retries) unless the proxy is intentionally stopping, so that
+   * operations like `location.reload()` don't kill the debug session.
+   */
+  private connectToTarget(): void {
+    this.targetOpen = false;
+    this.targetWs = new WebSocket(this.targetWsUrl);
+
+    this.targetWs.on("open", () => {
+      this.log.appendLine(`Connected to UXP target: ${this.targetWsUrl}`);
+      this.targetOpen = true;
+
+      // Flush any messages that arrived while we were (re)connecting.
+      for (const queued of this.pendingMessages) {
+        this.logTraffic("js-debug → UXP (queued)", queued);
+        this.targetWs?.send(queued);
+      }
+      this.pendingMessages.length = 0;
+
+      // Start a timer — if we don't receive an execution context within
+      // the timeout the plugin is probably not loaded in the host app.
+      this.noContextTimer = setTimeout(() => {
+        if (!this.executionContextUniqueId) {
+          this.log.appendLine(
+            "[CDP] Warning: no execution context received within " +
+            `${CdpProxyServer.CONTEXT_TIMEOUT_MS / 1000}s — plugin may not be loaded. Disconnecting.`
+          );
+          vscode.window.showWarningMessage(
+            "UXP Debugger: Connected to the relay but no response from the plugin. " +
+            "Make sure the plugin is loaded in the host application (e.g. via UDT 'uxp plugin load')."
+          );
+          this.stop();
+        }
+      }, CdpProxyServer.CONTEXT_TIMEOUT_MS);
+
+      // Enable the Runtime domain so that Runtime.evaluate works.
+      const enableId = this.nextInternalId++;
+      this.internalIds.set(enableId, "Runtime.enable");
+      this.targetWs?.send(
+        JSON.stringify({ id: enableId, method: "Runtime.enable", params: {} })
+      );
+    });
+
+    // ------ Forward: UXP target → js-debug (client) ------
+    this.targetWs.on("message", (data) => {
+      const raw = data.toString();
+      const rewritten = this.rewriteFromTarget(raw);
+      if (rewritten !== null) {
+        this.logTraffic("UXP → js-debug", rewritten);
+        this.clientWs?.send(rewritten);
+      }
+    });
+
+    this.targetWs.on("close", () => {
+      this.log.appendLine("UXP target WebSocket closed.");
+      this.targetOpen = false;
+      this.executionContextUniqueId = undefined;
+      if (this.noContextTimer) {
+        clearTimeout(this.noContextTimer);
+        this.noContextTimer = undefined;
+      }
+      if (!this.stopping) {
+        this.reconnectToTarget();
+      }
+    });
+
+    this.targetWs.on("error", (err) => {
+      this.log.appendLine(`UXP target WS error: ${err.message}`);
+    });
+  }
+
+  /**
+   * Retry connecting to the UXP target with exponential-ish backoff.
+   * Gives up after MAX_RECONNECT_ATTEMPTS and closes the client connection.
+   */
+  private reconnectToTarget(attempt = 1): void {
+    if (this.stopping) { return; }
+    if (attempt > CdpProxyServer.MAX_RECONNECT_ATTEMPTS) {
+      this.log.appendLine(
+        `[CDP] Gave up reconnecting after ${CdpProxyServer.MAX_RECONNECT_ATTEMPTS} attempts.`
+      );
+      vscode.window.showErrorMessage(
+        "UXP Debugger: Lost connection to the plugin and could not reconnect."
+      );
+      this.clientWs?.close();
+      return;
+    }
+
+    this.log.appendLine(
+      `[CDP] Reconnect attempt ${attempt}/${CdpProxyServer.MAX_RECONNECT_ATTEMPTS} ` +
+      `in ${CdpProxyServer.RECONNECT_DELAY_MS}ms…`
+    );
+
+    setTimeout(() => {
+      if (this.stopping) { return; }
+      this.connectToTarget();
+
+      // If this attempt fails (target WS closes immediately), the "close"
+      // handler in connectToTarget will call reconnectToTarget(attempt + 1).
+      const currentWs = this.targetWs;
+      const onCloseRetry = () => {
+        // Only bump attempt if we never reached OPEN state.
+        if (!this.targetOpen && !this.stopping) {
+          this.reconnectToTarget(attempt + 1);
+        }
+      };
+      // Replace the default close→reconnect handler for this attempt so
+      // the counter increments properly.
+      currentWs?.removeAllListeners("close");
+      currentWs?.on("close", () => {
+        this.log.appendLine("UXP target WebSocket closed.");
+        this.targetOpen = false;
+        this.executionContextUniqueId = undefined;
+        if (this.noContextTimer) {
+          clearTimeout(this.noContextTimer);
+          this.noContextTimer = undefined;
+        }
+        onCloseRetry();
+      });
+    }, CdpProxyServer.RECONNECT_DELAY_MS);
   }
 
   // -----------------------------------------------------------------------
@@ -348,7 +443,48 @@ export class CdpProxyServer {
           clearTimeout(this.noContextTimer);
           this.noContextTimer = undefined;
         }
+        // A new context arrived — this is a reload. Discard any deferred
+        // destruction messages so js-debug keeps running.
+        if (this.deferredContextTimer) {
+          clearTimeout(this.deferredContextTimer);
+          this.deferredContextTimer = undefined;
+          this.log.appendLine(
+            `[CDP] New context arrived — discarding ${this.deferredContextMessages.length} deferred destruction event(s) (reload)`
+          );
+          this.deferredContextMessages.length = 0;
+        }
         this.log.appendLine(`[CDP] Captured executionContext uniqueId: ${this.executionContextUniqueId}`);
+      }
+
+      // Defer executionContextDestroyed / executionContextsCleared:
+      // Hold the message for a short grace period. If a new
+      // executionContextCreated arrives (reload), we discard it.
+      // Otherwise (unload / real termination), we forward it to js-debug.
+      if (
+        msg.method === "Runtime.executionContextDestroyed" ||
+        msg.method === "Runtime.executionContextsCleared"
+      ) {
+        this.log.appendLine(
+          `[CDP] Deferring ${msg.method} (grace period ${CdpProxyServer.CONTEXT_RELOAD_GRACE_MS}ms)`
+        );
+        this.executionContextUniqueId = undefined;
+        this.deferredContextMessages.push(raw);
+
+        // (Re)start the grace timer — only one timer is active at a time.
+        if (!this.deferredContextTimer) {
+          this.deferredContextTimer = setTimeout(() => {
+            this.deferredContextTimer = undefined;
+            // Grace period elapsed with no new context — forward to js-debug.
+            this.log.appendLine(
+              `[CDP] Grace period elapsed — forwarding ${this.deferredContextMessages.length} deferred destruction event(s)`
+            );
+            for (const deferred of this.deferredContextMessages) {
+              this.clientWs?.send(deferred);
+            }
+            this.deferredContextMessages.length = 0;
+          }, CdpProxyServer.CONTEXT_RELOAD_GRACE_MS);
+        }
+        return null;
       }
 
       // Rewrite script URLs and inline source maps so that js-debug can
@@ -424,7 +560,7 @@ export class CdpProxyServer {
   // -----------------------------------------------------------------------
   // Source-map rewriting
   // -----------------------------------------------------------------------
-  // ! This is bad for perfromance. Find out a way to avoid this if possible.
+  // ! This is bad for performance. Find out a way to avoid this if possible.
   /**
    * Rewrite the `sourceRoot` inside an inline (data-URL) source map so that
    * relative `sources` entries resolve to the correct local files.
