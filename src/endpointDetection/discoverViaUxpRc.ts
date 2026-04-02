@@ -2,15 +2,11 @@ import * as fs from "fs";
 import * as path from "path";
 import * as vscode from "vscode";
 import {UxpTarget} from "../types";
+import {UDT_SERVICE_PORT} from "../constants";
 
 // ---------------------------------------------------------------------------
 // .uxprc discovery
 // ---------------------------------------------------------------------------
-
-/**
- * UDT (UXP Developer Tools) service port — used for the relay WebSocket.
- */
-const UDT_PORT = 14001;
 
 /**
  * Discover UXP plugin targets via the `.uxprc` file next to manifest.json.
@@ -53,7 +49,7 @@ export function discoverViaUxpRc(
       const appId: string = app.id ?? "unknown";
       const appVersion: string = app.version ?? "";
       const hostApp = appId === "PS" ? "Photoshop" : appId;
-      const wsUrl = `ws://127.0.0.1:${UDT_PORT}/socket/cdt/${sessionId}`;
+      const wsUrl = `ws://127.0.0.1:${UDT_SERVICE_PORT}/socket/cdt/${sessionId}`;
 
       targets.push({
         label: `${pluginName} (${appId} ${appVersion}) [via UDT Service]`,

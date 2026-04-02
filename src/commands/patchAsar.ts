@@ -28,11 +28,13 @@ export async function patchAsarCommand(outputChannel: vscode.OutputChannel): Pro
     await vscode.window.withProgress(
       {
         location: vscode.ProgressLocation.Notification,
-        title: `UXP Patch: patching ${path.basename(asarPath)}\u2026`,
+        title: `UXP Patch: patching ${path.basename(asarPath)}`,
         cancellable: false,
       },
-      async () => {
-        result = await patchAsarFile(asarPath);
+      async (progress) => {
+        result = await patchAsarFile(asarPath, (message, increment) => {
+          progress.report({ message, increment });
+        });
       },
     );
     /* eslint-disable @typescript-eslint/no-non-null-assertion */

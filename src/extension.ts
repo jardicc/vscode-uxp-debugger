@@ -2,7 +2,7 @@ import * as vscode from "vscode";
 import { UxpDebugConfigProvider } from "./debugConfigProvider";
 import { attachCommand, getActiveCdpProxy, clearActiveCdpProxy } from "./commands/attach";
 import { patchAsarCommand } from "./commands/patchAsar";
-import { selectManifestPath } from "./commands/setManifestPath";
+//import { selectManifestPath } from "./commands/setManifestPath";
 
 
 
@@ -21,11 +21,11 @@ export function activate(context: vscode.ExtensionContext): void {
   );
 
   // ---- Command: uxp.setManifestPath ----------------------------------------
-  context.subscriptions.push(
-    vscode.commands.registerCommand("uxp.setManifestPath", () =>
-      selectManifestPath(context, outputChannel)
-    )
-  );
+  // context.subscriptions.push(
+  //   vscode.commands.registerCommand("uxp.setManifestPath", () =>
+  //     selectManifestPath(context, outputChannel)
+  //   )
+  // );
 
   // ---- Command: uxp.attach ------------------------------------------------
   context.subscriptions.push(

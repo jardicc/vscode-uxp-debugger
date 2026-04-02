@@ -2,7 +2,7 @@
   "name": "uxpdebugger",
   "displayName": "UXP Debugger",
   "description": "Attach to Adobe UXP plugins for debugging in VSCode. Supports inlined sourcemaps",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "author": "Jaroslav Bereza",
   "publisher": "JaroslavBereza",
   "pricing": "Free",
@@ -32,7 +32,6 @@
   "activationEvents": [
     "onDebugResolve:uxp",
     "onCommand:uxp.attach",
-    "onCommand:uxp.setManifestPath",
     "onCommand:uxp.patchAsar"
   ],
   "main": "./dist/extension.js",
@@ -42,10 +41,6 @@
       {
         "command": "uxp.attach",
         "title": "UXP: Attach to Adobe UXP Plugin"
-      },
-      {
-        "command": "uxp.setManifestPath",
-        "title": "UXP: Set Manifest Path"
       },
       {
         "command": "uxp.patchAsar",
