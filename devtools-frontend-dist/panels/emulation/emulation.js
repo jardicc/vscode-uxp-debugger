@@ -1,0 +1,2801 @@
+var __defProp = Object.defineProperty;
+var __export = (target, all) => {
+  for (var name in all)
+    __defProp(target, name, { get: all[name], enumerable: true });
+};
+
+// gen/front_end/panels/emulation/AdvancedApp.js
+var AdvancedApp_exports = {};
+__export(AdvancedApp_exports, {
+  AdvancedApp: () => AdvancedApp,
+  AdvancedAppProvider: () => AdvancedAppProvider
+});
+import * as Host3 from "./..\\..\\core\\host\\host.js";
+import * as UI5 from "./..\\..\\ui\\legacy\\legacy.js";
+import * as ThemeSupport from "./..\\..\\ui\\legacy\\theme_support\\theme_support.js";
+
+// gen/front_end/panels/emulation/DeviceModeView.js
+var DeviceModeView_exports = {};
+__export(DeviceModeView_exports, {
+  ActionDelegate: () => ActionDelegate,
+  DEFAULT_DEVICE_MODE_VIEW: () => DEFAULT_DEVICE_MODE_VIEW,
+  DEFAULT_RULER_VIEW: () => DEFAULT_RULER_VIEW,
+  DeviceModeView: () => DeviceModeView,
+  Ruler: () => Ruler
+});
+import * as Common4 from "./..\\..\\core\\common\\common.js";
+import * as Host2 from "./..\\..\\core\\host\\host.js";
+import * as i18n5 from "./..\\..\\core\\i18n\\i18n.js";
+import * as Root from "./..\\..\\core\\root\\root.js";
+import * as SDK2 from "./..\\..\\core\\sdk\\sdk.js";
+import * as EmulationModel2 from "./..\\..\\models\\emulation\\emulation.js";
+import * as Geometry from "./..\\..\\models\\geometry\\geometry.js";
+import * as UI4 from "./..\\..\\ui\\legacy\\legacy.js";
+import { Directives as Directives3, html as html3, nothing as nothing2, render as render3 } from "./..\\..\\ui\\lit\\lit.js";
+import * as VisualLogging3 from "./..\\..\\ui\\visual_logging\\visual_logging.js";
+
+// gen/front_end/panels/emulation/DeviceModeToolbar.js
+var DeviceModeToolbar_exports = {};
+__export(DeviceModeToolbar_exports, {
+  DEFAULT_VIEW: () => DEFAULT_VIEW,
+  DeviceModeToolbar: () => DeviceModeToolbar
+});
+import "./..\\..\\ui\\legacy\\legacy.js";
+import * as Common from "./..\\..\\core\\common\\common.js";
+import * as Host from "./..\\..\\core\\host\\host.js";
+import * as i18n from "./..\\..\\core\\i18n\\i18n.js";
+import * as Platform from "./..\\..\\core\\platform\\platform.js";
+import * as EmulationModel from "./..\\..\\models\\emulation\\emulation.js";
+import * as Buttons from "./..\\..\\ui\\components\\buttons\\buttons.js";
+import * as UI from "./..\\..\\ui\\legacy\\legacy.js";
+import { Directive, Directives, html, i18nTemplate, noChange, render } from "./..\\..\\ui\\lit\\lit.js";
+import * as VisualLogging from "./..\\..\\ui\\visual_logging\\visual_logging.js";
+import * as MobileThrottling from "./..\\mobile_throttling\\mobile_throttling.js";
+var AutoWidthSelectDirective = class _AutoWidthSelectDirective extends Directive.Directive {
+  static itemWidthCache = /* @__PURE__ */ new Map();
+  constructor(partInfo) {
+    super(partInfo);
+    if (partInfo.type !== Directive.PartType.ELEMENT) {
+      throw new Error("AutoWidthSelectDirective must be used as an element directive");
+    }
+  }
+  update(part, [text]) {
+    const select = part.element;
+    let widthPx = _AutoWidthSelectDirective.itemWidthCache.get(text);
+    if (!widthPx) {
+      const measuringElement = document.createElement("select");
+      measuringElement.className = select.className;
+      measuringElement.style.width = "fit-content";
+      measuringElement.style.position = "absolute";
+      measuringElement.style.visibility = "hidden";
+      measuringElement.style.pointerEvents = "none";
+      measuringElement.appendChild(document.createElement("option"));
+      measuringElement.options[0].textContent = text;
+      select.parentElement?.appendChild(measuringElement);
+      const width = measuringElement.offsetWidth;
+      measuringElement.remove();
+      widthPx = width ? `${width}px` : "";
+      if (width > 0) {
+        _AutoWidthSelectDirective.itemWidthCache.set(text, widthPx);
+      }
+    }
+    select.style.width = widthPx;
+    return this.render(text);
+  }
+  render(_text) {
+    return noChange;
+  }
+};
+var autoWidthSelect = Directive.directive(AutoWidthSelectDirective);
+var UIStrings = {
+  /**
+   * @description Title of the device dimensions selection item in the device mode toolbar.
+   * @example {Responsive} PH1
+   */
+  dimensions: "Dimensions: {PH1}",
+  /**
+   * @description Title of the device pixel ratio selection item in the device mode toolbar.
+   * @example {2.0} PH1
+   */
+  dpr: "DPR: {PH1}",
+  /**
+   * @description Title of the width input textbox in the device mode toolbar, for the width of the
+   * webpage in pixels.
+   */
+  width: "Width",
+  /**
+   * @description Title of the height input textbox in the device mode toolbar, for the height of the
+   * webpage in pixels. 'leave empty for full' is an instruction to the user - the webpage will be
+   * full-height if this textbox is left empty.
+   */
+  heightLeaveEmptyForFull: "Height (leave empty for full)",
+  /**
+   * @description Tooltip for a drop-down menu where the user can select the zoom percentage of
+   * the webpage preview.
+   */
+  zoom: "Zoom",
+  /**
+   * @description Tooltip for a drop-down menu where the user can select the device pixel ratio
+   * (the ratio between physical pixels on a screen and CSS logical pixels) of the webpage
+   * preview.
+   */
+  devicePixelRatio: "Device pixel ratio",
+  /**
+   * @description Tooltip for a drop-down menu where the user can select the device type (e.g.
+   * Mobile or Desktop).
+   */
+  deviceType: "Device type",
+  /**
+   * @description Tooltip text for a three dots menu button which shows an expanded set of options.
+   */
+  moreOptions: "More options",
+  /**
+   * @description A menu item in the drop-down box that allows the user to select the zoom level.
+   * Labels the option to automatically fit the preview to the available window space in the device mode toolbar.
+   */
+  fitToWindow: "Fit to window",
+  /**
+   * @description A menu item in the drop-down box that allows the user to select the device pixel
+   * ratio. Labels the default value which varies between device types, represented by the
+   * placeholder, which is a number, in the device mode toolbar.
+   * @example {4.3} PH1
+   */
+  defaultF: "{PH1} (default)",
+  /**
+   * @description Command to hide a display in the device mode toolbar that shows the different media
+   * queries for the device, above the device screen.
+   * https://web.dev/learn/design/media-queries
+   */
+  hideMediaQueries: "Hide media queries",
+  /**
+   * @description Command to show a display in the device mode toolbar that shows the different media
+   * queries for the device, above the device screen.
+   * https://web.dev/learn/design/media-queries
+   */
+  showMediaQueries: "Show media queries",
+  /**
+   * @description Command in the device mode toolbar to hide a virtual ruler,
+   * displayed above and next to the device screen.
+   */
+  hideRulers: "Hide rulers",
+  /**
+   * @description Command in the device mode toolbar to show a virtual ruler,
+   * displayed above and next to the device screen.
+   */
+  showRulers: "Show rulers",
+  /**
+   * @description Command in the device mode toolbar to remove the drop-down menu from the toolbar
+   * that lets the user override the device pixel ratio of the emulated device.
+   */
+  removeDevicePixelRatio: "Remove device pixel ratio",
+  /**
+   * @description Command in the device mode toolbar to add the drop-down menu to the toolbar
+   * that lets the user override the device pixel ratio of the emulated device.
+   */
+  addDevicePixelRatio: "Add device pixel ratio",
+  /**
+   * @description Command in the device mode toolbar to remove the drop-down menu from the toolbar
+   * that lets the user set the device type (e.g. Desktop or Mobile).
+   */
+  removeDeviceType: "Remove device type",
+  /**
+   * @description Command in the device mode toolbar to add the drop-down menu to the toolbar
+   * that lets the user set the device type (e.g. Desktop or Mobile).
+   */
+  addDeviceType: "Add device type",
+  /**
+   * @description A context menu item in the device mode toolbar that resets all settings back to
+   * their default values.
+   */
+  resetToDefaults: "Reset to defaults",
+  /**
+   * @description A menu command in the device mode toolbar that closes DevTools.
+   */
+  closeDevtools: "Close DevTools",
+  /**
+   * @description Title of the device selected in the device mode toolbar. The responsive device is
+   * not a specific phone or tablet model but a virtual device that can change its height and width
+   * dynamically by clicking and dragging the sides. Responsive refers to responsive design:
+   * https://web.dev/learn/design
+   */
+  responsive: "Responsive",
+  /**
+   * @description A context menu item in the device mode toolbar that takes the user to a screen
+   * where they can add, edit, or remove custom devices.
+   */
+  edit: "Edit\u2026",
+  /**
+   * @description Text describing the portrait orientation of the emulated device.
+   */
+  portrait: "Portrait",
+  /**
+   * @description Text describing the landscape orientation of the emulated device.
+   */
+  landscape: "Landscape",
+  /**
+   * @description Title of a button in the device mode toolbar which rotates the device 90 degrees.
+   */
+  rotate: "Rotate",
+  /**
+   * @description Tooltip of the rotate screen orientation button.
+   */
+  screenOrientationOptions: "Screen orientation options",
+  /**
+   * @description Tooltip shown on the rotate button when screen orientation is locked by the page.
+   */
+  screenOrientationLocked: "Screen orientation is locked by the page",
+  /**
+   * @description Tooltip for a button which toggles dual-screen mode to emulate devices with two screens.
+   */
+  toggleDualscreenMode: "Toggle dual-screen mode",
+  /**
+   * @description Tooltip for a drop-down menu where the user can select the device
+   * posture (e.g. Continuous or Folded).
+   */
+  devicePosture: "Device posture",
+  /**
+   * @description Title of the network throttling selection in the device mode toolbar.
+   */
+  throttling: "Throttling"
+};
+var str_ = i18n.i18n.registerUIStrings("panels/emulation/DeviceModeToolbar.ts", UIStrings);
+var i18nString = i18n.i18n.getLocalizedString.bind(void 0, str_);
+var { ifDefined, live } = Directives;
+var { widget } = UI.Widget;
+function createSizeInput(title, jslogContext, value, disabled, placeholder, onChange) {
+  return html`
+      <input type="number"
+             max=${EmulationModel.DeviceModeModel.MaxDeviceSize}
+             min=${EmulationModel.DeviceModeModel.MinDeviceSize}
+             title=${title}
+             class="device-mode-size-input"
+             .disabled=${disabled ?? false}
+             jslog=${VisualLogging.textField().track({ change: true }).context(jslogContext)}
+             .value=${value ?? ""}
+             placeholder=${ifDefined(placeholder)}
+             @change=${onChange}
+             @keydown=${(event) => {
+    const input = event.target;
+    let modifiedValue = UI.UIUtils.modifiedFloatNumber(Number(input.value), event);
+    if (modifiedValue === null) {
+      return;
+    }
+    modifiedValue = Math.min(modifiedValue, EmulationModel.DeviceModeModel.MaxDeviceSize);
+    modifiedValue = Math.max(modifiedValue, EmulationModel.DeviceModeModel.MinDeviceSize);
+    event.preventDefault();
+    input.value = String(modifiedValue);
+    input.dispatchEvent(new Event("change"));
+  }}>`;
+}
+var DEFAULT_VIEW = (input, _output, target) => {
+  render(html`
+    <devtools-toolbar class="main-toolbar">
+      <div class="device-mode-empty-toolbar-element"></div>
+      ${i18nTemplate(str_, UIStrings.dimensions, { PH1: html`
+        <select class="dark-text toolbar-has-dropdown-shrinkable"
+                ${autoWidthSelect(input.deviceText)}
+                title=${i18nString(UIStrings.deviceType)}
+                aria-label=${i18nString(UIStrings.deviceType)}
+                @change=${input.onDeviceChange}
+                .value=${live(input.selectedDeviceOption === input.deviceModeOptions.responsive ? "Responsive" : input.selectedDeviceOption?.title || "Responsive")}
+                jslog=${VisualLogging.dropDown().track({ change: true }).context("device")}>
+          <option value="Responsive" ?selected=${input.deviceModeOptions.responsive.selected} jslog=${VisualLogging.item(input.deviceModeOptions.responsive.jslogContext).track({ click: true })}>
+            ${input.deviceModeOptions.responsive.title}
+          </option>
+          ${input.deviceModeOptions.standard.map((group) => html`
+            <optgroup label=${EmulationModel.EmulatedDevices.getCategoryTitle(group.category)}>
+              ${group.options.map((o) => html`<option value=${o.title} ?selected=${o.selected} jslog=${VisualLogging.item(o.jslogContext).track({ click: true })}>${o.title}</option>`)}
+            </optgroup>
+          `)}
+          ${input.deviceModeOptions.custom.length > 0 ? html`
+            <optgroup label="Custom">
+              ${input.deviceModeOptions.custom.map((o) => html`<option value=${o.title} ?selected=${o.selected} jslog=${VisualLogging.item(o.jslogContext).track({ click: true })}>${o.title}</option>`)}
+            </optgroup>
+          ` : ""}
+          <option value="Edit" jslog=${VisualLogging.item(input.deviceModeOptions.edit.jslogContext).track({ click: true })}>
+            ${input.deviceModeOptions.edit.title}
+          </option>
+        </select>` })}
+
+      ${createSizeInput(i18nString(UIStrings.width), "width", input.widthValue, !input.isResponsive, "", input.onWidthChange)}
+
+      <div class="device-mode-x">×</div>
+      ${createSizeInput(i18nString(UIStrings.heightLeaveEmptyForFull), "height", input.heightValue, !input.isResponsive, input.heightPlaceholder, input.onHeightChange)}
+
+      <div class="device-mode-empty-toolbar-element"></div>
+      <select class="dark-text toolbar-has-dropdown-shrinkable"
+              ${autoWidthSelect(input.scaleText)}
+              title=${i18nString(UIStrings.zoom)}
+              aria-label=${i18nString(UIStrings.zoom)}
+              @change=${input.onScaleChange}
+              .value=${String(input.scaleOptions.find((o) => o.selected)?.value ?? "")}
+              jslog=${VisualLogging.dropDown().track({ change: true }).context("scale")}>
+        ${input.scaleOptions.map((o) => html`<option value=${o.value} ?selected=${o.selected} jslog=${VisualLogging.item(o.jslogContext).track({ click: true })}>${o.title}</option>`)}
+      </select>
+
+      <div class="device-mode-empty-toolbar-element"></div>
+
+      ${input.showDeviceScaleFactorSetting.get() ? html`
+        <div class="toolbar-text">
+          ${i18nTemplate(str_, UIStrings.dpr, {
+    PH1: html`
+              <select class="dark-text toolbar-has-dropdown-shrinkable"
+                      ${autoWidthSelect(input.dprText)}
+                    title=${i18nString(UIStrings.devicePixelRatio)}
+                    aria-label=${i18nString(UIStrings.devicePixelRatio)}
+                    @change=${input.onDeviceScaleChange}
+                    .value=${String(input.dprOptions.find((o) => o.selected)?.value ?? "")}
+                    jslog=${VisualLogging.dropDown().track({ change: true }).context("device-pixel-ratio")}
+                    ?disabled=${!input.isResponsive}>
+                ${input.dprOptions.map((o) => html`<option value=${o.value} ?selected=${o.selected} jslog=${VisualLogging.item(o.jslogContext).track({ click: true })}>${o.title}</option>`)}
+              </select>`
+  })}
+        </div>` : ""}
+
+      <div class="device-mode-empty-toolbar-element"></div>
+      ${input.showUserAgentTypeSetting.get() ? html`
+        <select class="dark-text toolbar-has-dropdown-shrinkable"
+                ${autoWidthSelect(input.uaText)}
+                title=${i18nString(UIStrings.deviceType)}
+                aria-label=${i18nString(UIStrings.deviceType)}
+                @change=${input.onUAChange}
+                .value=${input.uaOptions.find((o) => o.selected)?.value || ""}
+                jslog=${VisualLogging.dropDown().track({ change: true }).context("device-type")}
+                ?disabled=${!input.isResponsive}>
+          ${input.uaOptions.map((o) => html`<option value=${o.value} ?selected=${o.selected} jslog=${VisualLogging.item(o.jslogContext).track({ click: true })}>${o.title}</option>`)}
+        </select>` : ""}
+      <select class="dark-text" ${widget(MobileThrottling.NetworkThrottlingSelector.NetworkThrottlingSelect, {
+    title: i18nString(UIStrings.throttling),
+    bindToGlobalConditions: true
+  })}></select>
+      <select class="dark-text toolbar-has-dropdown-shrinkable" ${widget(MobileThrottling.ThrottlingManager.SaveDataOverrideSelect)}></select>
+
+      <div class="device-mode-empty-toolbar-element"></div>
+      <devtools-button class="toolbar-button"
+                       .data=${{ variant: "toolbar", iconName: "screen-rotation" }}
+                       jslog=${VisualLogging.action("screen-rotation").track({ click: true })}
+                       @click=${input.onModeMenuClick}
+                       .title=${input.modeButtonTitle}
+                       .disabled=${input.modeButtonDisabled}>
+      </devtools-button>
+
+      <!-- Show dual screen toolbar -->
+      ${input.showSpanButton ? html`
+        <devtools-button class="toolbar-button"
+                         .data=${{ variant: "toolbar", iconName: "device-fold" }}
+                         jslog=${VisualLogging.action("device-fold").track({ click: true })}
+                         .title=${i18nString(UIStrings.toggleDualscreenMode)}
+                         @click=${input.onSpanClick}>
+        </devtools-button>` : ""}
+
+      <!-- Show posture toolbar menu for foldable devices. -->
+      <div class="device-mode-empty-toolbar-element"></div>
+      ${input.showPostureItem ? html`
+        <select class="dark-text toolbar-has-dropdown-shrinkable"
+                ${autoWidthSelect(input.postureText)}
+                title=${i18nString(UIStrings.devicePosture)}
+                aria-label=${i18nString(UIStrings.devicePosture)}
+                @change=${input.onPostureChange}
+                .value=${input.postureOptions.find((o) => o.selected)?.value || ""}
+                jslog=${VisualLogging.dropDown().track({ change: true }).context("device-posture")}>
+          ${input.postureOptions.map((o) => html`<option value=${o.value} ?selected=${o.selected} jslog=${VisualLogging.item(o.value.toLowerCase()).track({ click: true })}>${o.title}</option>`)}
+        </select>` : ""}
+    </devtools-toolbar>
+    <devtools-toolbar class="device-mode-toolbar-options" wrappable>
+      <div class="device-mode-empty-toolbar-element"></div>
+      <devtools-button
+        .data=${{ variant: "toolbar", iconName: "dots-vertical", title: i18nString(UIStrings.moreOptions) }}
+        @click=${input.onMoreOptionsClick}
+        jslog=${VisualLogging.dropDown("more-options").track({ click: true })}
+      ></devtools-button></devtools-toolbar>
+  `, target, { container: {
+    classes: ["device-mode-toolbar"],
+    attributes: {
+      jslog: `${VisualLogging.toolbar("device-mode").track({ resize: true })}`
+    }
+  } });
+};
+var DeviceModeToolbar = class extends UI.Widget.Widget {
+  #model;
+  showMediaInspectorSetting;
+  showRulersSetting;
+  showDeviceScaleFactorSetting;
+  showUserAgentTypeSetting;
+  autoAdjustScaleSetting;
+  lastMode;
+  emulatedDevicesList;
+  persistenceSetting;
+  view;
+  constructor(element, view = DEFAULT_VIEW) {
+    super(element);
+    this.view = view;
+    this.showMediaInspectorSetting = Common.Settings.Settings.instance().moduleSetting("show-media-query-inspector");
+    this.showMediaInspectorSetting.addChangeListener(this.requestUpdate, this);
+    this.showRulersSetting = Common.Settings.Settings.instance().moduleSetting("emulation.show-rulers");
+    this.showRulersSetting.addChangeListener(this.requestUpdate, this);
+    this.showDeviceScaleFactorSetting = Common.Settings.Settings.instance().createSetting("emulation.show-device-scale-factor", false);
+    this.showDeviceScaleFactorSetting.addChangeListener(this.requestUpdate, this);
+    this.showUserAgentTypeSetting = Common.Settings.Settings.instance().createSetting("emulation.show-user-agent-type", false);
+    this.showUserAgentTypeSetting.addChangeListener(this.requestUpdate, this);
+    this.autoAdjustScaleSetting = Common.Settings.Settings.instance().createSetting("emulation.auto-adjust-scale", true);
+    this.autoAdjustScaleSetting.addChangeListener(this.requestUpdate, this);
+    this.lastMode = /* @__PURE__ */ new Map();
+    this.emulatedDevicesList = EmulationModel.EmulatedDevices.EmulatedDevicesList.instance();
+    this.emulatedDevicesList.addEventListener("CustomDevicesUpdated", this.deviceListChanged, this);
+    this.emulatedDevicesList.addEventListener("StandardDevicesUpdated", this.deviceListChanged, this);
+    this.persistenceSetting = Common.Settings.Settings.instance().createSetting("emulation.device-mode-value", { device: "", orientation: "", mode: "" });
+  }
+  get model() {
+    return this.#model;
+  }
+  set model(model) {
+    if (this.#model === model) {
+      return;
+    }
+    if (this.#model) {
+      this.#model.toolbarControlsEnabledSetting().removeChangeListener(this.requestUpdate, this);
+      this.#model.scaleSetting().removeChangeListener(this.requestUpdate, this);
+      this.#model.uaSetting().removeChangeListener(this.requestUpdate, this);
+      this.#model.deviceScaleFactorSetting().removeChangeListener(this.requestUpdate, this);
+      this.#model.removeEventListener("Updated", this.requestUpdate, this);
+    }
+    this.#model = model;
+    this.#model.toolbarControlsEnabledSetting().addChangeListener(this.requestUpdate, this);
+    this.#model.scaleSetting().addChangeListener(this.requestUpdate, this);
+    this.#model.uaSetting().addChangeListener(this.requestUpdate, this);
+    this.#model.deviceScaleFactorSetting().addChangeListener(this.requestUpdate, this);
+    this.#model.addEventListener("Updated", this.requestUpdate, this);
+    this.requestUpdate();
+  }
+  wasShown() {
+    super.wasShown();
+    this.performUpdate();
+    this.restore();
+  }
+  performUpdate() {
+    if (!this.model) {
+      return;
+    }
+    const isResponsive = this.model.type() === EmulationModel.DeviceModeModel.Type.Responsive;
+    const isFullHeight = isResponsive && this.model.isFullHeight();
+    const size = this.model.appliedDeviceSize();
+    const widthValue = String(size.width);
+    const heightValue = isFullHeight ? "" : String(size.height);
+    const heightPlaceholder = String(size.height);
+    const device = this.model.device();
+    if (this.model.type() !== EmulationModel.DeviceModeModel.Type.None) {
+      if (this.model.type() === EmulationModel.DeviceModeModel.Type.Device && device) {
+        this.lastMode.set(device, this.model.mode());
+      }
+      const value = this.persistenceSetting.get();
+      const currentMode = this.model.mode();
+      if (device) {
+        value.device = device.title;
+        value.orientation = currentMode ? currentMode.orientation : "";
+        value.mode = currentMode ? currentMode.title : "";
+      } else {
+        value.device = "";
+        value.orientation = "";
+        value.mode = "";
+      }
+      this.persistenceSetting.set(value);
+    }
+    let modeButtonTitle = i18nString(UIStrings.rotate);
+    let modeButtonDisabled = false;
+    if (this.model.isScreenOrientationLocked()) {
+      modeButtonDisabled = true;
+      modeButtonTitle = i18nString(UIStrings.screenOrientationLocked);
+    } else if (device) {
+      const modeCount = device.modes.length;
+      modeButtonDisabled = modeCount < 2;
+      modeButtonTitle = modeCount === 2 ? i18nString(UIStrings.rotate) : i18nString(UIStrings.screenOrientationOptions);
+    } else if (isResponsive) {
+      modeButtonDisabled = false;
+      modeButtonTitle = i18nString(UIStrings.rotate);
+    } else {
+      modeButtonDisabled = true;
+    }
+    const showSpanButton = Boolean(device?.isDualScreen);
+    const showPostureItem = Boolean(!device?.isDualScreen && device?.isFoldableScreen);
+    const deviceModeOptions = this.getDeviceModeOptions();
+    const scaleOptions = this.getScaleOptions();
+    const dprOptions = this.getDeviceScaleFactorOptions();
+    const uaOptions = this.getUserAgentOptions();
+    const postureOptions = this.getDevicePostureOptions();
+    const standardOptions = deviceModeOptions.standard.flatMap((g) => g.options);
+    const selectedDeviceOption = [
+      deviceModeOptions.responsive,
+      ...standardOptions,
+      ...deviceModeOptions.custom
+    ].find((o) => o.selected);
+    const deviceText = selectedDeviceOption ? selectedDeviceOption.title : deviceModeOptions.responsive.title;
+    let scaleText = scaleOptions.find((o) => o.selected)?.title || "";
+    if (scaleText.includes(" (")) {
+      scaleText = scaleText.substring(0, scaleText.indexOf(" ("));
+    }
+    let dprText = dprOptions.find((o) => o.selected)?.title || "";
+    if (dprText.includes(" (")) {
+      dprText = dprText.substring(0, dprText.indexOf(" ("));
+    }
+    const uaText = uaOptions.find((o) => o.selected)?.title || "";
+    const postureText = postureOptions.find((o) => o.selected)?.title || "";
+    const enabled = this.model.toolbarControlsEnabledSetting().get();
+    this.contentElement.classList.toggle("disabled", !enabled);
+    const input = {
+      isResponsive,
+      isFullHeight,
+      widthValue,
+      heightValue,
+      heightPlaceholder,
+      modeButtonTitle,
+      modeButtonDisabled,
+      showSpanButton,
+      showPostureItem,
+      deviceModeOptions,
+      scaleOptions,
+      dprOptions,
+      uaOptions,
+      postureOptions,
+      selectedDeviceOption,
+      deviceText,
+      scaleText,
+      dprText,
+      uaText,
+      postureText,
+      onDeviceChange: this.onDeviceChange.bind(this),
+      onWidthChange: (event) => {
+        const width = Number(event.target.value);
+        if (this.autoAdjustScaleSetting.get()) {
+          this.model?.setWidthAndScaleToFit(width);
+        } else {
+          this.model?.setWidth(width);
+        }
+      },
+      onHeightChange: (event) => {
+        const height = Number(event.target.value);
+        if (this.autoAdjustScaleSetting.get()) {
+          this.model?.setHeightAndScaleToFit(height);
+        } else {
+          this.model?.setHeight(height);
+        }
+      },
+      onScaleChange: this.onScaleChange.bind(this),
+      onDeviceScaleChange: this.onDeviceScaleChange.bind(this),
+      onUAChange: this.onUAChange.bind(this),
+      onPostureChange: this.onPostureChange.bind(this),
+      onModeMenuClick: this.modeMenuClicked.bind(this),
+      onSpanClick: this.spanClicked.bind(this),
+      onMoreOptionsClick: (event) => {
+        const contextMenu = new UI.ContextMenu.ContextMenu(event);
+        this.appendOptionsMenuItems(contextMenu);
+        void contextMenu.show();
+      },
+      autoAdjustScaleSetting: this.autoAdjustScaleSetting,
+      showDeviceScaleFactorSetting: this.showDeviceScaleFactorSetting,
+      showUserAgentTypeSetting: this.showUserAgentTypeSetting
+    };
+    this.view(input, {}, this.contentElement);
+  }
+  getDevicePostureOptions() {
+    const currentPosture = this.currentDevicePosture();
+    return ["Continuous", "Folded"].map((title) => ({ title, value: title, selected: currentPosture === title }));
+  }
+  onPostureChange(event) {
+    const value = event.target.value;
+    if (value !== this.currentDevicePosture()) {
+      this.spanClicked();
+    }
+  }
+  currentDevicePosture() {
+    const mode = this.model?.mode();
+    if (mode && (mode.orientation === EmulationModel.EmulatedDevices.VerticalSpanned || mode.orientation === EmulationModel.EmulatedDevices.HorizontalSpanned)) {
+      return "Folded";
+    }
+    return "Continuous";
+  }
+  getScaleOptions() {
+    if (!this.model) {
+      return [];
+    }
+    const values = [0.5, 0.75, 1, 1.25, 1.5, 2];
+    const isAutoAdjusting = this.autoAdjustScaleSetting.get();
+    const currentScale = this.model.scaleSetting().get();
+    if (!isAutoAdjusting && !values.includes(currentScale)) {
+      values.push(currentScale);
+      values.sort((a, b) => a - b);
+    }
+    const options = [
+      {
+        title: i18nString(UIStrings.fitToWindow),
+        value: 0,
+        selected: isAutoAdjusting,
+        jslogContext: "fit-to-window"
+      }
+    ];
+    for (const value of values) {
+      const title = (value * 100).toFixed(0) + "%";
+      options.push({
+        title,
+        value,
+        selected: !isAutoAdjusting && currentScale === value,
+        jslogContext: title
+      });
+    }
+    return options;
+  }
+  onScaleChange(event) {
+    if (!this.model) {
+      return;
+    }
+    const value = Number(event.target.value);
+    if (value === 0) {
+      this.autoAdjustScaleSetting.set(true);
+      if (this.model.type() === EmulationModel.DeviceModeModel.Type.Responsive) {
+        const appliedSize = this.model.appliedDeviceSize();
+        this.model.setSizeAndScaleToFit(appliedSize.width, appliedSize.height);
+      } else {
+        const device = this.model.device();
+        const mode = this.model.mode();
+        if (device && mode) {
+          this.model.emulate(EmulationModel.DeviceModeModel.Type.Device, device, mode, void 0);
+        }
+      }
+    } else {
+      this.autoAdjustScaleSetting.set(false);
+      this.model.scaleSetting().set(value);
+    }
+  }
+  getDeviceScaleFactorOptions() {
+    if (!this.model) {
+      return [];
+    }
+    const deviceScaleFactorSetting = this.model.deviceScaleFactorSetting();
+    const defaultValue = this.model.uaSetting().get() === "Mobile" || this.model.uaSetting().get() === "Mobile (no touch)" ? EmulationModel.DeviceModeModel.defaultMobileScaleFactor : window.devicePixelRatio;
+    const values = [1, 2, 3];
+    if (!values.includes(defaultValue)) {
+      values.push(defaultValue);
+      values.sort((a, b) => a - b);
+    }
+    const currentDPR = deviceScaleFactorSetting.get();
+    return values.map((value) => {
+      let title = String(value);
+      let jslogContext = `dpr-${value}`;
+      if (value === defaultValue) {
+        title = i18nString(UIStrings.defaultF, { PH1: value });
+        jslogContext = "dpr-default";
+      }
+      return {
+        title,
+        value: value === defaultValue ? 0 : value,
+        selected: currentDPR === value || value === defaultValue && currentDPR === 0,
+        jslogContext
+      };
+    });
+  }
+  onDeviceScaleChange(event) {
+    const value = Number(event.target.value);
+    this.model?.deviceScaleFactorSetting().set(value);
+  }
+  getUserAgentOptions() {
+    if (!this.model) {
+      return [];
+    }
+    const uaSetting = this.model.uaSetting();
+    const currentUserAgent = uaSetting.get();
+    return [
+      "Mobile",
+      "Mobile (no touch)",
+      "Desktop",
+      "Desktop (touch)"
+    ].map((value) => ({
+      title: value,
+      value,
+      selected: currentUserAgent === value,
+      jslogContext: Platform.StringUtilities.toKebabCase(value)
+    }));
+  }
+  onUAChange(event) {
+    const value = event.target.value;
+    this.model?.uaSetting().set(value);
+  }
+  appendOptionsMenuItems(contextMenu) {
+    if (!this.model) {
+      return;
+    }
+    const model = this.model;
+    appendToggleItem(contextMenu.headerSection(), this.showMediaInspectorSetting, i18nString(UIStrings.hideMediaQueries), i18nString(UIStrings.showMediaQueries), void 0, "media-queries");
+    appendToggleItem(contextMenu.headerSection(), this.showRulersSetting, i18nString(UIStrings.hideRulers), i18nString(UIStrings.showRulers), void 0, "rulers");
+    appendToggleItem(contextMenu.defaultSection(), this.showDeviceScaleFactorSetting, i18nString(UIStrings.removeDevicePixelRatio), i18nString(UIStrings.addDevicePixelRatio), void 0, "device-pixel-ratio");
+    appendToggleItem(contextMenu.defaultSection(), this.showUserAgentTypeSetting, i18nString(UIStrings.removeDeviceType), i18nString(UIStrings.addDeviceType), void 0, "device-type");
+    contextMenu.appendItemsAtLocation("deviceModeMenu");
+    contextMenu.footerSection().appendItem(i18nString(UIStrings.resetToDefaults), this.reset.bind(this), { jslogContext: "reset-to-defaults" });
+    contextMenu.footerSection().appendItem(i18nString(UIStrings.closeDevtools), Host.InspectorFrontendHost.InspectorFrontendHostInstance.closeWindow.bind(Host.InspectorFrontendHost.InspectorFrontendHostInstance), { jslogContext: "close-dev-tools" });
+    function appendToggleItem(section, setting, title1, title2, disabled, context) {
+      if (typeof disabled === "undefined") {
+        disabled = model.type() === EmulationModel.DeviceModeModel.Type.None;
+      }
+      const isEnabled = Boolean(setting.get() && !disabled);
+      const jslogContext = `${context}-${isEnabled ? "disable" : "enable"}`;
+      section.appendItem(isEnabled ? title1 : title2, setting.set.bind(setting, !setting.get()), { disabled, jslogContext });
+    }
+  }
+  reset() {
+    this.showDeviceScaleFactorSetting.set(false);
+    this.showUserAgentTypeSetting.set(false);
+    this.showMediaInspectorSetting.set(false);
+    this.showRulersSetting.set(false);
+    this.model?.reset();
+  }
+  emulateDevice(device) {
+    if (!this.model) {
+      return;
+    }
+    const scale = this.autoAdjustScaleSetting.get() ? void 0 : this.model.scaleSetting().get();
+    this.model.emulate(EmulationModel.DeviceModeModel.Type.Device, device, this.lastMode.get(device) || device.modes[0], scale);
+  }
+  switchToResponsive() {
+    this.model?.emulate(EmulationModel.DeviceModeModel.Type.Responsive, null, null);
+  }
+  filterDevices(devices) {
+    devices = devices.filter(function(d) {
+      return d.show();
+    });
+    devices.sort(EmulationModel.EmulatedDevices.EmulatedDevice.deviceComparator);
+    return devices;
+  }
+  standardDevices() {
+    return this.filterDevices(this.emulatedDevicesList.standard());
+  }
+  customDevices() {
+    return this.filterDevices(this.emulatedDevicesList.custom());
+  }
+  allDevices() {
+    return this.standardDevices().concat(this.customDevices());
+  }
+  getDeviceModeOptions() {
+    if (!this.model) {
+      return {
+        responsive: { title: i18nString(UIStrings.responsive), selected: false, jslogContext: "responsive" },
+        standard: [],
+        custom: [],
+        edit: { title: i18nString(UIStrings.edit), jslogContext: "edit" }
+      };
+    }
+    const currentDevice = this.model.device();
+    const optionsByCategory = /* @__PURE__ */ new Map();
+    for (const device of this.standardDevices()) {
+      const cat = EmulationModel.EmulatedDevices.deviceCategory(device);
+      let list = optionsByCategory.get(cat);
+      if (!list) {
+        list = [];
+        optionsByCategory.set(cat, list);
+      }
+      list.push({
+        device,
+        title: device.title,
+        selected: currentDevice === device,
+        jslogContext: Platform.StringUtilities.toKebabCase(device.title)
+      });
+    }
+    const groupedStandard = [];
+    for (const category of EmulationModel.EmulatedDevices.CATEGORY_ORDER) {
+      const options = optionsByCategory.get(category);
+      if (options && options.length > 0) {
+        groupedStandard.push({ category, options });
+      }
+    }
+    return {
+      responsive: {
+        title: i18nString(UIStrings.responsive),
+        selected: this.model.type() === EmulationModel.DeviceModeModel.Type.Responsive,
+        jslogContext: "responsive"
+      },
+      standard: groupedStandard,
+      custom: this.customDevices().map((device) => ({
+        device,
+        title: device.title,
+        selected: this.model?.device() === device,
+        jslogContext: Platform.StringUtilities.toKebabCase(device.title)
+      })),
+      edit: {
+        title: i18nString(UIStrings.edit),
+        jslogContext: "edit"
+      }
+    };
+  }
+  onDeviceChange(event) {
+    const value = event.target.value;
+    if (value === "Edit") {
+      this.emulatedDevicesList.revealCustomSetting();
+      this.requestUpdate();
+    } else if (value === "Responsive") {
+      this.switchToResponsive();
+    } else {
+      for (const device of this.allDevices()) {
+        if (device.title === value) {
+          this.emulateDevice(device);
+          break;
+        }
+      }
+    }
+  }
+  deviceListChanged() {
+    this.requestUpdate();
+    if (!this.model) {
+      return;
+    }
+    const device = this.model.device();
+    if (!device) {
+      return;
+    }
+    const devices = this.allDevices();
+    if (devices.indexOf(device) === -1) {
+      if (devices.length) {
+        this.emulateDevice(devices[0]);
+      } else {
+        this.model.emulate(EmulationModel.DeviceModeModel.Type.Responsive, null, null);
+      }
+    } else {
+      this.emulateDevice(device);
+    }
+  }
+  spanClicked() {
+    if (!this.model) {
+      return;
+    }
+    const device = this.model.device();
+    if (!device || !device.isDualScreen && !device.isFoldableScreen) {
+      return;
+    }
+    const scale = this.autoAdjustScaleSetting.get() ? void 0 : this.model.scaleSetting().get();
+    const mode = this.model.mode();
+    if (!mode) {
+      return;
+    }
+    const newMode = device.getSpanPartner(mode);
+    if (!newMode) {
+      return;
+    }
+    this.model.emulate(this.model.type(), device, newMode, scale);
+    return;
+  }
+  modeMenuClicked(event) {
+    if (!this.model) {
+      return;
+    }
+    if (this.model.isScreenOrientationLocked()) {
+      return;
+    }
+    const device = this.model.device();
+    const model = this.model;
+    const autoAdjustScaleSetting = this.autoAdjustScaleSetting;
+    if (model.type() === EmulationModel.DeviceModeModel.Type.Responsive) {
+      const appliedSize = model.appliedDeviceSize();
+      if (autoAdjustScaleSetting.get()) {
+        model.setSizeAndScaleToFit(appliedSize.height, appliedSize.width);
+      } else {
+        model.setWidth(appliedSize.height);
+        model.setHeight(appliedSize.width);
+      }
+      return;
+    }
+    if (!device) {
+      return;
+    }
+    if ((device.isDualScreen || device.isFoldableScreen || device.modes.length === 2) && device.modes[0].orientation !== device.modes[1].orientation) {
+      const scale = autoAdjustScaleSetting.get() ? void 0 : model.scaleSetting().get();
+      const mode = model.mode();
+      if (!mode) {
+        return;
+      }
+      const rotationPartner = device.getRotationPartner(mode);
+      if (!rotationPartner) {
+        return;
+      }
+      model.emulate(model.type(), model.device(), rotationPartner, scale);
+      return;
+    }
+    const modeButton = event.target;
+    const contextMenu = new UI.ContextMenu.ContextMenu(event, {
+      x: modeButton.getBoundingClientRect().left,
+      y: modeButton.getBoundingClientRect().top + modeButton.offsetHeight
+    });
+    addOrientation(EmulationModel.EmulatedDevices.Vertical, i18nString(UIStrings.portrait));
+    addOrientation(EmulationModel.EmulatedDevices.Horizontal, i18nString(UIStrings.landscape));
+    void contextMenu.show();
+    function addOrientation(orientation, title) {
+      if (!device) {
+        return;
+      }
+      const modes = device.modesForOrientation(orientation);
+      if (!modes.length) {
+        return;
+      }
+      if (modes.length === 1) {
+        addMode(modes[0], title);
+      } else {
+        for (let index = 0; index < modes.length; index++) {
+          addMode(modes[index], title + " \u2013 " + modes[index].title);
+        }
+      }
+    }
+    function addMode(mode, title) {
+      contextMenu.defaultSection().appendCheckboxItem(title, applyMode.bind(null, mode), { checked: model.mode() === mode, jslogContext: "device-mode" });
+    }
+    function applyMode(mode) {
+      const scale = autoAdjustScaleSetting.get() ? void 0 : model.scaleSetting().get();
+      model.emulate(model.type(), model.device(), mode, scale);
+    }
+  }
+  getPrettyFitZoomPercentage() {
+    return !this.model ? "" : `${(this.model.fitScale() * 100).toFixed(0)}`;
+  }
+  getPrettyZoomPercentage() {
+    return !this.model ? "" : `${(this.model.scale() * 100).toFixed(0)}`;
+  }
+  restore() {
+    if (!this.model) {
+      return;
+    }
+    for (const device of this.allDevices()) {
+      if (device.title === this.persistenceSetting.get().device) {
+        for (const mode of device.modes) {
+          if (mode.orientation === this.persistenceSetting.get().orientation && mode.title === this.persistenceSetting.get().mode) {
+            this.lastMode.set(device, mode);
+            this.emulateDevice(device);
+            return;
+          }
+        }
+      }
+    }
+    this.model.emulate(EmulationModel.DeviceModeModel.Type.Responsive, null, null);
+  }
+};
+
+// gen/front_end/panels/emulation/deviceModeView.css.js
+var deviceModeView_css_default = `/*
+ * Copyright 2015 The Chromium Authors
+ * Use of this source code is governed by a BSD-style license that can be
+ * found in the LICENSE file.
+ */
+
+:host {
+  overflow: hidden;
+  align-items: stretch;
+  flex: auto;
+  background-color: var(--app-color-toolbar-background);
+}
+
+.device-mode-toolbar {
+  flex: none;
+  background-color: var(--app-color-toolbar-background);
+  border-bottom: 1px solid var(--sys-color-divider);
+  display: flex;
+  flex-direction: row;
+  align-items: stretch;
+}
+
+.device-mode-x {
+  margin: 0 1px;
+  font-size: 16px;
+}
+
+.device-mode-size-input {
+  /*
+   * 4 characters for the maximum size of the value,
+   * 2 characters for the width of the step-buttons,
+   * 2 pixels padding between the characters and the
+   * step-buttons.
+   */
+  width: calc(4ch + 2ch + 2px);
+  max-height: 18px;
+  border: var(--sys-color-neutral-outline);
+  border-radius: 4px;
+  margin: 0 2px;
+  text-align: center;
+  font-size: inherit;
+  font-family: inherit;
+}
+
+.device-mode-size-input:disabled {
+  user-select: none;
+}
+
+.device-mode-size-input:focus::-webkit-input-placeholder {
+  color: transparent;
+}
+
+.device-mode-empty-toolbar-element {
+  width: 0;
+}
+
+devtools-toolbar {
+  overflow: hidden;
+  flex: 0 100000 auto;
+  padding: 0 5px;
+
+  &[wrappable] {
+    height: var(--toolbar-height);
+  }
+}
+
+devtools-toolbar.main-toolbar {
+  margin: 0 auto;
+}
+
+devtools-toolbar.device-mode-toolbar-options {
+  flex: none;
+}
+
+.device-mode-content-clip {
+  overflow: hidden;
+  flex: auto;
+}
+
+.device-mode-media-container {
+  flex: none;
+  overflow: hidden;
+  box-shadow: inset 0 -1px var(--sys-color-divider);
+}
+
+.device-mode-content-clip .device-mode-media-container {
+  margin-bottom: 20px;
+}
+
+.device-mode-presets-container {
+  flex: 0 0 20px;
+  display: flex;
+}
+
+.device-mode-presets-container-inner {
+  flex: auto;
+  justify-content: center;
+  position: relative;
+  background-color: var(--sys-color-surface1);
+  border-bottom: 1px solid var(--sys-color-divider);
+}
+
+.device-mode-presets-container:hover {
+  transition: opacity 0.1s;
+  transition-delay: 50ms;
+  opacity: 100%;
+}
+
+.device-mode-preset-bar-outer {
+  pointer-events: none;
+  display: flex;
+  justify-content: center;
+}
+
+.device-mode-preset-bar {
+  border-left: 2px solid var(--sys-color-divider);
+  border-right: 2px solid var(--sys-color-divider);
+  pointer-events: auto;
+  text-align: center;
+  flex: none;
+  color: var(--sys-color-on-surface);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  white-space: nowrap;
+  margin-bottom: 1px;
+}
+
+.device-mode-preset-bar:hover {
+  transition: background-color 0.1s;
+  transition-delay: 50ms;
+  background-color: var(--sys-color-state-hover-on-subtle);
+}
+
+.device-mode-preset-bar > span {
+  visibility: hidden;
+}
+
+.device-mode-preset-bar:hover > span {
+  transition: visibility 0.1s;
+  transition-delay: 50ms;
+  visibility: visible;
+}
+
+.device-mode-content-area {
+  flex: auto;
+  position: relative;
+  margin: 0;
+}
+
+.device-mode-screen-area {
+  position: absolute;
+  left: 0;
+  right: 0;
+  width: 0;
+  height: 0;
+  background-color: var(--sys-color-inverse-surface);
+}
+
+.device-mode-content-clip .device-mode-screen-area {
+  --override-screen-area-box-shadow: hsl(240deg 3% 84%) 0 0 0 0.5px, hsl(0deg 0% 80% / 40%) 0 0 20px;
+
+  box-shadow: var(--override-screen-area-box-shadow);
+}
+
+.theme-with-dark-background .device-mode-content-clip .device-mode-screen-area,
+:host-context(.theme-with-dark-background) .device-mode-content-clip .device-mode-screen-area {
+  --override-screen-area-box-shadow: rgb(40 40 42) 0 0 0 0.5px, rgb(51 51 51 / 40%) 0 0 20px;
+}
+
+.device-mode-resizer {
+  position: absolute;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+  transition: background-color 0.1s ease, opacity 0.1s ease;
+}
+
+.device-mode-resizer:hover {
+  background-color: var(--sys-color-state-hover-on-subtle);
+  opacity: 100%;
+}
+
+.device-mode-resizer > div {
+  pointer-events: none;
+}
+
+.device-mode-right-resizer {
+  top: 0;
+  bottom: -1px;
+  right: -20px;
+  width: 20px;
+}
+
+.device-mode-left-resizer {
+  top: 0;
+  bottom: -1px;
+  left: -20px;
+  width: 20px;
+  opacity: 0%;
+}
+
+.device-mode-bottom-resizer {
+  left: 0;
+  right: -1px;
+  bottom: -20px;
+  height: 20px;
+}
+
+.device-mode-bottom-right-resizer {
+  inset: 0 -20px -20px 0;
+  background-color: var(--sys-color-surface1);
+}
+
+.device-mode-bottom-left-resizer {
+  inset: 0 0 -20px -20px;
+  opacity: 0%;
+}
+
+.device-mode-right-resizer > div {
+  /* stylelint-disable-next-line custom-property-pattern */
+  content: var(--image-file-resizeHorizontal);
+  width: 6px;
+  height: 26px;
+}
+
+.device-mode-left-resizer > div {
+  /* stylelint-disable-next-line custom-property-pattern */
+  content: var(--image-file-resizeHorizontal);
+  width: 6px;
+  height: 26px;
+}
+
+.device-mode-bottom-resizer > div {
+  /* stylelint-disable-next-line custom-property-pattern */
+  content: var(--image-file-resizeVertical);
+  margin-bottom: -2px;
+  width: 26px;
+  height: 6px;
+}
+
+.device-mode-bottom-right-resizer > div {
+  position: absolute;
+  bottom: 3px;
+  right: 3px;
+  width: 13px;
+  height: 13px;
+  /* stylelint-disable-next-line custom-property-pattern */
+  content: var(--image-file-resizeDiagonal);
+}
+
+.device-mode-bottom-left-resizer > div {
+  position: absolute;
+  bottom: 3px;
+  left: 3px;
+  width: 13px;
+  height: 13px;
+  /* stylelint-disable-next-line custom-property-pattern */
+  content: var(--image-file-resizeDiagonal);
+  transform: rotate(90deg);
+}
+
+.device-mode-page-area {
+  position: absolute;
+  left: 0;
+  right: 0;
+  width: 0;
+  height: 0;
+  display: flex;
+  background-color: var(--sys-color-cdt-base-container);
+}
+
+.device-mode-ruler {
+  display: block;
+  position: absolute;
+  overflow: visible;
+}
+
+.device-mode-ruler-top {
+  height: 20px;
+  right: 0;
+}
+
+.device-mode-ruler-left {
+  width: 20px;
+  bottom: 0;
+}
+
+.device-mode-ruler-content {
+  pointer-events: none;
+  position: absolute;
+  left: -20px;
+  top: -20px;
+}
+
+.device-mode-ruler-top .device-mode-ruler-content {
+  border-top: 1px solid transparent;
+  right: 0;
+  bottom: 20px;
+  background-color: var(--sys-color-cdt-base-container);
+}
+
+.device-mode-ruler-left .device-mode-ruler-content {
+  border-left: 1px solid transparent;
+  border-top: 1px solid transparent;
+  right: 20px;
+  bottom: 0;
+}
+
+.device-mode-ruler-inner {
+  position: absolute;
+}
+
+.device-mode-ruler-top .device-mode-ruler-inner {
+  inset: 0 0 0 20px;
+  border-bottom: 1px solid var(--sys-color-token-subtle);
+}
+
+.device-mode-ruler-left .device-mode-ruler-inner {
+  inset: 19px 0 0;
+  border-right: 1px solid var(--sys-color-token-subtle);
+  background-color: var(--sys-color-cdt-base-container);
+}
+
+.device-mode-ruler-marker {
+  position: absolute;
+}
+
+.device-mode-ruler-top .device-mode-ruler-marker {
+  width: 0;
+  height: 5px;
+  bottom: 0;
+  border-right: 1px solid var(--sys-color-token-subtle);
+  margin-right: -1px;
+}
+
+.device-mode-ruler-top .device-mode-ruler-marker.device-mode-ruler-marker-medium {
+  height: 10px;
+}
+
+.device-mode-ruler-top .device-mode-ruler-marker.device-mode-ruler-marker-large {
+  height: 15px;
+}
+
+.device-mode-ruler-left .device-mode-ruler-marker {
+  height: 0;
+  width: 5px;
+  right: 0;
+  border-bottom: 1px solid var(--sys-color-token-subtle);
+  margin-bottom: -1px;
+}
+
+.device-mode-ruler-left .device-mode-ruler-marker.device-mode-ruler-marker-medium {
+  width: 10px;
+}
+
+.device-mode-ruler-left .device-mode-ruler-marker.device-mode-ruler-marker-large {
+  width: 15px;
+}
+
+.device-mode-ruler-text {
+  color: var(--sys-color-token-subtle);
+  position: relative;
+  pointer-events: auto;
+}
+
+.device-mode-ruler-text:hover {
+  color: var(--sys-color-on-surface);
+}
+
+.device-mode-ruler-top .device-mode-ruler-text {
+  left: 2px;
+  top: -2px;
+}
+
+.device-mode-ruler-left .device-mode-ruler-text {
+  left: -4px;
+  top: -15px;
+  transform: rotate(270deg);
+}
+
+/*# sourceURL=${import.meta.resolve("./deviceModeView.css")} */`;
+
+// gen/front_end/panels/emulation/InspectedPagePlaceholder.js
+var InspectedPagePlaceholder_exports = {};
+__export(InspectedPagePlaceholder_exports, {
+  InspectedPagePlaceholder: () => InspectedPagePlaceholder
+});
+import * as Common2 from "./..\\..\\core\\common\\common.js";
+import * as UI2 from "./..\\..\\ui\\legacy\\legacy.js";
+
+// gen/front_end/panels/emulation/inspectedPagePlaceholder.css.js
+var inspectedPagePlaceholder_css_default = `/*
+ * Copyright 2016 The Chromium Authors
+ * Use of this source code is governed by a BSD-style license that can be
+ * found in the LICENSE file.
+ */
+
+:host {
+  background-color: var(--sys-color-cdt-base-container);
+}
+
+/*# sourceURL=${import.meta.resolve("./inspectedPagePlaceholder.css")} */`;
+
+// gen/front_end/panels/emulation/InspectedPagePlaceholder.js
+var inspectedPagePlaceholderInstance;
+var InspectedPagePlaceholder = class _InspectedPagePlaceholder extends Common2.ObjectWrapper.eventMixin(UI2.Widget.Widget) {
+  constructor() {
+    super({ useShadowDom: true });
+    this.registerRequiredCSS(inspectedPagePlaceholder_css_default);
+    this.restoreMinimumSize();
+  }
+  static instance(opts = { forceNew: null }) {
+    const { forceNew } = opts;
+    if (!inspectedPagePlaceholderInstance || forceNew) {
+      inspectedPagePlaceholderInstance = new _InspectedPagePlaceholder();
+    }
+    return inspectedPagePlaceholderInstance;
+  }
+  restoreMinimumSize() {
+    this.setMinimumSize(150, 150);
+  }
+  clearMinimumSize() {
+    this.setMinimumSize(1, 1);
+  }
+  dipPageRect() {
+    const zoomFactor = UI2.ZoomManager.ZoomManager.instance().zoomFactor();
+    const rect = this.element.getBoundingClientRect();
+    const bodyRect = this.element.ownerDocument.body.getBoundingClientRect();
+    const left = Math.max(rect.left * zoomFactor, bodyRect.left * zoomFactor);
+    const top = Math.max(rect.top * zoomFactor, bodyRect.top * zoomFactor);
+    const bottom = Math.min(rect.bottom * zoomFactor, bodyRect.bottom * zoomFactor);
+    const right = Math.min(rect.right * zoomFactor, bodyRect.right * zoomFactor);
+    return { x: left, y: top, width: right - left, height: bottom - top };
+  }
+  update(force) {
+    const rect = this.dipPageRect();
+    const bounds = {
+      x: Math.round(rect.x),
+      y: Math.round(rect.y),
+      height: Math.max(1, Math.round(rect.height)),
+      width: Math.max(1, Math.round(rect.width))
+    };
+    if (force) {
+      --bounds.height;
+      this.dispatchEventToListeners("Update", bounds);
+      ++bounds.height;
+    }
+    this.dispatchEventToListeners("Update", bounds);
+  }
+};
+
+// gen/front_end/panels/emulation/MediaQueryInspector.js
+var MediaQueryInspector_exports = {};
+__export(MediaQueryInspector_exports, {
+  DEFAULT_VIEW: () => DEFAULT_VIEW2,
+  MediaQueryInspector: () => MediaQueryInspector,
+  MediaQueryUIModel: () => MediaQueryUIModel
+});
+import * as Common3 from "./..\\..\\core\\common\\common.js";
+import * as i18n3 from "./..\\..\\core\\i18n\\i18n.js";
+import * as Platform2 from "./..\\..\\core\\platform\\platform.js";
+import * as SDK from "./..\\..\\core\\sdk\\sdk.js";
+import * as Bindings from "./..\\..\\models\\bindings\\bindings.js";
+import * as UI3 from "./..\\..\\ui\\legacy\\legacy.js";
+import { Directives as Directives2, html as html2, nothing, render as render2 } from "./..\\..\\ui\\lit\\lit.js";
+import * as VisualLogging2 from "./..\\..\\ui\\visual_logging\\visual_logging.js";
+
+// gen/front_end/panels/emulation/mediaQueryInspector.css.js
+var mediaQueryInspector_css_default = `/*
+ * Copyright 2015 The Chromium Authors
+ * Use of this source code is governed by a BSD-style license that can be
+ * found in the LICENSE file.
+ */
+/* Media query bars */
+
+.media-inspector-view {
+  height: 50px;
+}
+
+.media-inspector-marker-container {
+  height: 14px;
+  margin: 2px 0;
+  position: relative;
+}
+
+.media-inspector-bar {
+  display: flex;
+  flex-direction: row;
+  align-items: stretch;
+  pointer-events: none;
+  position: absolute;
+  inset: 0;
+}
+
+.media-inspector-marker {
+  flex: none;
+  pointer-events: auto;
+  margin: 1px 0;
+  white-space: nowrap;
+  z-index: auto;
+  position: relative;
+}
+
+.media-inspector-marker-spacer {
+  flex: auto;
+}
+
+.media-inspector-marker:hover {
+  margin: -1px 0;
+  opacity: 100%;
+}
+
+.media-inspector-marker-min-width {
+  flex: auto;
+  background-color: var(--sys-color-yellow-container);
+  border-right: 2px solid var(--sys-color-yellow-bright);
+  border-left: 2px solid var(--sys-color-yellow-bright);
+
+  &:hover {
+    background-color: color-mix(in srgb, var(--sys-color-yellow-container), var(--sys-color-yellow-bright) 30%);
+  }
+}
+
+.media-inspector-marker-min-width-right {
+  border-left: 2px solid var(--sys-color-yellow-bright);
+}
+
+.media-inspector-marker-min-width-left {
+  border-right: 2px solid var(--sys-color-yellow-bright);
+}
+
+.media-inspector-marker-min-max-width {
+  background-color: var(--sys-color-tertiary-container);
+  border-left: 2px solid var(--sys-color-tertiary);
+  border-right: 2px solid var(--sys-color-tertiary);
+}
+
+.media-inspector-marker-min-max-width:hover {
+  z-index: 1;
+}
+
+.media-inspector-marker-max-width {
+  background-color: var(--sys-color-inverse-primary);
+  border-right: 2px solid var(--sys-color-primary-bright);
+  border-left: 2px solid var(--sys-color-primary-bright);
+}
+
+/* Clear background colors when query is not active and not hovering */
+
+.media-inspector-marker-inactive .media-inspector-marker-min-width:not(:hover) {
+  background-color: var(--sys-color-surface-yellow);
+}
+
+.media-inspector-marker-inactive .media-inspector-marker-min-max-width:not(:hover) {
+  background-color: color-mix(in srgb, var(--sys-color-tertiary-container), var(--sys-color-cdt-base-container) 30%);
+}
+
+.media-inspector-marker-inactive .media-inspector-marker-max-width:not(:hover) {
+  background-color: var(--sys-color-tonal-container);
+}
+
+/* Media query labels */
+
+.media-inspector-marker-label-container {
+  position: absolute;
+  z-index: 1;
+}
+
+.media-inspector-marker:not(:hover) .media-inspector-marker-label-container {
+  display: none;
+}
+
+.media-inspector-marker-label-container-left {
+  left: -2px;
+}
+
+.media-inspector-marker-label-container-right {
+  right: -2px;
+}
+
+.media-inspector-marker-label {
+  color: var(--sys-color-on-surface);
+  position: absolute;
+  top: 1px;
+  bottom: 0;
+  font-size: 12px;
+  pointer-events: none;
+}
+
+.media-inspector-label-right {
+  right: 4px;
+}
+
+.media-inspector-label-left {
+  left: 4px;
+}
+
+/*# sourceURL=${import.meta.resolve("./mediaQueryInspector.css")} */`;
+
+// gen/front_end/panels/emulation/MediaQueryInspector.js
+var UIStrings2 = {
+  /**
+   * @description A context menu item in the media query inspector of the device mode toolbar.
+   * Takes the user to the source code where this media query came from.
+   */
+  revealInSourceCode: "Reveal in source code"
+};
+var str_2 = i18n3.i18n.registerUIStrings("panels/emulation/MediaQueryInspector.ts", UIStrings2);
+var i18nString2 = i18n3.i18n.getLocalizedString.bind(void 0, str_2);
+var { classMap } = Directives2;
+var DEFAULT_VIEW2 = (input, _output, target) => {
+  const createBarClassMap = (marker) => ({
+    "media-inspector-bar": true,
+    "media-inspector-marker-inactive": !marker.active
+  });
+  render2(html2`
+    <style>${mediaQueryInspector_css_default}</style>
+    <div class='media-inspector-view'>
+    ${input.markers.entries().map(([section, markers]) => html2`
+      <div class='media-inspector-marker-container'>
+        ${markers.map((marker) => html2`
+          <div
+              class=${classMap(createBarClassMap(marker))}
+              @click=${() => input.onMediaQueryClicked(marker.model)}
+              @contextmenu=${(event) => input.onContextMenu(event, marker.locations)}
+          >
+            ${section === 0 ? renderMaxSection(input.zoomFactor, marker.model) : section === 1 ? renderMinMaxSection(input.zoomFactor, marker.model) : renderMinSection(input.zoomFactor, marker.model)}
+          </div>
+        `)}
+      </div>
+    `).toArray()}
+    </div>`, target, { container: { attributes: { jslog: `${VisualLogging2.mediaInspectorView().track({ click: true })}` } } });
+};
+function renderMaxSection(zoomFactor, model) {
+  return html2`
+    <div class='media-inspector-marker-spacer'></div>
+    <div
+        class='media-inspector-marker media-inspector-marker-max-width'
+        style=${"width: " + model.maxWidthValue(zoomFactor) + "px"}
+        title=${model.mediaText()}
+    >
+      ${renderLabel(model.maxWidthExpression(), false, false)}
+      ${renderLabel(model.maxWidthExpression(), true, true)}
+    </div>
+    <div class='media-inspector-marker-spacer'></div>
+  `;
+}
+function renderMinMaxSection(zoomFactor, model) {
+  const width = (model.maxWidthValue(zoomFactor) - model.minWidthValue(zoomFactor)) * 0.5;
+  return html2`
+    <div class='media-inspector-marker-spacer'></div>
+    <div
+        class='media-inspector-marker media-inspector-marker-min-max-width'
+        style=${"width: " + width + "px"}
+        title=${model.mediaText()}
+    >
+      ${renderLabel(model.maxWidthExpression(), true, false)}
+      ${renderLabel(model.minWidthExpression(), false, true)}
+    </div>
+    <div class='media-inspector-marker-spacer' style=${"flex: 0 0 " + model.minWidthValue(zoomFactor) + "px"}></div>
+    <div
+        class='media-inspector-marker media-inspector-marker-min-max-width'
+        style=${"width: " + width + "px"}
+        title=${model.mediaText()}
+    >
+      ${renderLabel(model.minWidthExpression(), true, false)}
+      ${renderLabel(model.maxWidthExpression(), false, true)}
+    </div>
+    <div class='media-inspector-marker-spacer'></div>
+  `;
+}
+function renderMinSection(zoomFactor, model) {
+  return html2`
+    <div
+        class='media-inspector-marker media-inspector-marker-min-width media-inspector-marker-min-width-left'
+        title=${model.mediaText()}
+    >${renderLabel(model.minWidthExpression(), false, false)}</div>
+    <div class='media-inspector-marker-spacer' style=${"flex: 0 0 " + model.minWidthValue(zoomFactor) + "px"}></div>
+    <div
+        class='media-inspector-marker media-inspector-marker-min-width media-inspector-marker-min-width-right'
+        title=${model.mediaText()}
+    >${renderLabel(model.minWidthExpression(), true, true)}</div>
+  `;
+}
+function renderLabel(expression, atLeft, leftAlign) {
+  if (!expression) {
+    return nothing;
+  }
+  const containerClassMap = {
+    "media-inspector-marker-label-container": true,
+    "media-inspector-marker-label-container-left": atLeft,
+    "media-inspector-marker-label-container-right": !atLeft
+  };
+  const labelClassMap = {
+    "media-inspector-marker-label": true,
+    "media-inspector-label-left": leftAlign,
+    "media-inspector-label-right": !leftAlign
+  };
+  return html2`
+    <div class=${classMap(containerClassMap)}>
+      <span class=${classMap(labelClassMap)}>${expression.value()}${expression.unit()}</span>
+    </div>
+  `;
+}
+var MediaQueryInspector = class extends UI3.Widget.Widget {
+  view;
+  mediaThrottler = new Common3.Throttler.Throttler(0);
+  #getWidthCallback;
+  #setWidthCallback;
+  #scale;
+  cssModel;
+  cachedQueryModels;
+  constructor(element, view = DEFAULT_VIEW2) {
+    super(element, { useShadowDom: "pure" });
+    this.view = view;
+    this.#scale = 1;
+    SDK.TargetManager.TargetManager.instance().observeModels(SDK.CSSModel.CSSModel, this);
+    UI3.ZoomManager.ZoomManager.instance().addEventListener("ZoomChanged", this.requestUpdate.bind(this), this);
+  }
+  get getWidthCallback() {
+    return this.#getWidthCallback;
+  }
+  set getWidthCallback(callback) {
+    this.#getWidthCallback = callback;
+    this.requestUpdate();
+  }
+  get setWidthCallback() {
+    return this.#setWidthCallback;
+  }
+  set setWidthCallback(callback) {
+    this.#setWidthCallback = callback;
+    this.requestUpdate();
+  }
+  modelAdded(cssModel) {
+    if (cssModel.target() !== SDK.TargetManager.TargetManager.instance().primaryPageTarget()) {
+      return;
+    }
+    this.cssModel = cssModel;
+    this.cssModel.addEventListener(SDK.CSSModel.Events.StyleSheetAdded, this.scheduleMediaQueriesUpdate, this);
+    this.cssModel.addEventListener(SDK.CSSModel.Events.StyleSheetRemoved, this.scheduleMediaQueriesUpdate, this);
+    this.cssModel.addEventListener(SDK.CSSModel.Events.StyleSheetChanged, this.scheduleMediaQueriesUpdate, this);
+    this.cssModel.addEventListener(SDK.CSSModel.Events.MediaQueryResultChanged, this.scheduleMediaQueriesUpdate, this);
+  }
+  modelRemoved(cssModel) {
+    if (cssModel !== this.cssModel) {
+      return;
+    }
+    this.cssModel.removeEventListener(SDK.CSSModel.Events.StyleSheetAdded, this.scheduleMediaQueriesUpdate, this);
+    this.cssModel.removeEventListener(SDK.CSSModel.Events.StyleSheetRemoved, this.scheduleMediaQueriesUpdate, this);
+    this.cssModel.removeEventListener(SDK.CSSModel.Events.StyleSheetChanged, this.scheduleMediaQueriesUpdate, this);
+    this.cssModel.removeEventListener(SDK.CSSModel.Events.MediaQueryResultChanged, this.scheduleMediaQueriesUpdate, this);
+    delete this.cssModel;
+  }
+  get scale() {
+    return this.#scale;
+  }
+  set scale(scale) {
+    if (Math.abs(this.#scale - scale) < 1e-8) {
+      return;
+    }
+    this.#scale = scale;
+    this.requestUpdate();
+  }
+  onMediaQueryClicked(model) {
+    const modelMaxWidth = model.maxWidthExpression();
+    const modelMinWidth = model.minWidthExpression();
+    if (model.section() === 0) {
+      this.setWidthCallback?.(modelMaxWidth ? modelMaxWidth.computedLength() || 0 : 0);
+      return;
+    }
+    if (model.section() === 2) {
+      this.setWidthCallback?.(modelMinWidth ? modelMinWidth.computedLength() || 0 : 0);
+      return;
+    }
+    const currentWidth = this.getWidthCallback?.() ?? 0;
+    if (modelMinWidth && currentWidth !== modelMinWidth.computedLength()) {
+      this.setWidthCallback?.(modelMinWidth.computedLength() || 0);
+    } else {
+      this.setWidthCallback?.(modelMaxWidth ? modelMaxWidth.computedLength() || 0 : 0);
+    }
+  }
+  onContextMenu(event, locations) {
+    if (!this.cssModel?.isEnabled()) {
+      return;
+    }
+    const uiLocations = /* @__PURE__ */ new Map();
+    for (let i = 0; i < locations.length; ++i) {
+      const uiLocation = Bindings.CSSWorkspaceBinding.CSSWorkspaceBinding.instance().rawLocationToUILocation(locations[i]);
+      if (!uiLocation) {
+        continue;
+      }
+      const descriptor = typeof uiLocation.columnNumber === "number" ? Platform2.StringUtilities.sprintf("%s:%d:%d", uiLocation.uiSourceCode.url(), uiLocation.lineNumber + 1, uiLocation.columnNumber + 1) : Platform2.StringUtilities.sprintf("%s:%d", uiLocation.uiSourceCode.url(), uiLocation.lineNumber + 1);
+      uiLocations.set(descriptor, uiLocation);
+    }
+    const contextMenuItems = [...uiLocations.keys()].sort();
+    const contextMenu = new UI3.ContextMenu.ContextMenu(event);
+    const subMenuItem = contextMenu.defaultSection().appendSubMenuItem(i18nString2(UIStrings2.revealInSourceCode), void 0, "reveal-in-source-list");
+    for (let i = 0; i < contextMenuItems.length; ++i) {
+      const title = contextMenuItems[i];
+      subMenuItem.defaultSection().appendItem(title, this.revealSourceLocation.bind(this, uiLocations.get(title)), { jslogContext: "reveal-in-source" });
+    }
+    void contextMenu.show();
+  }
+  revealSourceLocation(location) {
+    void Common3.Revealer.reveal(location);
+  }
+  scheduleMediaQueriesUpdate() {
+    if (!this.isShowing()) {
+      return;
+    }
+    void this.mediaThrottler.schedule(this.refetchMediaQueries.bind(this));
+  }
+  refetchMediaQueries() {
+    if (!this.isShowing() || !this.cssModel) {
+      return Promise.resolve();
+    }
+    return this.cssModel.getMediaQueries().then(this.rebuildMediaQueries.bind(this));
+  }
+  squashAdjacentEqual(models) {
+    const filtered = [];
+    for (let i = 0; i < models.length; ++i) {
+      const last = filtered[filtered.length - 1];
+      if (!last?.equals(models[i])) {
+        filtered.push(models[i]);
+      }
+    }
+    return filtered;
+  }
+  rebuildMediaQueries(cssMedias) {
+    let queryModels = [];
+    for (let i = 0; i < cssMedias.length; ++i) {
+      const cssMedia = cssMedias[i];
+      if (!cssMedia.mediaList) {
+        continue;
+      }
+      for (let j = 0; j < cssMedia.mediaList.length; ++j) {
+        const mediaQuery = cssMedia.mediaList[j];
+        const queryModel = MediaQueryUIModel.createFromMediaQuery(cssMedia, mediaQuery);
+        if (queryModel) {
+          queryModels.push(queryModel);
+        }
+      }
+    }
+    queryModels.sort(compareModels);
+    queryModels = this.squashAdjacentEqual(queryModels);
+    let allEqual = this.cachedQueryModels && this.cachedQueryModels.length === queryModels.length;
+    for (let i = 0; allEqual && i < queryModels.length; ++i) {
+      allEqual = allEqual && this.cachedQueryModels?.[i].equals(queryModels[i]);
+    }
+    if (allEqual) {
+      return;
+    }
+    this.cachedQueryModels = queryModels;
+    this.requestUpdate();
+    function compareModels(model1, model2) {
+      return model1.compareTo(model2);
+    }
+  }
+  buildMediaQueryMarkers() {
+    if (!this.cachedQueryModels) {
+      return [];
+    }
+    const markers = [];
+    let lastMarker = null;
+    for (const model of this.cachedQueryModels) {
+      if (lastMarker?.model.dimensionsEqual(model)) {
+        lastMarker.active = lastMarker.active || model.active();
+      } else {
+        lastMarker = {
+          active: model.active(),
+          model,
+          locations: []
+        };
+        markers.push(lastMarker);
+      }
+      const rawLocation = model.rawLocation();
+      if (rawLocation) {
+        lastMarker.locations.push(rawLocation);
+      }
+    }
+    return markers;
+  }
+  zoomFactor() {
+    return UI3.ZoomManager.ZoomManager.instance().zoomFactor() / this.#scale;
+  }
+  wasShown() {
+    super.wasShown();
+    this.scheduleMediaQueriesUpdate();
+    this.performUpdate();
+  }
+  performUpdate() {
+    if (!this.isShowing() || !this.getWidthCallback || !this.setWidthCallback) {
+      return;
+    }
+    const markers = Map.groupBy(this.buildMediaQueryMarkers(), (marker) => marker.model.section());
+    this.view({
+      zoomFactor: this.zoomFactor(),
+      markers,
+      onMediaQueryClicked: this.onMediaQueryClicked.bind(this),
+      onContextMenu: this.onContextMenu.bind(this)
+    }, {}, this.contentElement);
+  }
+};
+var MediaQueryUIModel = class _MediaQueryUIModel {
+  cssMedia;
+  #minWidthExpression;
+  #maxWidthExpression;
+  #active;
+  #section;
+  #rawLocation;
+  constructor(cssMedia, minWidthExpression, maxWidthExpression, active) {
+    this.cssMedia = cssMedia;
+    this.#minWidthExpression = minWidthExpression;
+    this.#maxWidthExpression = maxWidthExpression;
+    this.#active = active;
+    if (maxWidthExpression && !minWidthExpression) {
+      this.#section = 0;
+    } else if (minWidthExpression && maxWidthExpression) {
+      this.#section = 1;
+    } else {
+      this.#section = 2;
+    }
+  }
+  static createFromMediaQuery(cssMedia, mediaQuery) {
+    let maxWidthExpression = null;
+    let maxWidthPixels = Number.MAX_VALUE;
+    let minWidthExpression = null;
+    let minWidthPixels = Number.MIN_VALUE;
+    const expressions = mediaQuery.expressions();
+    if (!expressions) {
+      return null;
+    }
+    for (let i = 0; i < expressions.length; ++i) {
+      const expression = expressions[i];
+      const feature = expression.feature();
+      if (feature.indexOf("width") === -1) {
+        continue;
+      }
+      const pixels = expression.computedLength();
+      if (feature.startsWith("max-") && pixels && pixels < maxWidthPixels) {
+        maxWidthExpression = expression;
+        maxWidthPixels = pixels;
+      } else if (feature.startsWith("min-") && pixels && pixels > minWidthPixels) {
+        minWidthExpression = expression;
+        minWidthPixels = pixels;
+      }
+    }
+    if (minWidthPixels > maxWidthPixels || !maxWidthExpression && !minWidthExpression) {
+      return null;
+    }
+    return new _MediaQueryUIModel(cssMedia, minWidthExpression, maxWidthExpression, mediaQuery.active());
+  }
+  equals(other) {
+    return this.compareTo(other) === 0;
+  }
+  dimensionsEqual(other) {
+    const thisMinWidthExpression = this.minWidthExpression();
+    const otherMinWidthExpression = other.minWidthExpression();
+    const thisMaxWidthExpression = this.maxWidthExpression();
+    const otherMaxWidthExpression = other.maxWidthExpression();
+    const sectionsEqual = this.section() === other.section();
+    const minWidthEqual = !thisMinWidthExpression || thisMinWidthExpression.computedLength() === otherMinWidthExpression?.computedLength();
+    const maxWidthEqual = !thisMaxWidthExpression || thisMaxWidthExpression.computedLength() === otherMaxWidthExpression?.computedLength();
+    return sectionsEqual && minWidthEqual && maxWidthEqual;
+  }
+  compareTo(other) {
+    if (this.section() !== other.section()) {
+      return this.section() - other.section();
+    }
+    if (this.dimensionsEqual(other)) {
+      const myLocation = this.rawLocation();
+      const otherLocation = other.rawLocation();
+      if (!myLocation && !otherLocation) {
+        return Platform2.StringUtilities.compare(this.mediaText(), other.mediaText());
+      }
+      if (myLocation && !otherLocation) {
+        return 1;
+      }
+      if (!myLocation && otherLocation) {
+        return -1;
+      }
+      if (this.active() !== other.active()) {
+        return this.active() ? -1 : 1;
+      }
+      if (!myLocation || !otherLocation) {
+        return 0;
+      }
+      return Platform2.StringUtilities.compare(myLocation.url, otherLocation.url) || myLocation.lineNumber - otherLocation.lineNumber || myLocation.columnNumber - otherLocation.columnNumber;
+    }
+    const thisMaxWidthExpression = this.maxWidthExpression();
+    const otherMaxWidthExpression = other.maxWidthExpression();
+    const thisMaxLength = thisMaxWidthExpression ? thisMaxWidthExpression.computedLength() || 0 : 0;
+    const otherMaxLength = otherMaxWidthExpression ? otherMaxWidthExpression.computedLength() || 0 : 0;
+    const thisMinWidthExpression = this.minWidthExpression();
+    const otherMinWidthExpression = other.minWidthExpression();
+    const thisMinLength = thisMinWidthExpression ? thisMinWidthExpression.computedLength() || 0 : 0;
+    const otherMinLength = otherMinWidthExpression ? otherMinWidthExpression.computedLength() || 0 : 0;
+    if (this.section() === 0) {
+      return otherMaxLength - thisMaxLength;
+    }
+    if (this.section() === 2) {
+      return thisMinLength - otherMinLength;
+    }
+    return thisMinLength - otherMinLength || otherMaxLength - thisMaxLength;
+  }
+  section() {
+    return this.#section;
+  }
+  mediaText() {
+    return this.cssMedia.text || "";
+  }
+  rawLocation() {
+    if (!this.#rawLocation) {
+      this.#rawLocation = this.cssMedia.rawLocation();
+    }
+    return this.#rawLocation;
+  }
+  minWidthExpression() {
+    return this.#minWidthExpression;
+  }
+  maxWidthExpression() {
+    return this.#maxWidthExpression;
+  }
+  minWidthValue(zoomFactor) {
+    const minWidthExpression = this.minWidthExpression();
+    return minWidthExpression ? (minWidthExpression.computedLength() || 0) / zoomFactor : 0;
+  }
+  maxWidthValue(zoomFactor) {
+    const maxWidthExpression = this.maxWidthExpression();
+    return maxWidthExpression ? (maxWidthExpression.computedLength() || 0) / zoomFactor : 0;
+  }
+  active() {
+    return this.#active;
+  }
+};
+
+// gen/front_end/panels/emulation/DeviceModeView.js
+var { classMap: classMap2, ref, styleMap } = Directives3;
+var { widget: widget2 } = UI4.Widget;
+var UIStrings3 = {
+  /**
+   * @description Title of the bottom resizer element in the device mode view of the device mode toolbar.
+   */
+  doubleclickForFullHeight: "Double-click for full height",
+  /**
+   * @description Name of a device that the user can select to emulate. Small mobile device.
+   * Translation of this phrase should be limited to 10 characters.
+   */
+  mobileS: "Mobile S",
+  /**
+   * @description Name of a device that the user can select to emulate. Medium mobile device.
+   * Translation of this phrase should be limited to 10 characters.
+   */
+  mobileM: "Mobile M",
+  /**
+   * @description Name of a device that the user can select to emulate. Large mobile device.
+   * Translation of this phrase should be limited to 10 characters.
+   */
+  mobileL: "Mobile L",
+  /**
+   * @description Name of a device that the user can select to emulate. Tablet device.
+   * Translation of this phrase should be limited to 10 characters.
+   */
+  tablet: "Tablet",
+  /**
+   * @description Name of a device that the user can select to emulate. Laptop device.
+   * Translation of this phrase should be limited to 10 characters.
+   */
+  laptop: "Laptop",
+  /**
+   * @description Name of a device that the user can select to emulate. Large laptop device.
+   * Translation of this phrase should be limited to 10 characters.
+   */
+  laptopL: "Laptop L"
+};
+var str_3 = i18n5.i18n.registerUIStrings("panels/emulation/DeviceModeView.ts", UIStrings3);
+var i18nString3 = i18n5.i18n.getLocalizedString.bind(void 0, str_3);
+function resizerRef(resizer, onConnect) {
+  let oldEl;
+  return (el) => {
+    if (el instanceof HTMLElement) {
+      if (oldEl === el) {
+        return;
+      }
+      if (oldEl) {
+        resizer.removeElement(oldEl);
+      }
+      oldEl = el;
+      resizer.addElement(el);
+      onConnect?.(el);
+    } else if (oldEl) {
+      resizer.removeElement(oldEl);
+      oldEl = void 0;
+    }
+  };
+}
+var DEFAULT_DEVICE_MODE_VIEW = (input, _output, target) => {
+  const sizes = [320, 375, 425, 768, 1024, 1440, 2560];
+  const titles = [
+    i18nString3(UIStrings3.mobileS),
+    i18nString3(UIStrings3.mobileM),
+    i18nString3(UIStrings3.mobileL),
+    i18nString3(UIStrings3.tablet),
+    i18nString3(UIStrings3.laptop),
+    i18nString3(UIStrings3.laptopL),
+    "4K"
+  ];
+  render3(input.showDeviceMode ? html3`${UI4.Widget.widget(DeviceModeToolbar, { model: input.model })}
+    <div class=${classMap2({
+    "device-mode-content-clip": true,
+    vbox: true,
+    "device-mode-rulers-visible": input.showRulers
+  })}>
+      <div class="device-mode-presets-container" jslog=${VisualLogging3.responsivePresets()}>
+        <div class="device-mode-presets-container-inner">
+          ${sizes.map((size, idx) => html3`
+            <div class="fill device-mode-preset-bar-outer">
+              <div class="device-mode-preset-bar"
+                   style="width: ${size * input.scale}px;"
+                   jslog=${VisualLogging3.action().track({ click: true }).context(`device-mode-preset-${size}px`)}
+                   @click=${(e) => input.onApplyPresetSize(size, e)}>
+                <span>${titles[idx]} – ${size}px</span>
+              </div>
+            </div>
+          `).reverse()}
+        </div>
+      </div>
+      <div class="device-mode-media-container">
+        ${input.showMediaInspector ? widget2(MediaQueryInspector, {
+    scale: input.scale,
+    getWidthCallback: () => input.model.appliedDeviceSize().width,
+    setWidthCallback: input.model.setWidth.bind(input.model)
+  }) : nothing2}
+      </div>
+      <div class="device-mode-content-area">
+        <div class="device-mode-screen-area"
+             style=${styleMap(input.cachedCssScreenRect ? {
+    left: `${input.cachedCssScreenRect.left}px`,
+    top: `${input.cachedCssScreenRect.top}px`,
+    width: `${input.cachedCssScreenRect.width}px`,
+    height: `${input.cachedCssScreenRect.height}px`
+  } : {})}>
+          <div class="device-mode-resizer device-mode-bottom-right-resizer"
+               ?hidden=${!input.resizable}
+               jslog=${VisualLogging3.slider("device-mode-resizer").track({ drag: true })}
+               ${ref(input.bottomRightResizerRef)}>
+            <div></div>
+          </div>
+          <div class="device-mode-resizer device-mode-bottom-left-resizer"
+               ?hidden=${!input.resizable}
+               jslog=${VisualLogging3.slider("device-mode-resizer").track({ drag: true })}
+               ${ref(input.bottomLeftResizerRef)}>
+            <div></div>
+          </div>
+          <div class="device-mode-resizer device-mode-right-resizer"
+               ?hidden=${!input.resizable}
+               jslog=${VisualLogging3.slider("device-mode-resizer").track({ drag: true })}
+               ${ref(input.rightResizerRef)}>
+            <div></div>
+          </div>
+          <div class="device-mode-resizer device-mode-left-resizer"
+               ?hidden=${!input.resizable}
+               jslog=${VisualLogging3.slider("device-mode-resizer").track({ drag: true })}
+               ${ref(input.leftResizerRef)}>
+            <div></div>
+          </div>
+          <div class="device-mode-resizer device-mode-bottom-resizer"
+               ?hidden=${!input.resizable}
+               jslog=${VisualLogging3.slider("device-mode-resizer").track({ drag: true })}
+               title=${i18nString3(UIStrings3.doubleclickForFullHeight)}
+               ${ref(input.bottomResizerRef)}
+               @dblclick=${input.onDoubleclickBottomResizer}>
+            <div></div>
+          </div>
+          <div class="device-mode-page-area"
+               style=${styleMap(input.cachedCssVisiblePageRect ? {
+    left: `${input.cachedCssVisiblePageRect.left}px`,
+    top: `${input.cachedCssVisiblePageRect.top}px`,
+    width: `${input.cachedCssVisiblePageRect.width}px`,
+    height: `${input.cachedCssVisiblePageRect.height}px`
+  } : {})}>
+            ${widget2(() => InspectedPagePlaceholder.instance(), { minimumSize: new Geometry.Size(1, 1) })}
+          </div>
+        </div>
+        ${input.showRulers ? html3`
+          <devtools-widget class="device-mode-ruler-top device-mode-ruler"
+              style=${styleMap({ left: `${input.cachedCssScreenRect?.left ?? 0}px`, top: `${input.cachedCssScreenRect?.top ?? 0}px` })}
+              ${UI4.Widget.widget(Ruler, {
+    scale: input.scale,
+    horizontal: true
+  })}
+              @device-mode-ruler-marker-selected=${(e) => input.model.setWidthAndScaleToFit(e.detail)}>
+          </devtools-widget>
+          <devtools-widget class="device-mode-ruler-left device-mode-ruler"
+              style=${styleMap({ left: `${input.cachedCssScreenRect?.left ?? 0}px`, top: `${input.cachedCssScreenRect?.top ?? 0}px` })}
+              ${UI4.Widget.widget(Ruler, {
+    scale: input.scale,
+    horizontal: false
+  })}
+              @device-mode-ruler-marker-selected=${(e) => input.model.setHeightAndScaleToFit(e.detail)}>
+          </devtools-widget>
+        ` : nothing2}
+      </div>
+    </div>
+  ` : widget2(() => InspectedPagePlaceholder.instance(), { minimumSize: new Geometry.Size(150, 150) }), target, {
+    container: {
+      classes: ["device-mode-view"]
+    }
+  });
+};
+var DeviceModeView = class _DeviceModeView extends UI4.Widget.VBox {
+  wrapperInstance;
+  model;
+  showMediaInspectorSetting;
+  showRulersSetting;
+  bottomRightResizer = this.createResizer(2, 1);
+  bottomLeftResizer = this.createResizer(-2, 1);
+  rightResizer = this.createResizer(2, 0);
+  leftResizer = this.createResizer(-2, 0);
+  bottomResizer = this.createResizer(0, 1);
+  bottomRightResizerRef = resizerRef(this.bottomRightResizer);
+  bottomLeftResizerRef = resizerRef(this.bottomLeftResizer);
+  rightResizerRef = resizerRef(this.rightResizer);
+  leftResizerRef = resizerRef(this.leftResizer);
+  bottomResizerRef = resizerRef(this.bottomResizer);
+  slowPositionStart;
+  resizeStart;
+  cachedCssScreenRect;
+  cachedCssVisiblePageRect;
+  cachedMediaInspectorVisible;
+  cachedShowRulers;
+  cachedScale;
+  #toggleDeviceModeAction;
+  #showDeviceModeSetting;
+  #view;
+  constructor(element, view = DEFAULT_DEVICE_MODE_VIEW) {
+    super(element, { useShadowDom: true });
+    this.#view = view;
+    this.setMinimumSize(150, 150);
+    this.registerRequiredCSS(deviceModeView_css_default);
+    this.model = EmulationModel2.DeviceModeModel.DeviceModeModel.instance();
+    this.model.addEventListener("Updated", this.updateUI, this);
+    this.showMediaInspectorSetting = Common4.Settings.Settings.instance().moduleSetting("show-media-query-inspector");
+    this.showMediaInspectorSetting.addChangeListener(this.updateUI, this);
+    this.showRulersSetting = Common4.Settings.Settings.instance().moduleSetting("emulation.show-rulers");
+    this.showRulersSetting.addChangeListener(this.updateUI, this);
+    this.#toggleDeviceModeAction = UI4.ActionRegistry.ActionRegistry.instance().getAction("emulation.toggle-device-mode");
+    const model = EmulationModel2.DeviceModeModel.DeviceModeModel.instance();
+    this.#showDeviceModeSetting = model.enabledSetting();
+    this.#showDeviceModeSetting.setRequiresUserAction(Boolean(Root.Runtime.Runtime.queryParam("hasOtherClients")));
+    this.#showDeviceModeSetting.addChangeListener(this.#showDeviceModeChanged, this);
+    SDK2.TargetManager.TargetManager.instance().addModelListener(SDK2.OverlayModel.OverlayModel, "ScreenshotRequested", this.screenshotRequestedFromOverlay, this);
+    this.performUpdate();
+    UI4.ZoomManager.ZoomManager.instance().addEventListener("ZoomChanged", this.zoomChanged, this);
+  }
+  #showDeviceModeChanged() {
+    if (!this.#showDeviceModeSetting.get()) {
+      this.model.emulate(EmulationModel2.DeviceModeModel.Type.None, null, null);
+      this.model.exitHingeMode();
+    }
+    this.requestUpdate();
+  }
+  performUpdate() {
+    this.#toggleDeviceModeAction.setToggled(this.#showDeviceModeSetting.get());
+    const input = {
+      model: this.model,
+      showDeviceMode: this.#showDeviceModeSetting.get(),
+      showMediaInspectorSetting: this.showMediaInspectorSetting,
+      showRulersSetting: this.showRulersSetting,
+      resizable: this.model.type() === EmulationModel2.DeviceModeModel.Type.Responsive,
+      showRulers: this.showRulersSetting.get() && this.model.type() !== EmulationModel2.DeviceModeModel.Type.None,
+      showMediaInspector: this.showMediaInspectorSetting.get() && this.model.type() !== EmulationModel2.DeviceModeModel.Type.None,
+      scale: this.model.scale(),
+      cachedCssScreenRect: this.cachedCssScreenRect,
+      cachedCssVisiblePageRect: this.cachedCssVisiblePageRect,
+      onApplyPresetSize: (width, e) => {
+        this.model.emulate(EmulationModel2.DeviceModeModel.Type.Responsive, null, null);
+        this.model.setWidthAndScaleToFit(width);
+        e.consume();
+      },
+      bottomRightResizer: this.bottomRightResizer,
+      bottomLeftResizer: this.bottomLeftResizer,
+      rightResizer: this.rightResizer,
+      leftResizer: this.leftResizer,
+      bottomResizer: this.bottomResizer,
+      bottomRightResizerRef: this.bottomRightResizerRef,
+      bottomLeftResizerRef: this.bottomLeftResizerRef,
+      rightResizerRef: this.rightResizerRef,
+      leftResizerRef: this.leftResizerRef,
+      bottomResizerRef: this.bottomResizerRef,
+      onDoubleclickBottomResizer: () => this.model.setHeight(0)
+    };
+    this.#view(input, void 0, this.contentElement);
+  }
+  static #setNonEmulatedAvailableSize() {
+    const model = EmulationModel2.DeviceModeModel.DeviceModeModel.instance();
+    if (model.type() !== EmulationModel2.DeviceModeModel.Type.None) {
+      return;
+    }
+    const zoomFactor = UI4.ZoomManager.ZoomManager.instance().zoomFactor();
+    const rect = InspectedPagePlaceholder.instance().element.getBoundingClientRect();
+    const availableSize = new Geometry.Size(Math.max(rect.width * zoomFactor, 1), Math.max(rect.height * zoomFactor, 1));
+    model.setAvailableSize(availableSize, availableSize);
+  }
+  static captureScreenshot(fullSize, clip) {
+    const model = EmulationModel2.DeviceModeModel.DeviceModeModel.instance();
+    this.#setNonEmulatedAvailableSize();
+    if (fullSize) {
+      void model.captureFullSizeScreenshot();
+    } else if (clip) {
+      void model.captureAreaScreenshot(clip);
+    } else {
+      void model.captureScreenshot();
+    }
+    return true;
+  }
+  screenshotRequestedFromOverlay(event) {
+    const clip = event.data;
+    _DeviceModeView.captureScreenshot(false, clip);
+  }
+  createResizer(widthFactor, heightFactor) {
+    const resizer = new UI4.ResizerWidget.ResizerWidget();
+    let cursor = widthFactor ? "ew-resize" : "ns-resize";
+    if (widthFactor * heightFactor > 0) {
+      cursor = "nwse-resize";
+    }
+    if (widthFactor * heightFactor < 0) {
+      cursor = "nesw-resize";
+    }
+    resizer.setCursor(cursor);
+    resizer.addEventListener("ResizeStart", this.onResizeStart, this);
+    resizer.addEventListener("ResizeUpdateXY", this.onResizeUpdate.bind(this, widthFactor, heightFactor));
+    resizer.addEventListener("ResizeEnd", this.onResizeEnd, this);
+    return resizer;
+  }
+  onResizeStart() {
+    this.slowPositionStart = null;
+    const rect = this.model.screenRect();
+    this.resizeStart = new Geometry.Size(rect.width, rect.height);
+  }
+  onResizeUpdate(widthFactor, heightFactor, event) {
+    if (event.data.shiftKey !== Boolean(this.slowPositionStart)) {
+      this.slowPositionStart = event.data.shiftKey ? { x: event.data.currentX, y: event.data.currentY } : null;
+    }
+    let cssOffsetX = event.data.currentX - event.data.startX;
+    let cssOffsetY = event.data.currentY - event.data.startY;
+    if (this.slowPositionStart) {
+      cssOffsetX = (event.data.currentX - this.slowPositionStart.x) / 10 + this.slowPositionStart.x - event.data.startX;
+      cssOffsetY = (event.data.currentY - this.slowPositionStart.y) / 10 + this.slowPositionStart.y - event.data.startY;
+    }
+    if (widthFactor && this.resizeStart) {
+      const dipOffsetX = cssOffsetX * UI4.ZoomManager.ZoomManager.instance().zoomFactor();
+      let newWidth = this.resizeStart.width + dipOffsetX * widthFactor;
+      newWidth = Math.round(newWidth / this.model.scale());
+      if (newWidth >= EmulationModel2.DeviceModeModel.MinDeviceSize && newWidth <= EmulationModel2.DeviceModeModel.MaxDeviceSize) {
+        this.model.setWidth(newWidth);
+      }
+    }
+    if (heightFactor && this.resizeStart) {
+      const dipOffsetY = cssOffsetY * UI4.ZoomManager.ZoomManager.instance().zoomFactor();
+      let newHeight = this.resizeStart.height + dipOffsetY * heightFactor;
+      newHeight = Math.round(newHeight / this.model.scale());
+      if (newHeight >= EmulationModel2.DeviceModeModel.MinDeviceSize && newHeight <= EmulationModel2.DeviceModeModel.MaxDeviceSize) {
+        this.model.setHeight(newHeight);
+      }
+    }
+  }
+  exitHingeMode() {
+    if (this.model) {
+      this.model.exitHingeMode();
+    }
+  }
+  onResizeEnd() {
+    delete this.resizeStart;
+    Host2.userMetrics.actionTaken(Host2.UserMetrics.Action.ResizedViewInResponsiveMode);
+  }
+  updateUI() {
+    if (!this.isShowing()) {
+      return;
+    }
+    const zoomFactor = UI4.ZoomManager.ZoomManager.instance().zoomFactor();
+    let callDoResize = false;
+    const showRulers = this.showRulersSetting.get() && this.model.type() !== EmulationModel2.DeviceModeModel.Type.None;
+    let contentAreaResized = false;
+    const cssScreenRect = this.model.screenRect().scale(1 / zoomFactor);
+    if (!this.cachedCssScreenRect || !cssScreenRect.isEqual(this.cachedCssScreenRect)) {
+      callDoResize = true;
+      this.cachedCssScreenRect = cssScreenRect;
+    }
+    const cssVisiblePageRect = this.model.visiblePageRect().scale(1 / zoomFactor);
+    if (!this.cachedCssVisiblePageRect || !cssVisiblePageRect.isEqual(this.cachedCssVisiblePageRect)) {
+      callDoResize = true;
+      this.cachedCssVisiblePageRect = cssVisiblePageRect;
+    }
+    const mediaInspectorVisible = this.showMediaInspectorSetting.get() && this.model.type() !== EmulationModel2.DeviceModeModel.Type.None;
+    if (mediaInspectorVisible !== this.cachedMediaInspectorVisible) {
+      contentAreaResized = true;
+      callDoResize = true;
+      this.cachedMediaInspectorVisible = mediaInspectorVisible;
+    }
+    if (showRulers !== this.cachedShowRulers) {
+      contentAreaResized = true;
+      callDoResize = true;
+      this.cachedShowRulers = showRulers;
+    }
+    if (this.model.scale() !== this.cachedScale) {
+      callDoResize = true;
+      this.cachedScale = this.model.scale();
+    }
+    this.requestUpdate();
+    void this.updateComplete.then(() => {
+      if (callDoResize) {
+        this.doResize();
+      }
+      if (contentAreaResized) {
+        this.contentAreaResized();
+      }
+      InspectedPagePlaceholder.instance().update();
+    });
+  }
+  contentAreaResized() {
+    const contentArea = this.contentElement.querySelector(".device-mode-content-area");
+    if (!contentArea) {
+      return;
+    }
+    const rect = contentArea.getBoundingClientRect();
+    const zoomFactor = UI4.ZoomManager.ZoomManager.instance().zoomFactor();
+    const handleWidth = this.contentElement.querySelector(".device-mode-right-resizer")?.offsetWidth || 20;
+    const handleHeight = this.contentElement.querySelector(".device-mode-bottom-resizer")?.offsetHeight || 20;
+    const availableSize = new Geometry.Size(Math.max(rect.width * zoomFactor, 1), Math.max(rect.height * zoomFactor, 1));
+    const preferredSize = new Geometry.Size(Math.max((rect.width - 2 * handleWidth) * zoomFactor, 1), Math.max((rect.height - handleHeight) * zoomFactor, 1));
+    this.model.setAvailableSize(availableSize, preferredSize);
+  }
+  zoomChanged() {
+    if (this.isShowing()) {
+      if (this.#showDeviceModeSetting.get()) {
+        this.contentAreaResized();
+      } else {
+        InspectedPagePlaceholder.instance().update();
+      }
+    }
+  }
+  onResize() {
+    if (this.isShowing()) {
+      if (this.#showDeviceModeSetting.get()) {
+        this.contentAreaResized();
+      } else {
+        InspectedPagePlaceholder.instance().update();
+      }
+    }
+  }
+  wasShown() {
+    super.wasShown();
+  }
+  willHide() {
+    super.willHide();
+    this.model.emulate(EmulationModel2.DeviceModeModel.Type.None, null, null);
+    this.model.exitHingeMode();
+  }
+};
+var DEFAULT_RULER_VIEW = (input, output, target) => {
+  const zoomFactor = UI4.ZoomManager.ZoomManager.instance().zoomFactor();
+  const size = input.horizontal ? target.offsetWidth : target.offsetHeight;
+  const dipSize = size * zoomFactor / input.scale;
+  const count = Math.ceil(dipSize / 5);
+  let step = 1;
+  if (input.scale < 0.8) {
+    step = 2;
+  }
+  if (input.scale < 0.6) {
+    step = 4;
+  }
+  if (input.scale < 0.4) {
+    step = 8;
+  }
+  if (input.scale < 0.2) {
+    step = 16;
+  }
+  if (input.scale < 0.1) {
+    step = 32;
+  }
+  const markers = [];
+  for (let i = 0; i < count; i++) {
+    if (i % step) {
+      continue;
+    }
+    const isLarge = !(i % 10);
+    const isMedium = !(i % 5);
+    const offset = i ? `${5 * i * input.scale / zoomFactor}px` : void 0;
+    markers.push(html3`
+      <div
+        class=${classMap2({
+      "device-mode-ruler-marker": true,
+      "device-mode-ruler-marker-large": isLarge,
+      "device-mode-ruler-marker-medium": isMedium && !isLarge
+    })}
+        style=${styleMap(input.horizontal ? { left: offset } : { top: offset })}>
+          ${i && !(i % 20) ? html3`<div class="device-mode-ruler-text" @click=${() => input.onMarkerClick(i * 5)}>${i * 5}</div>` : nothing2}
+      </div>
+    `);
+  }
+  render3(html3`
+    <div class="device-mode-ruler-content">
+      <div class="device-mode-ruler-inner">
+        ${markers}
+      </div>
+    </div>
+  `, target, {
+    container: {
+      classes: ["device-mode-ruler"],
+      attributes: { jslog: VisualLogging3.deviceModeRuler().track({ click: true }) }
+    }
+  });
+};
+var Ruler = class extends Common4.ObjectWrapper.eventMixin(UI4.Widget.Widget) {
+  #view;
+  #horizontal = true;
+  #scale = 1;
+  constructor(element, view = DEFAULT_RULER_VIEW) {
+    super(element);
+    this.#view = view;
+  }
+  get horizontal() {
+    return this.#horizontal;
+  }
+  set horizontal(horizontal) {
+    if (this.#horizontal === horizontal) {
+      return;
+    }
+    this.#horizontal = horizontal;
+    this.requestUpdate();
+  }
+  get scale() {
+    return this.#scale;
+  }
+  set scale(scale) {
+    if (this.#scale === scale) {
+      return;
+    }
+    this.#scale = scale;
+    this.requestUpdate();
+  }
+  wasShown() {
+    super.wasShown();
+    this.requestUpdate();
+  }
+  onResize() {
+    super.onResize();
+    this.requestUpdate();
+  }
+  #onMarkerClick = (size) => {
+    this.dispatchEventToListeners("MarkerSelected", size);
+  };
+  performUpdate() {
+    if (!this.isShowing()) {
+      return;
+    }
+    const viewInput = {
+      horizontal: this.#horizontal,
+      scale: this.#scale,
+      onMarkerClick: this.#onMarkerClick
+    };
+    this.#view(viewInput, void 0, this.contentElement);
+  }
+};
+var ActionDelegate = class {
+  handleAction(context, actionId) {
+    switch (actionId) {
+      case "emulation.capture-screenshot":
+        return DeviceModeView.captureScreenshot();
+      case "emulation.capture-node-screenshot": {
+        const node = context.flavor(SDK2.DOMModel.DOMNode);
+        if (!node) {
+          return true;
+        }
+        async function captureClip() {
+          if (!node) {
+            return;
+          }
+          const object = await node.resolveToObject();
+          if (!object) {
+            return;
+          }
+          const nodeBoxModel = await node.boxModel();
+          if (!nodeBoxModel) {
+            throw new Error(`Unable to get box model of the node: ${new Error().stack}`);
+          }
+          const nodeBorderQuad = nodeBoxModel.border;
+          const { minX, maxX, minY, maxY } = getQuadBoundingBox(nodeBorderQuad);
+          const metrics = await node.domModel().target().pageAgent().invoke_getLayoutMetrics();
+          if (metrics.getError()) {
+            throw new Error(`Unable to get metrics: ${new Error().stack}`);
+          }
+          const scrollX = metrics.cssVisualViewport.pageX;
+          const scrollY = metrics.cssVisualViewport.pageY;
+          const { x: oopifOffsetX, y: oopifOffsetY } = await getOopifOffset(node.domModel().target());
+          const clip = {
+            x: oopifOffsetX + scrollX + minX,
+            y: oopifOffsetY + scrollY + minY,
+            width: maxX - minX,
+            height: maxY - minY,
+            scale: 1
+          };
+          const zoom = metrics.cssVisualViewport.zoom ?? 1;
+          clip.x *= zoom;
+          clip.y *= zoom;
+          clip.width *= zoom;
+          clip.height *= zoom;
+          DeviceModeView.captureScreenshot(false, clip);
+        }
+        void captureClip();
+        return true;
+      }
+      case "emulation.capture-full-height-screenshot":
+        return DeviceModeView.captureScreenshot(true);
+      case "emulation.toggle-device-mode": {
+        const model = EmulationModel2.DeviceModeModel.DeviceModeModel.instance();
+        model.toggleDeviceMode();
+        return true;
+      }
+    }
+    return false;
+  }
+};
+async function getOopifOffset(target) {
+  if (!target) {
+    return { x: 0, y: 0 };
+  }
+  const parentTarget = target.parentTarget();
+  if (!parentTarget || parentTarget.type() !== SDK2.Target.Type.FRAME) {
+    return { x: 0, y: 0 };
+  }
+  const frameId = target.model(SDK2.ResourceTreeModel.ResourceTreeModel)?.mainFrame?.id;
+  if (!frameId) {
+    return { x: 0, y: 0 };
+  }
+  const parentDOMModel = parentTarget.model(SDK2.DOMModel.DOMModel);
+  if (!parentDOMModel) {
+    return { x: 0, y: 0 };
+  }
+  const frameOwnerDeferred = await parentDOMModel.getOwnerNodeForFrame(frameId);
+  const frameOwner = await frameOwnerDeferred?.resolvePromise();
+  if (!frameOwner) {
+    return { x: 0, y: 0 };
+  }
+  const boxModel = await frameOwner.boxModel();
+  if (!boxModel) {
+    return { x: 0, y: 0 };
+  }
+  const contentQuad = boxModel.content;
+  const iframeContentX = contentQuad[0];
+  const iframeContentY = contentQuad[1];
+  const parentMetrics = await parentTarget.pageAgent().invoke_getLayoutMetrics();
+  if (parentMetrics.getError()) {
+    return { x: 0, y: 0 };
+  }
+  const scrollX = parentMetrics.cssVisualViewport.pageX;
+  const scrollY = parentMetrics.cssVisualViewport.pageY;
+  const parentOffset = await getOopifOffset(parentTarget);
+  return {
+    x: iframeContentX + scrollX + parentOffset.x,
+    y: iframeContentY + scrollY + parentOffset.y
+  };
+}
+function getQuadBoundingBox(quad) {
+  const minX = Math.min(quad[0], quad[2], quad[4], quad[6]);
+  const maxX = Math.max(quad[0], quad[2], quad[4], quad[6]);
+  const minY = Math.min(quad[1], quad[3], quad[5], quad[7]);
+  const maxY = Math.max(quad[1], quad[3], quad[5], quad[7]);
+  return { minX, maxX, minY, maxY };
+}
+
+// gen/front_end/panels/emulation/AdvancedApp.js
+var appInstance = null;
+var AdvancedApp = class _AdvancedApp {
+  rootSplitWidget;
+  deviceModeView;
+  inspectedPagePlaceholder;
+  toolboxWindow;
+  toolboxRootView;
+  changingDockSide;
+  #universe;
+  constructor(universe) {
+    this.#universe = universe;
+    UI5.DockController.DockController.instance().addEventListener("BeforeDockSideChanged", this.openToolboxWindow, this);
+  }
+  /**
+   * Note: it's used by toolbox.ts without real type checks.
+   */
+  static instance(universe) {
+    if (!appInstance) {
+      if (!universe) {
+        throw new Error("AdvancedApp.instance() requires a Universe on initial instantiation");
+      }
+      appInstance = new _AdvancedApp(universe);
+    }
+    return appInstance;
+  }
+  static removeInstance() {
+    appInstance = null;
+  }
+  presentUI(document2) {
+    const rootView = new UI5.RootView.RootView(this.#universe);
+    this.rootSplitWidget = new UI5.SplitWidget.SplitWidget(false, true, "inspector-view.split-view-state", 555, 300, true);
+    this.rootSplitWidget.show(rootView.element);
+    this.rootSplitWidget.setSidebarWidget(UI5.InspectorView.InspectorView.instance());
+    this.rootSplitWidget.setDefaultFocusedChild(UI5.InspectorView.InspectorView.instance());
+    UI5.InspectorView.InspectorView.instance().setOwnerSplit(this.rootSplitWidget);
+    this.inspectedPagePlaceholder = InspectedPagePlaceholder.instance();
+    this.inspectedPagePlaceholder.addEventListener("Update", this.onSetInspectedPageBounds.bind(this), this);
+    this.deviceModeView = new DeviceModeView();
+    UI5.DockController.DockController.instance().addEventListener("BeforeDockSideChanged", this.onBeforeDockSideChange, this);
+    UI5.DockController.DockController.instance().addEventListener("DockSideChanged", this.onDockSideChange, this);
+    UI5.DockController.DockController.instance().addEventListener("AfterDockSideChanged", this.onAfterDockSideChange, this);
+    this.onDockSideChange();
+    console.timeStamp("AdvancedApp.attachToBody");
+    rootView.attachToDocument(document2);
+    rootView.focus();
+    this.inspectedPagePlaceholder.update();
+  }
+  openToolboxWindow(event) {
+    if (event.data.to !== "undocked") {
+      return;
+    }
+    if (this.toolboxWindow) {
+      return;
+    }
+    const url = window.location.href.replace("devtools_app.html", "device_mode_emulation_frame.html");
+    this.toolboxWindow = window.open(url, void 0);
+  }
+  deviceModeEmulationFrameLoaded(toolboxDocument) {
+    ThemeSupport.ThemeSupport.instance().addDocumentToTheme(toolboxDocument);
+    UI5.UIUtils.initializeUIUtils(toolboxDocument);
+    UI5.UIUtils.addPlatformClass(toolboxDocument.documentElement);
+    UI5.UIUtils.installComponentRootStyles(toolboxDocument.body);
+    UI5.ContextMenu.ContextMenu.installHandler(toolboxDocument);
+    this.toolboxRootView = new UI5.RootView.RootView(this.#universe);
+    this.toolboxRootView.attachToDocument(toolboxDocument);
+    this.updateDeviceModeView();
+  }
+  updateDeviceModeView() {
+    if (this.isDocked()) {
+      this.rootSplitWidget.setMainWidget(this.deviceModeView);
+    } else if (this.toolboxRootView) {
+      this.deviceModeView.show(this.toolboxRootView.element);
+    }
+  }
+  onBeforeDockSideChange(event) {
+    if (event.data.to === "undocked" && this.toolboxRootView) {
+      this.rootSplitWidget.hideSidebar();
+      this.inspectedPagePlaceholder.update();
+    }
+    this.changingDockSide = true;
+  }
+  onDockSideChange(event) {
+    this.updateDeviceModeView();
+    const toDockSide = event ? event.data.to : UI5.DockController.DockController.instance().dockSide();
+    if (toDockSide === void 0) {
+      throw new Error("Got onDockSideChange event with unexpected undefined for dockSide()");
+    }
+    if (toDockSide === "undocked") {
+      this.updateForUndocked();
+    } else if (this.toolboxRootView && event && event.data.from === "undocked") {
+      this.rootSplitWidget.hideSidebar();
+    } else {
+      this.updateForDocked(toDockSide);
+    }
+  }
+  onAfterDockSideChange(event) {
+    if (!this.changingDockSide) {
+      return;
+    }
+    if (event.data.from && event.data.from === "undocked") {
+      this.updateForDocked(event.data.to);
+    }
+    this.changingDockSide = false;
+    this.inspectedPagePlaceholder.update();
+  }
+  updateForDocked(dockSide) {
+    const resizerElement = this.rootSplitWidget.resizerElement();
+    resizerElement.style.transform = dockSide === "right" ? "translateX(2px)" : dockSide === "left" ? "translateX(-2px)" : "";
+    this.rootSplitWidget.setVertical(
+      dockSide === "right" || dockSide === "left"
+      /* UI.DockController.DockState.LEFT */
+    );
+    this.rootSplitWidget.setSecondIsSidebar(
+      dockSide === "right" || dockSide === "bottom"
+      /* UI.DockController.DockState.BOTTOM */
+    );
+    this.rootSplitWidget.toggleResizer(this.rootSplitWidget.resizerElement(), true);
+    this.rootSplitWidget.toggleResizer(
+      UI5.InspectorView.InspectorView.instance().topResizerElement(),
+      dockSide === "bottom"
+      /* UI.DockController.DockState.BOTTOM */
+    );
+    this.rootSplitWidget.showBoth();
+  }
+  updateForUndocked() {
+    this.rootSplitWidget.toggleResizer(this.rootSplitWidget.resizerElement(), false);
+    this.rootSplitWidget.toggleResizer(UI5.InspectorView.InspectorView.instance().topResizerElement(), false);
+    this.rootSplitWidget.hideMain();
+  }
+  isDocked() {
+    return UI5.DockController.DockController.instance().dockSide() !== "undocked";
+  }
+  onSetInspectedPageBounds(event) {
+    if (this.changingDockSide) {
+      return;
+    }
+    const window2 = this.inspectedPagePlaceholder.element.window();
+    if (!window2.innerWidth || !window2.innerHeight) {
+      return;
+    }
+    if (!this.inspectedPagePlaceholder.isShowing()) {
+      return;
+    }
+    const bounds = event.data;
+    console.timeStamp("AdvancedApp.setInspectedPageBounds");
+    Host3.InspectorFrontendHost.InspectorFrontendHostInstance.setInspectedPageBounds(bounds);
+  }
+};
+globalThis.Emulation = globalThis.Emulation || {};
+globalThis.Emulation.AdvancedApp = AdvancedApp;
+var advancedAppProviderInstance;
+var AdvancedAppProvider = class _AdvancedAppProvider {
+  static instance(opts = { forceNew: null }) {
+    const { forceNew } = opts;
+    if (!advancedAppProviderInstance || forceNew) {
+      advancedAppProviderInstance = new _AdvancedAppProvider();
+    }
+    return advancedAppProviderInstance;
+  }
+  createApp(universe) {
+    return AdvancedApp.instance(universe);
+  }
+};
+export {
+  AdvancedApp_exports as AdvancedApp,
+  DeviceModeToolbar_exports as DeviceModeToolbar,
+  DeviceModeView_exports as DeviceModeView,
+  InspectedPagePlaceholder_exports as InspectedPagePlaceholder,
+  MediaQueryInspector_exports as MediaQueryInspector
+};
+//# sourceMappingURL=emulation.js.map

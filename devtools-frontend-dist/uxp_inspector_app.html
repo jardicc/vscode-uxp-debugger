@@ -1,0 +1,25 @@
+<!--
+ * Copyright 2018 The Chromium Authors
+ * Use of this source code is governed by a BSD-style license that can be
+ * found in the LICENSE file.
+-->
+<!DOCTYPE html>
+<html lang="en">
+<meta charset="utf-8">
+<title>DevTools</title>
+<style>
+  @media (prefers-color-scheme: dark) {
+    body {
+      background-color: rgb(41 42 45);
+    }
+  }
+</style>
+<meta
+  http-equiv="Content-Security-Policy"
+  content="default-src 'self' devtools: data:; style-src 'self' 'unsafe-inline' devtools:; object-src 'none'; script-src
+  'self' https://chrome-devtools-frontend.appspot.com; img-src 'self' data: blob:; frame-src * data:; connect-src data: https://chromeuxreport.googleapis.com 'self' devtools: ws://127.0.0.1:*;">
+<meta name="referrer" content="no-referrer">
+<script type="module" src="./entrypoints/devtools_app/devtools_app.js"></script>
+<link href="./application_tokens.css" rel="stylesheet">
+<link href="./design_system_tokens.css" rel="stylesheet">
+<body class="undocked" id="-blink-dev-tools">

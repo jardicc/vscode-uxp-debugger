@@ -1,10 +1,65 @@
 # Changelog
 
-## [0.2.1] – 2026-04-02
+## [2.0.0]
 
-### Improvements
+### Changed
 
-- Updates icon
+- **Control panel: flat plugin list** — the "project folder" grouping is gone; the panel
+  now shows a single flat list of registered plugins. Add a plugin directly by picking its
+  `manifest.json` or from the active editor. The previously-registered project/plugin list
+  and script list are reset on upgrade. "Open project" is replaced by a per-plugin
+  "Open folder…" action that offers every ancestor folder up to the nearest `.git` root.
+
+### New Features
+
+- **HTML/CSS inspector** — `UXP: Inspect Plugin UI (HTML/CSS)` opens the real
+  Chrome DevTools Elements panel from the bundled DevTools frontend in a
+  VS Code webview for any live plugin session: DOM tree, Styles/Computed
+  panes, live CSS editing. Works standalone or alongside an attached
+  debugger — both share one CDP connection to the host app and require no
+  external network access.
+
+## [1.0.0] – 2026-07-25
+
+### Breaking: Adobe UXP Developer Tools (UDT) no longer required
+
+The extension now hosts its own UDT-compatible service broker inside the VS Code
+extension host and announces it to Adobe applications over Vulcan IPC. Host apps
+(Photoshop, InDesign, …) connect directly to VS Code — no UDT app, no `uxp` CLI,
+no `app.asar` patch, no `.uxprc` files.
+
+### New Features
+
+- **Built-in broker** on `127.0.0.1:14001` with the full UXP wire protocol
+  (handshake, plugin sessions, CDT debug tunnel).
+- **Load / Unload / Reload Plugin commands** (`UXP: Load Plugin`, …) — fan out to
+  every applicable connected app, with per-app result reporting.
+- **Global plugin registry** — the UXP Devtools panel stores registered plugin
+  manifest paths across workspaces and windows.
+- **Script debugging** — `UXP: Debug Current Script` runs and debugs the
+  `.ccjs` / `.psjs` / `.idjs` file open in the editor, including script
+  arguments (remembered per file) and a `uxp-script` launch.json type.
+- **Load and attach** — attaching to a plugin without a live session offers to
+  load it first.
+- **Enable Developer Mode command** — detects the machine-global developer flag
+  and writes it after an explicit consent dialog (OS elevation prompt).
+- **Per-host-app log channels** — `UXP/log` events from each application stream
+  into a dedicated output channel.
+- **Auto-stop on unload** — when the plugin is unloaded in the host app (or the
+  app quits), the debug session stops automatically.
+
+### Removed
+
+- `UXP: Patch app.asar` command and all `.uxprc` / `.debug.json` discovery
+  (obsolete — the extension owns the sessions now).
+- Target history picker (live sessions replace it).
+
+### Internal
+
+- Clean-room TypeScript broker (`src/core/**`, no `vscode` imports) with a
+  58-test vitest suite driven by a scripted fake host app.
+- Native Vulcan N-API prebuilds shipped per platform (win32-x64, darwin-x64,
+  darwin-arm64) and loaded by absolute path.
 
 ## [0.2.0] – 2026-04-02
 

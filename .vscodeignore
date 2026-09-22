@@ -1,11 +1,33 @@
 .vscode/**
 .vscode-test/**
 src/**
+test/**
+e2e/**
+out/**
+installers/**
+legacy/**
+scripts/**
+vscode-edge-devtools/**
+devtools-frontend-dist/**
+uxp-cli-v1/**
+uxp-UDT-v2/**
 node_modules/**
 .gitignore
 tsconfig.json
+vitest.config.ts
+eslint.config.mjs
 **/*.map
+docs/**
 **/*.ts
 **/*.txt
 **/*.psd
-!dist/**
+wallaby.js
+package-lock.json
+ARCHITECTURE*.md
+UXP-DEBUGGER-ARCHITECTURE.md
+# ignore .map in dist
+dist/**/*.map
+
+# Native Vulcan prebuilds + elevation scripts MUST ship (never bundled).
+!native/**
+!ThirdPartyNotices.txt

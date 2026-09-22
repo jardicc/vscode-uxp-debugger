@@ -1,0 +1,5394 @@
+var __defProp = Object.defineProperty;
+var __export = (target, all) => {
+  for (var name in all)
+    __defProp(target, name, { get: all[name], enumerable: true });
+};
+
+// gen/front_end/models/issues_manager/ClientHintIssue.js
+var ClientHintIssue_exports = {};
+__export(ClientHintIssue_exports, {
+  ClientHintIssue: () => ClientHintIssue
+});
+import * as i18n3 from "./..\\..\\core\\i18n\\i18n.js";
+
+// gen/front_end/models/issues_manager/Issue.js
+var Issue_exports = {};
+__export(Issue_exports, {
+  Issue: () => Issue,
+  getIssueKindDescription: () => getIssueKindDescription,
+  getIssueKindName: () => getIssueKindName,
+  getShowThirdPartyIssuesSetting: () => getShowThirdPartyIssuesSetting,
+  toZeroBasedLocation: () => toZeroBasedLocation,
+  unionIssueKind: () => unionIssueKind
+});
+import * as Host from "./..\\..\\core\\host\\host.js";
+import * as i18n from "./..\\..\\core\\i18n\\i18n.js";
+var UIStrings = {
+  /**
+   * @description The kind of an issue (plural, issues are categorized into kinds).
+   */
+  improvements: "Improvements",
+  /**
+   * @description The kind of an issue (plural, issues are categorized into kinds).
+   */
+  pageErrors: "Page errors",
+  /**
+   * @description The kind of an issue (plural, issues are categorized into kinds).
+   */
+  breakingChanges: "Breaking changes",
+  /**
+   * @description A description for a kind of issue we display in the Issues tab.
+   */
+  pageErrorIssue: "A page error issue: the page is not working correctly",
+  /**
+   * @description A description for a kind of issue we display in the Issues tab.
+   */
+  breakingChangeIssue: "A breaking change issue: the page may stop working in an upcoming version of Chrome",
+  /**
+   * @description A description for a kind of issue we display in the Issues tab.
+   */
+  improvementIssue: "An improvement issue: there is an opportunity to improve the page"
+};
+var str_ = i18n.i18n.registerUIStrings("models/issues_manager/Issue.ts", UIStrings);
+var i18nString = i18n.i18n.getLocalizedString.bind(void 0, str_);
+function getIssueKindName(issueKind) {
+  switch (issueKind) {
+    case "BreakingChange":
+      return i18nString(UIStrings.breakingChanges);
+    case "Improvement":
+      return i18nString(UIStrings.improvements);
+    case "PageError":
+      return i18nString(UIStrings.pageErrors);
+  }
+}
+function getIssueKindDescription(issueKind) {
+  switch (issueKind) {
+    case "PageError":
+      return i18nString(UIStrings.pageErrorIssue);
+    case "BreakingChange":
+      return i18nString(UIStrings.breakingChangeIssue);
+    case "Improvement":
+      return i18nString(UIStrings.improvementIssue);
+  }
+}
+function unionIssueKind(a, b) {
+  if (a === "PageError" || b === "PageError") {
+    return "PageError";
+  }
+  if (a === "BreakingChange" || b === "BreakingChange") {
+    return "BreakingChange";
+  }
+  return "Improvement";
+}
+function getShowThirdPartyIssuesSetting(settings) {
+  return settings.createSetting("show-third-party-issues", true);
+}
+var Issue = class {
+  #issueCode;
+  #issuesModel;
+  issueId = void 0;
+  #issueDetails;
+  #hidden;
+  constructor(code, issueDetails, issuesModel = null, issueId) {
+    this.#issueCode = typeof code === "object" ? code.code : code;
+    this.#issueDetails = issueDetails;
+    this.#issuesModel = issuesModel;
+    this.issueId = issueId;
+    Host.userMetrics.issueCreated(typeof code === "string" ? code : code.umaCode);
+    this.#hidden = false;
+  }
+  code() {
+    return this.#issueCode;
+  }
+  details() {
+    return this.#issueDetails;
+  }
+  getBlockedByResponseDetails() {
+    return [];
+  }
+  cookies() {
+    return [];
+  }
+  rawCookieLines() {
+    return [];
+  }
+  elements() {
+    return [];
+  }
+  requests() {
+    return [];
+  }
+  sources() {
+    return [];
+  }
+  trackingSites() {
+    return [];
+  }
+  isAssociatedWithRequestId(requestId) {
+    for (const request of this.requests()) {
+      if (request.requestId === requestId) {
+        return true;
+      }
+    }
+    return false;
+  }
+  /**
+   * The model might be unavailable or belong to a target that has already been disposed.
+   */
+  model() {
+    return this.#issuesModel;
+  }
+  isCausedByThirdParty() {
+    return false;
+  }
+  getIssueId() {
+    return this.issueId;
+  }
+  isHidden() {
+    return this.#hidden;
+  }
+  setHidden(hidden) {
+    this.#hidden = hidden;
+  }
+  maybeCreateConsoleMessage() {
+    return;
+  }
+};
+function toZeroBasedLocation(location) {
+  if (!location) {
+    return void 0;
+  }
+  return {
+    url: location.url,
+    scriptId: location.scriptId,
+    lineNumber: location.lineNumber,
+    columnNumber: location.columnNumber === 0 ? void 0 : location.columnNumber - 1
+  };
+}
+
+// gen/front_end/models/issues_manager/MarkdownIssueDescription.js
+var MarkdownIssueDescription_exports = {};
+__export(MarkdownIssueDescription_exports, {
+  createIssueDescriptionFromMarkdown: () => createIssueDescriptionFromMarkdown,
+  createIssueDescriptionFromRawMarkdown: () => createIssueDescriptionFromRawMarkdown,
+  findTitleFromMarkdownAst: () => findTitleFromMarkdownAst,
+  getFileContent: () => getFileContent,
+  getIssueTitleFromMarkdownDescription: () => getIssueTitleFromMarkdownDescription,
+  getMarkdownFileContent: () => getMarkdownFileContent,
+  resolveLazyDescription: () => resolveLazyDescription,
+  substitutePlaceholders: () => substitutePlaceholders
+});
+import * as Marked from "./..\\..\\third_party\\marked\\marked.js";
+function resolveLazyDescription(lazyDescription) {
+  function linksMap(currentLink) {
+    return { link: currentLink.link, linkTitle: currentLink.linkTitle() };
+  }
+  const substitutionMap = /* @__PURE__ */ new Map();
+  lazyDescription.substitutions?.forEach((value, key) => {
+    substitutionMap.set(key, value());
+  });
+  const description = {
+    file: lazyDescription.file,
+    links: lazyDescription.links.map(linksMap),
+    substitutions: substitutionMap
+  };
+  return description;
+}
+async function getFileContent(url) {
+  try {
+    const response = await fetch(url.toString());
+    return await response.text();
+  } catch {
+    throw new Error(`Markdown file ${url.toString()} not found. Make sure it is correctly listed in the relevant BUILD.gn files.`);
+  }
+}
+async function getMarkdownFileContent(filename) {
+  return await getFileContent(new URL(`descriptions/${filename}`, import.meta.url));
+}
+async function createIssueDescriptionFromMarkdown(description) {
+  const rawMarkdown = await getMarkdownFileContent(description.file);
+  const rawMarkdownWithPlaceholdersReplaced = substitutePlaceholders(rawMarkdown, description.substitutions);
+  return createIssueDescriptionFromRawMarkdown(rawMarkdownWithPlaceholdersReplaced, description);
+}
+function createIssueDescriptionFromRawMarkdown(markdown, description) {
+  const markdownAst = Marked.Marked.lexer(markdown);
+  const title = findTitleFromMarkdownAst(markdownAst);
+  if (!title) {
+    throw new Error("Markdown issue descriptions must start with a heading");
+  }
+  return {
+    title,
+    markdown: markdownAst.slice(1),
+    links: description.links
+  };
+}
+var validPlaceholderMatchPattern = /\{(PLACEHOLDER_[a-zA-Z][a-zA-Z0-9]*)\}/g;
+var validPlaceholderNamePattern = /PLACEHOLDER_[a-zA-Z][a-zA-Z0-9]*/;
+function substitutePlaceholders(markdown, substitutions) {
+  const unusedPlaceholders = new Set(substitutions ? substitutions.keys() : []);
+  validatePlaceholders(unusedPlaceholders);
+  const result = markdown.replace(validPlaceholderMatchPattern, (_, placeholder) => {
+    const replacement = substitutions ? substitutions.get(placeholder) : void 0;
+    if (replacement === void 0) {
+      throw new Error(`No replacement provided for placeholder '${placeholder}'.`);
+    }
+    unusedPlaceholders.delete(placeholder);
+    return replacement;
+  });
+  if (unusedPlaceholders.size > 0) {
+    throw new Error(`Unused replacements provided: ${[...unusedPlaceholders]}`);
+  }
+  return result;
+}
+function validatePlaceholders(placeholders) {
+  const invalidPlaceholders = [...placeholders].filter((placeholder) => !validPlaceholderNamePattern.test(placeholder));
+  if (invalidPlaceholders.length > 0) {
+    throw new Error(`Invalid placeholders provided in the substitutions map: ${invalidPlaceholders}`);
+  }
+}
+function findTitleFromMarkdownAst(markdownAst) {
+  if (markdownAst.length === 0 || markdownAst[0].type !== "heading" || markdownAst[0].depth !== 1) {
+    return null;
+  }
+  return markdownAst[0].text;
+}
+async function getIssueTitleFromMarkdownDescription(description) {
+  const rawMarkdown = await getMarkdownFileContent(description.file);
+  const markdownAst = Marked.Marked.lexer(rawMarkdown);
+  return findTitleFromMarkdownAst(markdownAst);
+}
+
+// gen/front_end/models/issues_manager/ClientHintIssue.js
+var UIStrings2 = {
+  /**
+   * @description Title for Client Hint specification URL link.
+   */
+  clientHintsInfrastructure: "Client Hints Infrastructure"
+};
+var str_2 = i18n3.i18n.registerUIStrings("models/issues_manager/ClientHintIssue.ts", UIStrings2);
+var i18nLazyString = i18n3.i18n.getLazilyComputedLocalizedString.bind(void 0, str_2);
+var ClientHintIssue = class _ClientHintIssue extends Issue {
+  constructor(issueDetails, issuesModel) {
+    super({
+      code: "ClientHintIssue",
+      umaCode: ["ClientHintIssue", issueDetails.clientHintIssueReason].join("::")
+    }, issueDetails, issuesModel);
+  }
+  getCategory() {
+    return "Other";
+  }
+  getDescription() {
+    const description = issueDescriptions.get(this.details().clientHintIssueReason);
+    if (!description) {
+      return null;
+    }
+    return resolveLazyDescription(description);
+  }
+  sources() {
+    return [this.details().sourceCodeLocation];
+  }
+  primaryKey() {
+    return JSON.stringify(this.details());
+  }
+  getKind() {
+    return "BreakingChange";
+  }
+  static fromInspectorIssue(issuesModel, inspectorIssue) {
+    const details = inspectorIssue.details.clientHintIssueDetails;
+    if (!details) {
+      console.warn("Client Hint issue without details received.");
+      return [];
+    }
+    return [new _ClientHintIssue(details, issuesModel)];
+  }
+};
+var issueDescriptions = /* @__PURE__ */ new Map([
+  [
+    "MetaTagAllowListInvalidOrigin",
+    {
+      file: "clientHintMetaTagAllowListInvalidOrigin.md",
+      links: [{
+        link: "https://wicg.github.io/client-hints-infrastructure/",
+        linkTitle: i18nLazyString(UIStrings2.clientHintsInfrastructure)
+      }]
+    }
+  ],
+  [
+    "MetaTagModifiedHTML",
+    {
+      file: "clientHintMetaTagModifiedHTML.md",
+      links: [{
+        link: "https://wicg.github.io/client-hints-infrastructure/",
+        linkTitle: i18nLazyString(UIStrings2.clientHintsInfrastructure)
+      }]
+    }
+  ]
+]);
+
+// gen/front_end/models/issues_manager/ConnectionAllowlistIssue.js
+var ConnectionAllowlistIssue_exports = {};
+__export(ConnectionAllowlistIssue_exports, {
+  ConnectionAllowlistIssue: () => ConnectionAllowlistIssue
+});
+import * as i18n5 from "./..\\..\\core\\i18n\\i18n.js";
+var UIStrings3 = {
+  /**
+   * @description Title for Connection-Allowlist specification URL.
+   */
+  connectionAllowlistHeader: "Connection-Allowlist specification"
+};
+var str_3 = i18n5.i18n.registerUIStrings("models/issues_manager/ConnectionAllowlistIssue.ts", UIStrings3);
+var i18nLazyString2 = i18n5.i18n.getLazilyComputedLocalizedString.bind(void 0, str_3);
+var ConnectionAllowlistIssue = class _ConnectionAllowlistIssue extends Issue {
+  constructor(issueDetails, issuesModel) {
+    super({
+      code: `${"ConnectionAllowlistIssue"}::${issueDetails.error}`,
+      umaCode: `${"ConnectionAllowlistIssue"}::${issueDetails.error}`
+    }, issueDetails, issuesModel);
+  }
+  primaryKey() {
+    return JSON.stringify(this.details());
+  }
+  getDescription() {
+    const description = {
+      file: `connectionAllowlist${this.details().error}.md`,
+      links: [
+        {
+          link: "https://wicg.github.io/private-network-access/#connection-allowlist",
+          linkTitle: i18nLazyString2(UIStrings3.connectionAllowlistHeader)
+        }
+      ]
+    };
+    return resolveLazyDescription(description);
+  }
+  getCategory() {
+    return "Other";
+  }
+  getKind() {
+    return "PageError";
+  }
+  requests() {
+    return this.details().request ? [this.details().request] : [];
+  }
+  static fromInspectorIssue(issuesModel, inspectorIssue) {
+    const details = inspectorIssue.details.connectionAllowlistIssueDetails;
+    if (!details) {
+      console.warn("Connection-Allowlist issue without details received.");
+      return [];
+    }
+    return [new _ConnectionAllowlistIssue(details, issuesModel)];
+  }
+};
+
+// gen/front_end/models/issues_manager/ContentSecurityPolicyIssue.js
+var ContentSecurityPolicyIssue_exports = {};
+__export(ContentSecurityPolicyIssue_exports, {
+  ContentSecurityPolicyIssue: () => ContentSecurityPolicyIssue,
+  evalViolationCode: () => evalViolationCode,
+  inlineViolationCode: () => inlineViolationCode,
+  trustedTypesPolicyViolationCode: () => trustedTypesPolicyViolationCode,
+  trustedTypesSinkViolationCode: () => trustedTypesSinkViolationCode,
+  urlViolationCode: () => urlViolationCode
+});
+import * as i18n7 from "./..\\..\\core\\i18n\\i18n.js";
+var UIStrings4 = {
+  /**
+   * @description Title for CSP URL link.
+   */
+  contentSecurityPolicySource: "Content Security Policy - Source allowlists",
+  /**
+   * @description Title for CSP inline issue link.
+   */
+  contentSecurityPolicyInlineCode: "Content Security Policy - Inline code",
+  /**
+   * @description Title for the CSP eval link.
+   */
+  contentSecurityPolicyEval: "Content Security Policy - Eval",
+  /**
+   * @description Title for Trusted Types policy violation issue link (https://developer.mozilla.org/en-US/docs/Web/API/Trusted_Types_API).
+   */
+  trustedTypesFixViolations: "Trusted Types - Fix violations",
+  /**
+   * @description Title for Trusted Types policy violation issue link (https://developer.mozilla.org/en-US/docs/Web/API/Trusted_Types_API).
+   */
+  trustedTypesPolicyViolation: "Trusted Types - Policy violation"
+};
+var str_4 = i18n7.i18n.registerUIStrings("models/issues_manager/ContentSecurityPolicyIssue.ts", UIStrings4);
+var i18nLazyString3 = i18n7.i18n.getLazilyComputedLocalizedString.bind(void 0, str_4);
+var ContentSecurityPolicyIssue = class _ContentSecurityPolicyIssue extends Issue {
+  constructor(issueDetails, issuesModel, issueId) {
+    const issueCode = [
+      "ContentSecurityPolicyIssue",
+      issueDetails.contentSecurityPolicyViolationType
+    ].join("::");
+    super(issueCode, issueDetails, issuesModel, issueId);
+  }
+  getCategory() {
+    return "ContentSecurityPolicy";
+  }
+  primaryKey() {
+    return JSON.stringify(this.details(), [
+      "blockedURL",
+      "contentSecurityPolicyViolationType",
+      "violatedDirective",
+      "isReportOnly",
+      "sourceCodeLocation",
+      "url",
+      "lineNumber",
+      "columnNumber",
+      "violatingNodeId"
+    ]);
+  }
+  getDescription() {
+    const description = issueDescriptions2.get(this.details().contentSecurityPolicyViolationType);
+    if (!description) {
+      return null;
+    }
+    return resolveLazyDescription(description);
+  }
+  getKind() {
+    if (this.details().isReportOnly) {
+      return "Improvement";
+    }
+    return "PageError";
+  }
+  static fromInspectorIssue(issuesModel, inspectorIssue) {
+    const cspDetails = inspectorIssue.details.contentSecurityPolicyIssueDetails;
+    if (!cspDetails) {
+      console.warn("Content security policy issue without details received.");
+      return [];
+    }
+    return [new _ContentSecurityPolicyIssue(cspDetails, issuesModel, inspectorIssue.issueId)];
+  }
+};
+var cspURLViolation = {
+  file: "cspURLViolation.md",
+  links: [{
+    link: "https://developers.google.com/web/fundamentals/security/csp#source_allowlists",
+    linkTitle: i18nLazyString3(UIStrings4.contentSecurityPolicySource)
+  }]
+};
+var cspInlineViolation = {
+  file: "cspInlineViolation.md",
+  links: [{
+    link: "https://developers.google.com/web/fundamentals/security/csp#inline_code_is_considered_harmful",
+    linkTitle: i18nLazyString3(UIStrings4.contentSecurityPolicyInlineCode)
+  }]
+};
+var cspEvalViolation = {
+  file: "cspEvalViolation.md",
+  links: [{
+    link: "https://developers.google.com/web/fundamentals/security/csp#eval_too",
+    linkTitle: i18nLazyString3(UIStrings4.contentSecurityPolicyEval)
+  }]
+};
+var cspTrustedTypesSinkViolation = {
+  file: "cspTrustedTypesSinkViolation.md",
+  links: [{
+    link: "https://web.dev/trusted-types/#fix-the-violations",
+    linkTitle: i18nLazyString3(UIStrings4.trustedTypesFixViolations)
+  }]
+};
+var cspTrustedTypesPolicyViolation = {
+  file: "cspTrustedTypesPolicyViolation.md",
+  links: [{ link: "https://web.dev/trusted-types/", linkTitle: i18nLazyString3(UIStrings4.trustedTypesPolicyViolation) }]
+};
+var urlViolationCode = [
+  "ContentSecurityPolicyIssue",
+  "kURLViolation"
+].join("::");
+var inlineViolationCode = [
+  "ContentSecurityPolicyIssue",
+  "kInlineViolation"
+].join("::");
+var evalViolationCode = [
+  "ContentSecurityPolicyIssue",
+  "kEvalViolation"
+].join("::");
+var trustedTypesSinkViolationCode = [
+  "ContentSecurityPolicyIssue",
+  "kTrustedTypesSinkViolation"
+].join("::");
+var trustedTypesPolicyViolationCode = [
+  "ContentSecurityPolicyIssue",
+  "kTrustedTypesPolicyViolation"
+].join("::");
+var issueDescriptions2 = /* @__PURE__ */ new Map([
+  ["kURLViolation", cspURLViolation],
+  ["kInlineViolation", cspInlineViolation],
+  ["kEvalViolation", cspEvalViolation],
+  ["kTrustedTypesSinkViolation", cspTrustedTypesSinkViolation],
+  ["kTrustedTypesPolicyViolation", cspTrustedTypesPolicyViolation]
+]);
+
+// gen/front_end/models/issues_manager/CookieDeprecationMetadataIssue.js
+var CookieDeprecationMetadataIssue_exports = {};
+__export(CookieDeprecationMetadataIssue_exports, {
+  CookieDeprecationMetadataIssue: () => CookieDeprecationMetadataIssue
+});
+import * as i18n9 from "./..\\..\\core\\i18n\\i18n.js";
+var UIStrings5 = {
+  /**
+   * @description Label for a link for third-party cookie issues.
+   */
+  thirdPartyPhaseoutExplained: "Changes to Chrome\u2019s treatment of third-party cookies"
+};
+var str_5 = i18n9.i18n.registerUIStrings("models/issues_manager/CookieDeprecationMetadataIssue.ts", UIStrings5);
+var i18nString2 = i18n9.i18n.getLocalizedString.bind(void 0, str_5);
+var CookieDeprecationMetadataIssue = class _CookieDeprecationMetadataIssue extends Issue {
+  constructor(issueDetails, issuesModel) {
+    const issueCode = "CookieDeprecationMetadataIssue_" + issueDetails.operation;
+    super(issueCode, issueDetails, issuesModel);
+  }
+  getCategory() {
+    return "Other";
+  }
+  getDescription() {
+    const fileName = this.details().operation === "SetCookie" ? "cookieWarnMetadataGrantSet.md" : "cookieWarnMetadataGrantRead.md";
+    let optOutText = "";
+    if (this.details().isOptOutTopLevel) {
+      optOutText = "\n\n (Top level site opt-out: " + this.details().optOutPercentage + "% - [learn more](gracePeriodStagedControlExplainer))";
+    }
+    return {
+      file: fileName,
+      substitutions: /* @__PURE__ */ new Map([
+        ["PLACEHOLDER_topleveloptout", optOutText]
+      ]),
+      links: [
+        {
+          link: "https://goo.gle/changes-to-chrome-browsing",
+          linkTitle: i18nString2(UIStrings5.thirdPartyPhaseoutExplained)
+        }
+      ]
+    };
+  }
+  getKind() {
+    return "BreakingChange";
+  }
+  primaryKey() {
+    return JSON.stringify(this.details());
+  }
+  static fromInspectorIssue(issuesModel, inspectorIssue) {
+    const details = inspectorIssue.details.cookieDeprecationMetadataIssueDetails;
+    if (!details) {
+      console.warn("Cookie deprecation metadata issue without details received.");
+      return [];
+    }
+    return [new _CookieDeprecationMetadataIssue(details, issuesModel)];
+  }
+};
+
+// gen/front_end/models/issues_manager/CookieIssue.js
+var CookieIssue_exports = {};
+__export(CookieIssue_exports, {
+  CookieIssue: () => CookieIssue,
+  isCausedByThirdParty: () => isCausedByThirdParty
+});
+import * as Common from "./..\\..\\core\\common\\common.js";
+import * as i18n11 from "./..\\..\\core\\i18n\\i18n.js";
+import * as SDK from "./..\\..\\core\\sdk\\sdk.js";
+var UIStrings6 = {
+  /**
+   * @description Label for the link for SameSite cookie issues.
+   */
+  samesiteCookiesExplained: "SameSite cookies explained",
+  /**
+   * @description Label for a link for cross-site redirect issues.
+   */
+  fileCrosSiteRedirectBug: "File a bug",
+  /**
+   * @description Text to show in Console panel when a third-party cookie is blocked in Chrome.
+   */
+  consoleTpcdErrorMessage: "Third-party cookie blocked in Chrome due to Chrome flags or browser settings."
+};
+var str_6 = i18n11.i18n.registerUIStrings("models/issues_manager/CookieIssue.ts", UIStrings6);
+var i18nLazyString4 = i18n11.i18n.getLazilyComputedLocalizedString.bind(void 0, str_6);
+var CookieIssue = class _CookieIssue extends Issue {
+  #frameManager;
+  constructor(code, issueDetails, issuesModel, issueId, frameManager) {
+    super(code, issueDetails, issuesModel, issueId);
+    this.#frameManager = frameManager;
+  }
+  cookieId() {
+    const details = this.details();
+    if (details.cookie) {
+      const { domain, path, name } = details.cookie;
+      const cookieId = `${domain};${path};${name}`;
+      return cookieId;
+    }
+    return this.details().rawCookieLine ?? "no-cookie-info";
+  }
+  primaryKey() {
+    const details = this.details();
+    const requestId = details.request ? details.request.requestId : "no-request";
+    return `${this.code()}-(${this.cookieId()})-(${requestId})`;
+  }
+  /**
+   * Returns an array of issues from a given CookieIssueDetails.
+   */
+  static createIssuesFromCookieIssueDetails(cookieIssueDetails, issuesModel, issueId, frameManager) {
+    const issues = [];
+    if (cookieIssueDetails.cookieExclusionReasons && cookieIssueDetails.cookieExclusionReasons.length > 0) {
+      for (const exclusionReason of cookieIssueDetails.cookieExclusionReasons) {
+        const code = _CookieIssue.codeForCookieIssueDetails(exclusionReason, cookieIssueDetails.cookieWarningReasons, cookieIssueDetails.operation);
+        if (code) {
+          issues.push(new _CookieIssue(code, cookieIssueDetails, issuesModel, issueId, frameManager));
+        }
+      }
+      return issues;
+    }
+    if (cookieIssueDetails.cookieWarningReasons) {
+      for (const warningReason of cookieIssueDetails.cookieWarningReasons) {
+        const code = _CookieIssue.codeForCookieIssueDetails(warningReason, [], cookieIssueDetails.operation);
+        if (code) {
+          issues.push(new _CookieIssue(code, cookieIssueDetails, issuesModel, issueId, frameManager));
+        }
+      }
+    }
+    return issues;
+  }
+  /**
+   * Calculates an issue code from a reason, an operation, and an array of warningReasons. All these together
+   * can uniquely identify a specific cookie issue.
+   * warningReasons is only needed for some CookieExclusionReason in order to determine if an issue should be raised.
+   * It is not required if reason is a CookieWarningReason.
+   *
+   * The issue code will be mapped to a CookieIssueSubCategory enum for metric purpose.
+   */
+  static codeForCookieIssueDetails(reason, warningReasons, operation) {
+    if (reason === "ExcludeSameSiteStrict" || reason === "ExcludeSameSiteLax" || reason === "ExcludeSameSiteUnspecifiedTreatedAsLax") {
+      if (warningReasons.includes(
+        "WarnCrossSiteRedirectDowngradeChangesInclusion"
+        /* Protocol.Audits.CookieWarningReason.WarnCrossSiteRedirectDowngradeChangesInclusion */
+      )) {
+        return [
+          "CookieIssue",
+          "CrossSiteRedirectDowngradeChangesInclusion"
+        ].join("::");
+      }
+      if (reason === "ExcludeSameSiteUnspecifiedTreatedAsLax") {
+        return ["CookieIssue", reason, operation].join("::");
+      }
+      return null;
+    }
+    if (reason === "ExcludePortMismatch") {
+      return ["CookieIssue", "ExcludePortMismatch"].join("::");
+    }
+    if (reason === "ExcludeSchemeMismatch") {
+      return ["CookieIssue", "ExcludeSchemeMismatch"].join("::");
+    }
+    return ["CookieIssue", reason, operation].join("::");
+  }
+  cookies() {
+    const details = this.details();
+    if (details.cookie) {
+      return [details.cookie];
+    }
+    return [];
+  }
+  rawCookieLines() {
+    const details = this.details();
+    if (details.rawCookieLine) {
+      return [details.rawCookieLine];
+    }
+    return [];
+  }
+  requests() {
+    const details = this.details();
+    if (details.request) {
+      return [details.request];
+    }
+    return [];
+  }
+  getCategory() {
+    return "Cookie";
+  }
+  getDescription() {
+    const description = issueDescriptions3.get(this.code());
+    if (!description) {
+      return null;
+    }
+    return resolveLazyDescription(description);
+  }
+  isCausedByThirdParty() {
+    const outermostFrame = this.#frameManager.getOutermostFrame();
+    return isCausedByThirdParty(outermostFrame, this.details().cookieUrl, this.details().siteForCookies);
+  }
+  getKind() {
+    if (this.details().cookieExclusionReasons?.length > 0) {
+      return "PageError";
+    }
+    return "BreakingChange";
+  }
+  static getCookieStatus(cookieIssueDetails) {
+    if (cookieIssueDetails.cookieExclusionReasons.includes(
+      "ExcludeThirdPartyPhaseout"
+      /* Protocol.Audits.CookieExclusionReason.ExcludeThirdPartyPhaseout */
+    )) {
+      return 0;
+    }
+    if (cookieIssueDetails.cookieWarningReasons.includes(
+      "WarnDeprecationTrialMetadata"
+      /* Protocol.Audits.CookieWarningReason.WarnDeprecationTrialMetadata */
+    )) {
+      return 2;
+    }
+    if (cookieIssueDetails.cookieWarningReasons.includes(
+      "WarnThirdPartyCookieHeuristic"
+      /* Protocol.Audits.CookieWarningReason.WarnThirdPartyCookieHeuristic */
+    )) {
+      return 3;
+    }
+    if (cookieIssueDetails.cookieWarningReasons.includes(
+      "WarnThirdPartyPhaseout"
+      /* Protocol.Audits.CookieWarningReason.WarnThirdPartyPhaseout */
+    )) {
+      return 1;
+    }
+    return;
+  }
+  static fromInspectorIssue(issuesModel, inspectorIssue, frameManager) {
+    const cookieIssueDetails = inspectorIssue.details.cookieIssueDetails;
+    if (!cookieIssueDetails) {
+      console.warn("Cookie issue without details received.");
+      return [];
+    }
+    return _CookieIssue.createIssuesFromCookieIssueDetails(cookieIssueDetails, issuesModel, inspectorIssue.issueId, frameManager);
+  }
+  static getSubCategory(code) {
+    if (code.includes("SameSite") || code.includes("Downgrade")) {
+      return "SameSiteCookie";
+    }
+    return "GenericCookie";
+  }
+  static isThirdPartyCookiePhaseoutRelatedIssue(issue) {
+    const excludeFromAggregate = [
+      "WarnThirdPartyCookieHeuristic",
+      "WarnDeprecationTrialMetadata",
+      "WarnThirdPartyPhaseout",
+      "ExcludeThirdPartyPhaseout"
+    ];
+    return excludeFromAggregate.some((exclude) => issue.code().includes(exclude));
+  }
+  maybeCreateConsoleMessage() {
+    const issuesModel = this.model();
+    if (issuesModel && this.code().includes(
+      "ExcludeThirdPartyPhaseout"
+      /* Protocol.Audits.CookieExclusionReason.ExcludeThirdPartyPhaseout */
+    )) {
+      return new SDK.ConsoleModel.ConsoleMessage(issuesModel.target().model(SDK.RuntimeModel.RuntimeModel), Common.Console.FrontendMessageSource.ISSUE_PANEL, "warning", UIStrings6.consoleTpcdErrorMessage, {
+        url: this.details().request?.url,
+        affectedResources: { requestId: this.details().request?.requestId, issueId: this.issueId }
+      });
+    }
+    return;
+  }
+};
+function isCausedByThirdParty(outermostFrame, cookieUrl, siteForCookies) {
+  if (!outermostFrame) {
+    return true;
+  }
+  if (!siteForCookies) {
+    return true;
+  }
+  if (!cookieUrl || outermostFrame.domainAndRegistry() === "") {
+    return false;
+  }
+  const parsedCookieUrl = Common.ParsedURL.ParsedURL.fromString(cookieUrl);
+  if (!parsedCookieUrl) {
+    return false;
+  }
+  return !isSubdomainOf(parsedCookieUrl.domain(), outermostFrame.domainAndRegistry());
+}
+function isSubdomainOf(subdomain, superdomain) {
+  if (subdomain.length <= superdomain.length) {
+    return subdomain === superdomain;
+  }
+  if (!subdomain.endsWith(superdomain)) {
+    return false;
+  }
+  const subdomainWithoutSuperdomian = subdomain.substr(0, subdomain.length - superdomain.length);
+  return subdomainWithoutSuperdomian.endsWith(".");
+}
+var sameSiteUnspecifiedWarnRead = {
+  file: "SameSiteUnspecifiedLaxAllowUnsafeRead.md",
+  links: [
+    {
+      link: "https://web.dev/samesite-cookies-explained/",
+      linkTitle: i18nLazyString4(UIStrings6.samesiteCookiesExplained)
+    }
+  ]
+};
+var sameSiteUnspecifiedWarnSet = {
+  file: "SameSiteUnspecifiedLaxAllowUnsafeSet.md",
+  links: [
+    {
+      link: "https://web.dev/samesite-cookies-explained/",
+      linkTitle: i18nLazyString4(UIStrings6.samesiteCookiesExplained)
+    }
+  ]
+};
+var sameSiteNoneInsecureErrorRead = {
+  file: "SameSiteNoneInsecureErrorRead.md",
+  links: [
+    {
+      link: "https://web.dev/samesite-cookies-explained/",
+      linkTitle: i18nLazyString4(UIStrings6.samesiteCookiesExplained)
+    }
+  ]
+};
+var sameSiteNoneInsecureErrorSet = {
+  file: "SameSiteNoneInsecureErrorSet.md",
+  links: [
+    {
+      link: "https://web.dev/samesite-cookies-explained/",
+      linkTitle: i18nLazyString4(UIStrings6.samesiteCookiesExplained)
+    }
+  ]
+};
+var sameSiteNoneInsecureWarnRead = {
+  file: "SameSiteNoneInsecureWarnRead.md",
+  links: [
+    {
+      link: "https://web.dev/samesite-cookies-explained/",
+      linkTitle: i18nLazyString4(UIStrings6.samesiteCookiesExplained)
+    }
+  ]
+};
+var sameSiteNoneInsecureWarnSet = {
+  file: "SameSiteNoneInsecureWarnSet.md",
+  links: [
+    {
+      link: "https://web.dev/samesite-cookies-explained/",
+      linkTitle: i18nLazyString4(UIStrings6.samesiteCookiesExplained)
+    }
+  ]
+};
+var attributeValueExceedsMaxSize = {
+  file: "CookieAttributeValueExceedsMaxSize.md",
+  links: []
+};
+var warnDomainNonAscii = {
+  file: "cookieWarnDomainNonAscii.md",
+  links: []
+};
+var excludeDomainNonAscii = {
+  file: "cookieExcludeDomainNonAscii.md",
+  links: []
+};
+var excludeBlockedWithinRelatedWebsiteSet = {
+  file: "cookieExcludeBlockedWithinRelatedWebsiteSet.md",
+  links: []
+};
+var cookieCrossSiteRedirectDowngrade = {
+  file: "cookieCrossSiteRedirectDowngrade.md",
+  links: [{
+    link: "https://bugs.chromium.org/p/chromium/issues/entry?template=Defect%20report%20from%20user&summary=[Cross-Site Redirect Chain] <INSERT BUG SUMMARY HERE>&comment=Chrome Version: (copy from chrome://version)%0AChannel: (e.g. Canary, Dev, Beta, Stable)%0A%0AAffected URLs:%0A%0AWhat is the expected result?%0A%0AWhat happens instead?%0A%0AWhat is the purpose of the cross-site redirect?:%0A%0AWhat steps will reproduce the problem?:%0A(1)%0A(2)%0A(3)%0A%0APlease provide any additional information below.&components=Internals%3ENetwork%3ECookies",
+    linkTitle: i18nLazyString4(UIStrings6.fileCrosSiteRedirectBug)
+  }]
+};
+var ExcludePortMismatch = {
+  file: "cookieExcludePortMismatch.md",
+  links: []
+};
+var ExcludeSchemeMismatch = {
+  file: "cookieExcludeSchemeMismatch.md",
+  links: []
+};
+var placeholderDescriptionForInvisibleIssues = {
+  file: "placeholderDescriptionForInvisibleIssues.md",
+  links: []
+};
+var issueDescriptions3 = /* @__PURE__ */ new Map([
+  // These two don't have a deprecation date yet, but they need to be fixed eventually.
+  ["CookieIssue::WarnSameSiteUnspecifiedLaxAllowUnsafe::ReadCookie", sameSiteUnspecifiedWarnRead],
+  ["CookieIssue::WarnSameSiteUnspecifiedLaxAllowUnsafe::SetCookie", sameSiteUnspecifiedWarnSet],
+  ["CookieIssue::WarnSameSiteUnspecifiedCrossSiteContext::ReadCookie", sameSiteUnspecifiedWarnRead],
+  ["CookieIssue::WarnSameSiteUnspecifiedCrossSiteContext::SetCookie", sameSiteUnspecifiedWarnSet],
+  ["CookieIssue::ExcludeSameSiteNoneInsecure::ReadCookie", sameSiteNoneInsecureErrorRead],
+  ["CookieIssue::ExcludeSameSiteNoneInsecure::SetCookie", sameSiteNoneInsecureErrorSet],
+  ["CookieIssue::WarnSameSiteNoneInsecure::ReadCookie", sameSiteNoneInsecureWarnRead],
+  ["CookieIssue::WarnSameSiteNoneInsecure::SetCookie", sameSiteNoneInsecureWarnSet],
+  ["CookieIssue::WarnAttributeValueExceedsMaxSize::ReadCookie", attributeValueExceedsMaxSize],
+  ["CookieIssue::WarnAttributeValueExceedsMaxSize::SetCookie", attributeValueExceedsMaxSize],
+  ["CookieIssue::WarnDomainNonASCII::ReadCookie", warnDomainNonAscii],
+  ["CookieIssue::WarnDomainNonASCII::SetCookie", warnDomainNonAscii],
+  ["CookieIssue::ExcludeDomainNonASCII::ReadCookie", excludeDomainNonAscii],
+  ["CookieIssue::ExcludeDomainNonASCII::SetCookie", excludeDomainNonAscii],
+  [
+    "CookieIssue::ExcludeThirdPartyCookieBlockedInRelatedWebsiteSet::ReadCookie",
+    excludeBlockedWithinRelatedWebsiteSet
+  ],
+  [
+    "CookieIssue::ExcludeThirdPartyCookieBlockedInRelatedWebsiteSet::SetCookie",
+    excludeBlockedWithinRelatedWebsiteSet
+  ],
+  ["CookieIssue::WarnThirdPartyPhaseout::ReadCookie", placeholderDescriptionForInvisibleIssues],
+  ["CookieIssue::WarnThirdPartyPhaseout::SetCookie", placeholderDescriptionForInvisibleIssues],
+  ["CookieIssue::WarnDeprecationTrialMetadata::ReadCookie", placeholderDescriptionForInvisibleIssues],
+  ["CookieIssue::WarnDeprecationTrialMetadata::SetCookie", placeholderDescriptionForInvisibleIssues],
+  ["CookieIssue::WarnThirdPartyCookieHeuristic::ReadCookie", placeholderDescriptionForInvisibleIssues],
+  ["CookieIssue::WarnThirdPartyCookieHeuristic::SetCookie", placeholderDescriptionForInvisibleIssues],
+  ["CookieIssue::ExcludeThirdPartyPhaseout::ReadCookie", placeholderDescriptionForInvisibleIssues],
+  ["CookieIssue::ExcludeThirdPartyPhaseout::SetCookie", placeholderDescriptionForInvisibleIssues],
+  ["CookieIssue::CrossSiteRedirectDowngradeChangesInclusion", cookieCrossSiteRedirectDowngrade],
+  ["CookieIssue::ExcludePortMismatch", ExcludePortMismatch],
+  ["CookieIssue::ExcludeSchemeMismatch", ExcludeSchemeMismatch]
+]);
+
+// gen/front_end/models/issues_manager/CorsIssue.js
+var CorsIssue_exports = {};
+__export(CorsIssue_exports, {
+  CorsIssue: () => CorsIssue
+});
+import * as i18n13 from "./..\\..\\core\\i18n\\i18n.js";
+var UIStrings7 = {
+  /**
+   * @description Label for the link for CORS Local Network Access issues.
+   */
+  corsLocalNetworkAccess: "Local Network Access",
+  /**
+   * @description Label for the link for CORS network issues.
+   */
+  CORS: "Cross-Origin Resource Sharing (CORS)"
+};
+var str_7 = i18n13.i18n.registerUIStrings("models/issues_manager/CorsIssue.ts", UIStrings7);
+var i18nString3 = i18n13.i18n.getLocalizedString.bind(void 0, str_7);
+function getIssueCode(details) {
+  switch (details.corsErrorStatus.corsError) {
+    case "InvalidAllowMethodsPreflightResponse":
+    case "InvalidAllowHeadersPreflightResponse":
+    case "PreflightMissingAllowOriginHeader":
+    case "PreflightMultipleAllowOriginValues":
+    case "PreflightInvalidAllowOriginValue":
+    case "MissingAllowOriginHeader":
+    case "MultipleAllowOriginValues":
+    case "InvalidAllowOriginValue":
+      return "CorsIssue::InvalidHeaders";
+    case "PreflightWildcardOriginNotAllowed":
+    case "WildcardOriginNotAllowed":
+      return "CorsIssue::WildcardOriginWithCredentials";
+    case "PreflightInvalidStatus":
+    case "PreflightDisallowedRedirect":
+    case "InvalidResponse":
+      return "CorsIssue::PreflightResponseInvalid";
+    case "AllowOriginMismatch":
+    case "PreflightAllowOriginMismatch":
+      return "CorsIssue::OriginMismatch";
+    case "InvalidAllowCredentials":
+    case "PreflightInvalidAllowCredentials":
+      return "CorsIssue::AllowCredentialsRequired";
+    case "MethodDisallowedByPreflightResponse":
+      return "CorsIssue::MethodDisallowedByPreflightResponse";
+    case "HeaderDisallowedByPreflightResponse":
+      return "CorsIssue::HeaderDisallowedByPreflightResponse";
+    case "RedirectContainsCredentials":
+      return "CorsIssue::RedirectContainsCredentials";
+    case "DisallowedByMode":
+      return "CorsIssue::DisallowedByMode";
+    case "CorsDisabledScheme":
+      return "CorsIssue::CorsDisabledScheme";
+    case "PreflightMissingAllowExternal":
+      return "CorsIssue::PreflightMissingAllowExternal";
+    case "PreflightInvalidAllowExternal":
+      return "CorsIssue::PreflightInvalidAllowExternal";
+    case "InsecureLocalNetwork":
+      return "CorsIssue::InsecureLocalNetwork";
+    case "NoCorsRedirectModeNotFollow":
+      return "CorsIssue::NoCorsRedirectModeNotFollow";
+    case "InvalidLocalNetworkAccess":
+      return "CorsIssue::InvalidLocalNetworkAccess";
+    case "LocalNetworkAccessPermissionDenied":
+      return "CorsIssue::LocalNetworkAccessPermissionDenied";
+  }
+}
+var CorsIssue = class _CorsIssue extends Issue {
+  constructor(issueDetails, issuesModel, issueId) {
+    super(getIssueCode(issueDetails), issueDetails, issuesModel, issueId);
+  }
+  getCategory() {
+    return "Cors";
+  }
+  getDescription() {
+    switch (getIssueCode(this.details())) {
+      case "CorsIssue::InvalidHeaders":
+        return {
+          file: "corsInvalidHeaderValues.md",
+          links: [{
+            link: "https://web.dev/cross-origin-resource-sharing",
+            linkTitle: i18nString3(UIStrings7.CORS)
+          }]
+        };
+      case "CorsIssue::WildcardOriginWithCredentials":
+        return {
+          file: "corsWildcardOriginNotAllowed.md",
+          links: [{
+            link: "https://web.dev/cross-origin-resource-sharing",
+            linkTitle: i18nString3(UIStrings7.CORS)
+          }]
+        };
+      case "CorsIssue::PreflightResponseInvalid":
+        return {
+          file: "corsPreflightResponseInvalid.md",
+          links: [{
+            link: "https://web.dev/cross-origin-resource-sharing",
+            linkTitle: i18nString3(UIStrings7.CORS)
+          }]
+        };
+      case "CorsIssue::OriginMismatch":
+        return {
+          file: "corsOriginMismatch.md",
+          links: [{
+            link: "https://web.dev/cross-origin-resource-sharing",
+            linkTitle: i18nString3(UIStrings7.CORS)
+          }]
+        };
+      case "CorsIssue::AllowCredentialsRequired":
+        return {
+          file: "corsAllowCredentialsRequired.md",
+          links: [{
+            link: "https://web.dev/cross-origin-resource-sharing",
+            linkTitle: i18nString3(UIStrings7.CORS)
+          }]
+        };
+      case "CorsIssue::MethodDisallowedByPreflightResponse":
+        return {
+          file: "corsMethodDisallowedByPreflightResponse.md",
+          links: [{
+            link: "https://web.dev/cross-origin-resource-sharing",
+            linkTitle: i18nString3(UIStrings7.CORS)
+          }]
+        };
+      case "CorsIssue::HeaderDisallowedByPreflightResponse":
+        return {
+          file: "corsHeaderDisallowedByPreflightResponse.md",
+          links: [{
+            link: "https://web.dev/cross-origin-resource-sharing",
+            linkTitle: i18nString3(UIStrings7.CORS)
+          }]
+        };
+      case "CorsIssue::RedirectContainsCredentials":
+        return {
+          file: "corsRedirectContainsCredentials.md",
+          links: [{
+            link: "https://web.dev/cross-origin-resource-sharing",
+            linkTitle: i18nString3(UIStrings7.CORS)
+          }]
+        };
+      case "CorsIssue::DisallowedByMode":
+        return {
+          file: "corsDisallowedByMode.md",
+          links: [{
+            link: "https://web.dev/cross-origin-resource-sharing",
+            linkTitle: i18nString3(UIStrings7.CORS)
+          }]
+        };
+      case "CorsIssue::CorsDisabledScheme":
+        return {
+          file: "corsDisabledScheme.md",
+          links: [{
+            link: "https://web.dev/cross-origin-resource-sharing",
+            linkTitle: i18nString3(UIStrings7.CORS)
+          }]
+        };
+      case "CorsIssue::NoCorsRedirectModeNotFollow":
+        return {
+          file: "corsNoCorsRedirectModeNotFollow.md",
+          links: [{
+            link: "https://web.dev/cross-origin-resource-sharing",
+            linkTitle: i18nString3(UIStrings7.CORS)
+          }]
+        };
+      case "CorsIssue::InsecureLocalNetwork":
+      case "CorsIssue::LocalNetworkAccessPermissionDenied":
+        return {
+          file: "corsLocalNetworkAccessPermissionDenied.md",
+          links: [{
+            link: "https://developer.chrome.com/blog/local-network-access",
+            linkTitle: i18nString3(UIStrings7.corsLocalNetworkAccess)
+          }]
+        };
+      case "CorsIssue::PreflightMissingAllowExternal":
+      case "CorsIssue::PreflightInvalidAllowExternal":
+      case "CorsIssue::InvalidLocalNetworkAccess":
+        return null;
+    }
+  }
+  primaryKey() {
+    return JSON.stringify(this.details());
+  }
+  getKind() {
+    if (this.details().isWarning && this.details().corsErrorStatus.corsError === "InsecureLocalNetwork") {
+      return "BreakingChange";
+    }
+    return "PageError";
+  }
+  static fromInspectorIssue(issuesModel, inspectorIssue) {
+    const corsIssueDetails = inspectorIssue.details.corsIssueDetails;
+    if (!corsIssueDetails) {
+      console.warn("Cors issue without details received.");
+      return [];
+    }
+    return [new _CorsIssue(corsIssueDetails, issuesModel, inspectorIssue.issueId)];
+  }
+};
+
+// gen/front_end/models/issues_manager/CrossOriginEmbedderPolicyIssue.js
+var CrossOriginEmbedderPolicyIssue_exports = {};
+__export(CrossOriginEmbedderPolicyIssue_exports, {
+  CrossOriginEmbedderPolicyIssue: () => CrossOriginEmbedderPolicyIssue,
+  isCrossOriginEmbedderPolicyIssue: () => isCrossOriginEmbedderPolicyIssue
+});
+import * as i18n15 from "./..\\..\\core\\i18n\\i18n.js";
+var UIStrings8 = {
+  /**
+   * @description Link text for a link to external documentation.
+   */
+  coopAndCoep: "COOP and COEP",
+  /**
+   * @description Title for an external link to more information in the Issues view.
+   */
+  samesiteAndSameorigin: "Same-Site and Same-Origin"
+};
+var str_8 = i18n15.i18n.registerUIStrings("models/issues_manager/CrossOriginEmbedderPolicyIssue.ts", UIStrings8);
+var i18nLazyString5 = i18n15.i18n.getLazilyComputedLocalizedString.bind(void 0, str_8);
+function isCrossOriginEmbedderPolicyIssue(reason) {
+  switch (reason) {
+    case "CoepFrameResourceNeedsCoepHeader":
+      return true;
+    case "CoopSandboxedIFrameCannotNavigateToCoopPage":
+      return true;
+    case "CorpNotSameOrigin":
+      return true;
+    case "CorpNotSameOriginAfterDefaultedToSameOriginByCoep":
+      return true;
+    case "CorpNotSameSite":
+      return true;
+  }
+  return false;
+}
+var CrossOriginEmbedderPolicyIssue = class extends Issue {
+  constructor(issueDetails, issuesModel) {
+    super(`CrossOriginEmbedderPolicyIssue::${issueDetails.reason}`, issueDetails, issuesModel);
+  }
+  primaryKey() {
+    return `${this.code()}-(${this.details().request.requestId})`;
+  }
+  getBlockedByResponseDetails() {
+    return [this.details()];
+  }
+  requests() {
+    return [this.details().request];
+  }
+  getCategory() {
+    return "CrossOriginEmbedderPolicy";
+  }
+  getDescription() {
+    const description = issueDescriptions4.get(this.code());
+    if (!description) {
+      return null;
+    }
+    return resolveLazyDescription(description);
+  }
+  getKind() {
+    return "PageError";
+  }
+};
+var issueDescriptions4 = /* @__PURE__ */ new Map([
+  [
+    "CrossOriginEmbedderPolicyIssue::CorpNotSameOriginAfterDefaultedToSameOriginByCoep",
+    {
+      file: "CoepCorpNotSameOriginAfterDefaultedToSameOriginByCoep.md",
+      links: [
+        { link: "https://web.dev/coop-coep/", linkTitle: i18nLazyString5(UIStrings8.coopAndCoep) },
+        { link: "https://web.dev/same-site-same-origin/", linkTitle: i18nLazyString5(UIStrings8.samesiteAndSameorigin) }
+      ]
+    }
+  ],
+  [
+    "CrossOriginEmbedderPolicyIssue::CoepFrameResourceNeedsCoepHeader",
+    {
+      file: "CoepFrameResourceNeedsCoepHeader.md",
+      links: [
+        { link: "https://web.dev/coop-coep/", linkTitle: i18nLazyString5(UIStrings8.coopAndCoep) }
+      ]
+    }
+  ],
+  [
+    "CrossOriginEmbedderPolicyIssue::CoopSandboxedIframeCannotNavigateToCoopPage",
+    {
+      file: "CoepCoopSandboxedIframeCannotNavigateToCoopPage.md",
+      links: [
+        { link: "https://web.dev/coop-coep/", linkTitle: i18nLazyString5(UIStrings8.coopAndCoep) }
+      ]
+    }
+  ],
+  [
+    "CrossOriginEmbedderPolicyIssue::CorpNotSameSite",
+    {
+      file: "CoepCorpNotSameSite.md",
+      links: [
+        { link: "https://web.dev/coop-coep/", linkTitle: i18nLazyString5(UIStrings8.coopAndCoep) },
+        { link: "https://web.dev/same-site-same-origin/", linkTitle: i18nLazyString5(UIStrings8.samesiteAndSameorigin) }
+      ]
+    }
+  ],
+  [
+    "CrossOriginEmbedderPolicyIssue::CorpNotSameOrigin",
+    {
+      file: "CoepCorpNotSameOrigin.md",
+      links: [
+        { link: "https://web.dev/coop-coep/", linkTitle: i18nLazyString5(UIStrings8.coopAndCoep) },
+        { link: "https://web.dev/same-site-same-origin/", linkTitle: i18nLazyString5(UIStrings8.samesiteAndSameorigin) }
+      ]
+    }
+  ]
+]);
+
+// gen/front_end/models/issues_manager/DeprecationIssue.js
+var DeprecationIssue_exports = {};
+__export(DeprecationIssue_exports, {
+  DeprecationIssue: () => DeprecationIssue
+});
+import * as i18n17 from "./..\\..\\core\\i18n\\i18n.js";
+
+// gen/front_end/generated/Deprecation.js
+var UIStrings9 = {
+  /**
+   * @description This warning occurs when the website uses Attribution Reporting.
+   */
+  AttributionReporting: "Attribution Reporting is deprecated and will be removed. See https://goo.gle/ps-status for details.",
+  /**
+   * @description We show this warning when 1) an 'authorization' header is attached to the request by scripts, 2) there is no 'authorization' in the 'access-control-allow-headers' header in the response, and 3) there is a wildcard symbol ('*') in the 'access-control-allow-header' header in the response. This is allowed now, but we're planning to reject such responses and require responses to have an 'access-control-allow-headers' containing 'authorization'.
+   */
+  AuthorizationCoveredByWildcard: "Authorization will not be covered by the wildcard symbol (*) in CORS `Access-Control-Allow-Headers` handling.",
+  /**
+   * @description This warning occurs when a page attempts to request a resource whose URL contained both a newline character (`\n` or `\r`), and a less-than character (`<`). These resources are blocked.
+   */
+  CanRequestURLHTTPContainingNewline: "Resource requests whose URLs contained both removed whitespace `\\(n|r|t)` characters and less-than characters (`<`) are blocked. Please remove newlines and encode less-than characters from places like element attribute values in order to load these resources.",
+  /**
+   * @description This warning occurs when the website attempts to invoke the deprecated `chrome.loadTimes().connectionInfo` API.
+   */
+  ChromeLoadTimesConnectionInfo: "`chrome.loadTimes()` is deprecated, instead use standardized API: Navigation Timing 2.",
+  /**
+   * @description This warning occurs when the website attempts to invoke the deprecated `chrome.loadTimes().firstPaintAfterLoadTime` API.
+   */
+  ChromeLoadTimesFirstPaintAfterLoadTime: "`chrome.loadTimes()` is deprecated, instead use standardized API: Paint Timing.",
+  /**
+   * @description This warning occurs when the website attempts to invoke the deprecated `chrome.loadTimes().wasAlternateProtocolAvailable` API.
+   */
+  ChromeLoadTimesWasAlternateProtocolAvailable: "`chrome.loadTimes()` is deprecated, instead use standardized API: `nextHopProtocol` in Navigation Timing 2.",
+  /**
+   * @description This warning occurs when a frame accesses another frame's data after having set `document.domain` without having set the `Origin-Agent-Cluster` http header. This is a companion warning to `documentDomainSettingWithoutOriginAgentClusterHeader`, where that warning occurs when `document.domain` is set, and this warning occurs when an access has been made, based on that previous `document.domain` setting.
+   */
+  CrossOriginAccessBasedOnDocumentDomain: "Relaxing the same-origin policy by setting `document.domain` is deprecated, and will be disabled by default. This deprecation warning is for a cross-origin access that was enabled by setting `document.domain`.",
+  /**
+   * @description Issue text shown when the web page uses a deprecated web API. The window.alert is the deprecated web API function.
+   */
+  CrossOriginWindowAlert: "Triggering window.alert from cross origin iframes has been deprecated and will be removed in the future.",
+  /**
+   * @description Issue text shown when the web page uses a deprecated web API. The window.confirm is the deprecated web API function.
+   */
+  CrossOriginWindowConfirm: "Triggering window.confirm from cross origin iframes has been deprecated and will be removed in the future.",
+  /**
+   * @description Warning displayed to developers when they hide the Cast button on a video element using the deprecated CSS selector instead of using the disableRemotePlayback attribute on the element.
+   */
+  CSSSelectorInternalMediaControlsOverlayCastButton: "The `disableRemotePlayback` attribute should be used in order to disable the default Cast integration instead of using `-internal-media-controls-overlay-cast-button` selector.",
+  /**
+   * @description Warning displayed to developers to let them know the CSS appearance property value they used is not standard and will be removed.
+   */
+  CSSValueAppearanceSliderVertical: "CSS appearance value `slider-vertical` is not standardized and will be removed.",
+  /**
+   * @description Warning displayed to developers when a data: URL is assigned to SVGUseElement to let them know that the support is deprecated.
+   */
+  DataUrlInSvgUse: "Support for data: URLs in SVGUseElement is deprecated and it will be removed in the future.",
+  /**
+   * @description Warning displayed to developers when an unknown protocol string is used in a call to navigator.credentials.get() or create() with the 'digital' option.
+   */
+  DigitalCredentialsUnknownProtocol: "An unknown Digital Credentials protocol was requested in navigator.credentials.get() or create(). In a future release, unrecognized protocols will be blocked.",
+  /**
+   * @description Warning displayed to developers when document.createEvent() is called with 'KeyboardEvents', which is a non-standard event interface that will be removed.
+   */
+  DocumentCreateEventKeyboardEvents: "document.createEvent('KeyboardEvents') is deprecated and will be removed. Use `new KeyboardEvent()` instead.",
+  /**
+   * @description Warning displayed to developers when document.createEvent() is called with 'TransitionEvent', which is a non-standard event interface that will be removed.
+   */
+  DocumentCreateEventTransitionEvent: "document.createEvent('TransitionEvent') is deprecated and will be removed. Use `new TransitionEvent()` instead.",
+  /**
+   * @description Translation is not needed, this will never be exposed in production code.
+   */
+  ExampleBrowserProcessDeprecation: "This is an example for showing the code required for a browser process reported deprecation.",
+  /**
+   * @description A deprecation warning shown in the DevTools Issues tab. It's shown when one of the Protected Audience APIs like `navigator.joinAdInterestGroup`, `navigator.getInterestGroupAdAuctionData` or `navigator.runAdAuction` are called.
+   */
+  Fledge: "The Protected Audience API is deprecated and will be removed in a future release.",
+  /**
+   * @description Warning displayed to developers when the Geolocation API is used from an insecure origin (one that isn't localhost or doesn't use HTTPS) to notify them that this use is no longer supported.
+   */
+  GeolocationInsecureOrigin: "`getCurrentPosition()` and `watchPosition()` no longer work on insecure origins. To use this feature, you should consider switching your application to a secure origin, such as HTTPS. See https://www.chromium.org/Home/chromium-security/deprecating-powerful-features-on-insecure-origins/ for more details.",
+  /**
+   * @description Warning displayed to developers when the Geolocation API is used from an insecure origin (one that isn't localhost or doesn't use HTTPS) to notify them that this use is deprecated.
+   */
+  GeolocationInsecureOriginDeprecatedNotRemoved: "`getCurrentPosition()` and `watchPosition()` are deprecated on insecure origins. To use this feature, you should consider switching your application to a secure origin, such as HTTPS. See https://www.chromium.org/Home/chromium-security/deprecating-powerful-features-on-insecure-origins/ for more details.",
+  /**
+   * @description This warning occurs when the `getUserMedia()` API is invoked on an insecure (e.g., HTTP) site. This is only permitted on secure sites (e.g., HTTPS).
+   */
+  GetUserMediaInsecureOrigin: "`getUserMedia()` no longer works on insecure origins. To use this feature, you should consider switching your application to a secure origin, such as HTTPS. See https://www.chromium.org/Home/chromium-security/deprecating-powerful-features-on-insecure-origins/ for more details.",
+  /**
+   * @description A deprecation warning shown to developers in the DevTools Issues tab when code tries to use the deprecated hostCandidate field, guiding developers to use the equivalent information in the .address and .port fields instead.
+   */
+  HostCandidateAttributeGetter: "`RTCPeerConnectionIceErrorEvent.hostCandidate` is deprecated. Please use `RTCPeerConnectionIceErrorEvent.address` or `RTCPeerConnectionIceErrorEvent.port` instead.",
+  /**
+   * @description A deprecation warning shown in the DevTools Issues tab, when a service worker reads one of the fields from an event named 'canmakepayment'.
+   */
+  IdentityInCanMakePaymentEvent: "The merchant origin and arbitrary data from the `canmakepayment` service worker event are deprecated and will be removed: `topOrigin`, `paymentRequestOrigin`, `methodData`, `modifiers`.",
+  /**
+   * @description This warning occurs when an insecure context (e.g., HTTP) requests a private resource (not on open internet). This is done to mitigate the potential for CSRF and other attacks.
+   */
+  InsecurePrivateNetworkSubresourceRequest: "The website requested a subresource from a network that it could only access because of its users' privileged network position. These requests expose non-public devices and servers to the internet, increasing the risk of a cross-site request forgery (CSRF) attack, and/or information leakage. To mitigate these risks, Chrome deprecates requests to non-public subresources when initiated from non-secure contexts, and will start blocking them.",
+  /**
+   * @description This is a deprecated warning to developers that a field in a structure has been renamed.
+   */
+  InterestGroupDailyUpdateUrl: "The `dailyUpdateUrl` field of `InterestGroups` passed to `joinAdInterestGroup()` has been renamed to `updateUrl`, to more accurately reflect its behavior.",
+  /**
+   * @description Warning displayed to developers that instead of calling the `Intl.v8BreakIterator` constructor, which is not a standard JavaScript API, use ECMA402 standard API Intl.Segmenter shipped in end of 2020 instead.
+   */
+  IntlV8BreakIterator: "`Intl.v8BreakIterator` is deprecated. Please use `Intl.Segmenter` instead.",
+  /**
+   * @description Warning for using deprecated 'inputQuota' attribute.
+   */
+  LanguageModel_InputQuota: "LanguageModel.inputQuota is deprecated. Please use LanguageModel.contextWindow instead. This alias is only available in extensions.",
+  /**
+   * @description Warning for using deprecated 'inputUsage' attribute.
+   */
+  LanguageModel_InputUsage: "LanguageModel.inputUsage is deprecated. Please use LanguageModel.contextUsage instead. This alias is only available in extensions.",
+  /**
+   * @description Warning for using deprecated 'measureInputUsage' method.
+   */
+  LanguageModel_MeasureInputUsage: "LanguageModel.measureInputUsage() is deprecated. Please use LanguageModel.measureContextUsage() instead. This alias is only available in extensions.",
+  /**
+   * @description Warning for using deprecated 'onquotaoverflow' event handler.
+   */
+  LanguageModel_OnQuotaOverflow: "LanguageModel.onquotaoverflow is deprecated. Please use LanguageModel.oncontextoverflow instead. The LanguageModel.onquotaoverflow alias is only available in extensions.",
+  /**
+   * @description Warning message for web developers when they call the deprecated LanguageModel.params() method.
+   */
+  LanguageModelParams: "LanguageModel.params() is deprecated and now only available in extension contexts. The topK and temperature related fields within its result are also deprecated.",
+  /**
+   * @description Warning message for web developers when they use the deprecated 'temperature' option in LanguageModel.create() or access the .temperature attribute.
+   */
+  LanguageModelTemperature: "The 'temperature' parameter/attribute for LanguageModel is deprecated. It is only functional within extensions and may be removed in the future.",
+  /**
+   * @description Warning message for web developers when they use the deprecated 'topK' option in LanguageModel.create() or access the .topK attribute.
+   */
+  LanguageModelTopK: "The 'topK' parameter/attribute for LanguageModel is deprecated. It is only functional within extensions and may be removed in the future.",
+  /**
+   * @description This warning occurs when a stylesheet loaded from a local file directive does not end in the file type `.css`.
+   */
+  LocalCSSFileExtensionRejected: "CSS cannot be loaded from `file:` URLs unless they end in a `.css` file extension.",
+  /**
+   * @description This warning occurs when the browser requests Web MIDI access as sysex (system exclusive messages) can be allowed via prompt even if the browser did not specifically request it.
+   */
+  NoSysexWebMIDIWithoutPermission: "Web MIDI will ask a permission to use even if the sysex is not specified in the `MIDIOptions`.",
+  /**
+   * @description Warning displayed to developers when the Notification API is used from an insecure origin (one that isn't localhost or doesn't use HTTPS) to notify them that this use is no longer supported.
+   */
+  NotificationInsecureOrigin: "The Notification API may no longer be used from insecure origins. You should consider switching your application to a secure origin, such as HTTPS. See https://www.chromium.org/Home/chromium-security/deprecating-powerful-features-on-insecure-origins/ for more details.",
+  /**
+   * @description Warning displayed to developers when permission to use notifications has been requested by a cross-origin iframe, to notify them that this use is no longer supported.
+   */
+  NotificationPermissionRequestedIframe: "Permission for the Notification API may no longer be requested from a cross-origin iframe. You should consider requesting permission from a top-level frame or opening a new window instead.",
+  /**
+   * @description Warning displayed to developers when CreateImageBitmap is used with the newly deprecated option imageOrientation: 'none'.
+   */
+  ObsoleteCreateImageBitmapImageOrientationNone: "Option `imageOrientation: 'none'` in createImageBitmap is deprecated. Please use createImageBitmap with option '{imageOrientation: 'from-image'}' instead.",
+  /**
+   * @description This warning occurs when the WebRTC protocol attempts to negotiate a connection using an obsolete cipher and risks connection security.
+   */
+  ObsoleteWebRtcCipherSuite: "Your partner is negotiating an obsolete (D)TLS version. Please check with your partner to have this fixed.",
+  /**
+   * @description Warning displayed to developers that use overflow:visible for replaced elements. This declaration was earlier ignored but will now change the element's painting based on whether the overflow value allows the element to paint outside its bounds.
+   */
+  OverflowVisibleOnReplacedElement: "Specifying `overflow: visible` on img, video and canvas tags may cause them to produce visual content outside of the element bounds. See https://github.com/WICG/shared-element-transitions/blob/main/debugging_overflow_on_images.md.",
+  /**
+   * @description Warning displayed to developers when they use a Flash Embed URLS to let them know that the browser will not automatically link to their equivalent HTML5 link.
+   */
+  OverrideFlashEmbedwithHTML: "Legacy flash video embed has been rewritten to HTML iframe. Flash is long gone, this rewriting hack is deprecated and may be removed in the future.",
+  /**
+   * @description Warning displayed to developers when they use the PaymentInstruments API to let them know this API is deprecated.
+   */
+  PaymentInstruments: "`paymentManager.instruments` is deprecated. Please use just-in-time install for payment handlers instead.",
+  /**
+   * @description Warning displayed to developers when their Web Payment API usage violates their Content-Security-Policy (CSP) connect-src directive to let them know this CSP bypass has been deprecated.
+   */
+  PaymentRequestCSPViolation: "Your `PaymentRequest` call bypassed Content-Security-Policy (CSP) `connect-src` directive. This bypass is deprecated. Please add the payment method identifier from the `PaymentRequest` API (in `supportedMethods` field) to your CSP `connect-src` directive.",
+  /**
+   * @description Warning displayed to developers when persistent storage type is used to notify that storage type is deprecated.
+   */
+  PersistentQuotaType: "`StorageType.persistent` is deprecated. Please use standardized `navigator.storage` instead.",
+  /**
+   * @description This issue indicates that a `<source>` element with a `<picture>` parent was using an `src` attribute, which is not valid and is ignored by the browser. The `srcset` attribute should be used instead.
+   */
+  PictureSourceSrc: "`<source src>` with a `<picture>` parent is invalid and therefore ignored. Please use `<source srcset>` instead.",
+  /**
+   * @description Warning displayed to developers when the vendor-prefixed method (webkitCancelAnimationFrame) is used rather than the equivalent unprefixed method (cancelAnimationFrame).
+   */
+  PrefixedCancelAnimationFrame: "webkitCancelAnimationFrame is vendor-specific. Please use the standard cancelAnimationFrame instead.",
+  /**
+   * @description Warning displayed to developers when the vendor-prefixed method (webkitRequestAnimationFrame) is used rather than the equivalent unprefixed method (requestAnimationFrame).
+   */
+  PrefixedRequestAnimationFrame: "webkitRequestAnimationFrame is vendor-specific. Please use the standard requestAnimationFrame instead.",
+  /**
+   * @description Standard message when one web API is deprecated in favor of another.
+   */
+  PrefixedVideoDisplayingFullscreen: "HTMLVideoElement.webkitDisplayingFullscreen is deprecated. Please use Document.fullscreenElement instead.",
+  /**
+   * @description Standard message when one web API is deprecated in favor of another.
+   */
+  PrefixedVideoEnterFullScreen: "HTMLVideoElement.webkitEnterFullScreen() is deprecated. Please use Element.requestFullscreen() instead.",
+  /**
+   * @description Standard message when one web API is deprecated in favor of another.
+   */
+  PrefixedVideoEnterFullscreen: "HTMLVideoElement.webkitEnterFullscreen() is deprecated. Please use Element.requestFullscreen() instead.",
+  /**
+   * @description Standard message when one web API is deprecated in favor of another.
+   */
+  PrefixedVideoExitFullScreen: "HTMLVideoElement.webkitExitFullScreen() is deprecated. Please use Document.exitFullscreen() instead.",
+  /**
+   * @description Standard message when one web API is deprecated in favor of another.
+   */
+  PrefixedVideoExitFullscreen: "HTMLVideoElement.webkitExitFullscreen() is deprecated. Please use Document.exitFullscreen() instead.",
+  /**
+   * @description Standard message when one web API is deprecated in favor of another.
+   */
+  PrefixedVideoSupportsFullscreen: "HTMLVideoElement.webkitSupportsFullscreen is deprecated. Please use Document.fullscreenEnabled instead.",
+  /**
+   * @description Warning displayed to developers when an SVG filter is applied to a disallowed content type.
+   */
+  PreventSvgFilterPaint: "SVG filters cannot be applied to cross-origin iframes, restricted iframes (e.g., sandboxed), or plugins.",
+  /**
+   * @description Standard message when one web API is deprecated in favor of another.
+   */
+  RangeExpand: "Range.expand() is deprecated. Please use Selection.modify() instead.",
+  /**
+   * @description A deprecation warning shown in the DevTools Issues tab. It's shown when the Storage Access API is automatically granted by Related Website Sets. The placeholder will always be the string `Related Website Sets`.
+   */
+  RelatedWebsiteSets: "`Related Website Sets` is deprecated and will be removed. See https://privacysandbox.com/news/update-on-plans-for-privacy-sandbox-technologies/ for more details.",
+  /**
+   * @description This warning occurs when a subresource loaded by a page has a URL with an authority portion. These are disallowed.
+   */
+  RequestedSubresourceWithEmbeddedCredentials: "Subresource requests whose URLs contain embedded credentials (e.g. `https://user:pass@host/`) are blocked.",
+  /**
+   * @description A deprecation warning shown in the DevTools Issues tab. It's shown when a video conferencing website attempts to use a non-standard crypto method when performing a handshake to set up a connection with another endpoint.
+   */
+  RTCConstraintEnableDtlsSrtpFalse: "The constraint `DtlsSrtpKeyAgreement` is removed. You have specified a `false` value for this constraint, which is interpreted as an attempt to use the removed `SDES key negotiation` method. This functionality is removed; use a service that supports `DTLS key negotiation` instead.",
+  /**
+   * @description A deprecation warning shown in the DevTools Issues tab. It's shown when a video conferencing website uses a non-standard API for controlling the crypto method used, but is not having an effect because the desired behavior is already enabled-by-default.
+   */
+  RTCConstraintEnableDtlsSrtpTrue: "The constraint `DtlsSrtpKeyAgreement` is removed. You have specified a `true` value for this constraint, which had no effect, but you can remove this constraint for tidiness.",
+  /**
+   * @description WebRTC is set of JavaScript APIs for sending and receiving data, audio and video. getStats() is a method used to obtain network and quality metrics. There are two versions of this method, one is being deprecated because it is non-standard.
+   */
+  RTCPeerConnectionGetStatsLegacyNonCompliant: "The callback-based getStats() is deprecated and will be removed. Use the spec-compliant getStats() instead.",
+  /**
+   * @description A deprecation warning shown in the DevTools Issues tab. It's shown then a video conferencing website attempts to use the `RTCP MUX` policy.
+   */
+  RtcpMuxPolicyNegotiate: "The `rtcpMuxPolicy` option is deprecated and will be removed.",
+  /**
+   * @description A deprecation warning shown in the DevTools Issues tab. The placeholder is always the noun 'SharedArrayBuffer' which refers to a JavaScript construct.
+   */
+  SharedArrayBufferConstructedWithoutIsolation: "`SharedArrayBuffer` will require cross-origin isolation. See https://developer.chrome.com/blog/enabling-shared-array-buffer/ for more details.",
+  /**
+   * @description A deprecation warning shown in the DevTools Issues tab. It's shown when one of the Shared Storage APIs like `sharedStorage.set()`, `sharedStorage.worklet.addModule()`, `sharedStorage.selectURL()`, etc., along with `<img sharedstoragewritable>`, `<iframe sharedstoragewritable>`, or `fetch(url, {sharedStorageWritable: true})` are used.
+   */
+  SharedStorage: "The Shared Storage API is deprecated and will be removed in a future release.",
+  /**
+   * @description A deprecation warning shown in the DevTools Issues tab. It's shown when the `document.requestStorageAccessFor` API is called. The placeholder will always be the string `document.requestStorageAccessFor`.
+   */
+  StorageAccessAPI_requestStorageAccessFor_Method: "`document.requestStorageAccessFor` is deprecated and will be removed. See https://privacysandbox.com/news/update-on-plans-for-privacy-sandbox-technologies/ for more details.",
+  /**
+   * @description A deprecation warning shown in the DevTools Issues tab. It's shown when the speech synthesis API is called before the page receives a user activation.
+   */
+  TextToSpeech_DisallowedByAutoplay: "`speechSynthesis.speak()` without user activation is deprecated and will be removed.",
+  /**
+   * @description A deprecation warning shown in the DevTools Issues tab. It's shown when one of the Topics APIs like `document.browsingTopics()`, `<img browsingtopics>`, `<iframe browsingtopics>`, or `fetch(url, {browsingTopics: true})` are used.
+   */
+  Topics: "The Topics API is deprecated and will be removed in a future release.",
+  /**
+   * @description A deprecation warning shown in the DevTools Issues tab. It's shown when a listener for the `unload` event is added.
+   */
+  UnloadHandler: "Unload event listeners are deprecated and will be removed.",
+  /**
+   * @description A deprecation warning shown in the DevTools Issues tab. The placeholder is always the noun 'SharedArrayBuffer' which refers to a JavaScript construct. 'Extensions' refers to Chrome extensions. The warning is shown when Chrome Extensions attempt to use 'SharedArrayBuffer's under insecure circumstances.
+   */
+  V8SharedArrayBufferConstructedInExtensionWithoutIsolation: "Extensions should opt into cross-origin isolation to continue using `SharedArrayBuffer`. See https://developer.chrome.com/docs/extensions/mv3/cross-origin-isolation/.",
+  /**
+   * @description This warning occurs when the deprecated `BluetoothRemoteGATTCharacteristic.writeValue()` method is used. Developers should use `writeValueWithResponse()` or `writeValueWithoutResponse()` instead.
+   */
+  WebBluetoothRemoteCharacteristicWriteValue: "`BluetoothRemoteGATTCharacteristic.writeValue()` is deprecated. Use `writeValueWithResponse()` or `writeValueWithoutResponse()` instead.",
+  /**
+   * @description Warning for using the deprecated 'incomingHighWaterMark' attribute on WebTransportDatagramDuplexStream. Developers should use 'incomingMaxBufferedDatagrams' instead.
+   */
+  WebTransportDatagramDuplexStreamIncomingHighWaterMark: "WebTransportDatagramDuplexStream.incomingHighWaterMark has been renamed to incomingMaxBufferedDatagrams. incomingHighWaterMark will be removed in a future version of Chrome.",
+  /**
+   * @description Warning for using the deprecated 'outgoingHighWaterMark' attribute on WebTransportDatagramDuplexStream. Developers should use 'outgoingMaxBufferedDatagrams' instead.
+   */
+  WebTransportDatagramDuplexStreamOutgoingHighWaterMark: "WebTransportDatagramDuplexStream.outgoingHighWaterMark has been renamed to outgoingMaxBufferedDatagrams. outgoingHighWaterMark will be removed in a future version of Chrome.",
+  /**
+   * @description Warning displayed to developers that they are using `XMLHttpRequest` API in a way that they expect an unsupported character encoding `UTF-16` could be used in the server reply.
+   */
+  XHRJSONEncodingDetection: "UTF-16 is not supported by response json in `XMLHttpRequest`",
+  /**
+   * @description Warning displayed to developers. It is shown when the `XMLHttpRequest` API is used in a way that it slows down the page load of the next page. The `main thread` refers to an operating systems thread used to run most of the processing of HTML documents, so please use a consistent wording.
+   */
+  XMLHttpRequestSynchronousInNonWorkerOutsideBeforeUnload: "Synchronous `XMLHttpRequest` on the main thread is deprecated because of its detrimental effects to the end user's experience. For more help, check https://xhr.spec.whatwg.org/.",
+  /**
+   * @description Warning displayed to developers that they are using either the XSLTProcessor API, or XSLT processing instructions, both of which have been deprecated and are scheduled to be removed.
+   */
+  XSLT: "XSLTProcessor and XSLT Processing Instructions have been deprecated by all browsers. These features will be removed from this browser soon."
+};
+var DEPRECATIONS_METADATA = {
+  "AttributionReporting": {
+    "chromeStatusFeature": 6320639375966208
+  },
+  "AuthorizationCoveredByWildcard": {
+    "milestone": 97
+  },
+  "CSSSelectorInternalMediaControlsOverlayCastButton": {
+    "chromeStatusFeature": 5714245488476160
+  },
+  "CSSValueAppearanceSliderVertical": {
+    "chromeStatusFeature": 6001359429566464
+  },
+  "CanRequestURLHTTPContainingNewline": {
+    "chromeStatusFeature": 5735596811091968
+  },
+  "ChromeLoadTimesConnectionInfo": {
+    "chromeStatusFeature": 5637885046816768
+  },
+  "ChromeLoadTimesFirstPaintAfterLoadTime": {
+    "chromeStatusFeature": 5637885046816768
+  },
+  "ChromeLoadTimesWasAlternateProtocolAvailable": {
+    "chromeStatusFeature": 5637885046816768
+  },
+  "CrossOriginAccessBasedOnDocumentDomain": {
+    "milestone": 115
+  },
+  "DataUrlInSvgUse": {
+    "chromeStatusFeature": 5128825141198848,
+    "milestone": 119
+  },
+  "DigitalCredentialsUnknownProtocol": {
+    "chromeStatusFeature": 6492906882990080,
+    "milestone": 160
+  },
+  "DocumentCreateEventKeyboardEvents": {
+    "chromeStatusFeature": 5095987863486464,
+    "milestone": 151
+  },
+  "DocumentCreateEventTransitionEvent": {
+    "chromeStatusFeature": 5095987863486464,
+    "milestone": 151
+  },
+  "IdentityInCanMakePaymentEvent": {
+    "chromeStatusFeature": 5190978431352832
+  },
+  "InsecurePrivateNetworkSubresourceRequest": {
+    "chromeStatusFeature": 5436853517811712,
+    "milestone": 92
+  },
+  "LanguageModelParams": {
+    "chromeStatusFeature": 5134603979063296
+  },
+  "LanguageModelTemperature": {
+    "chromeStatusFeature": 5134603979063296
+  },
+  "LanguageModelTopK": {
+    "chromeStatusFeature": 5134603979063296
+  },
+  "LanguageModel_InputQuota": {
+    "chromeStatusFeature": 5134603979063296
+  },
+  "LanguageModel_InputUsage": {
+    "chromeStatusFeature": 5134603979063296
+  },
+  "LanguageModel_MeasureInputUsage": {
+    "chromeStatusFeature": 5134603979063296
+  },
+  "LanguageModel_OnQuotaOverflow": {
+    "chromeStatusFeature": 5134603979063296
+  },
+  "LocalCSSFileExtensionRejected": {
+    "milestone": 64
+  },
+  "NoSysexWebMIDIWithoutPermission": {
+    "chromeStatusFeature": 5138066234671104,
+    "milestone": 82
+  },
+  "NotificationPermissionRequestedIframe": {
+    "chromeStatusFeature": 6451284559265792
+  },
+  "ObsoleteCreateImageBitmapImageOrientationNone": {
+    "milestone": 111
+  },
+  "ObsoleteWebRtcCipherSuite": {
+    "milestone": 81
+  },
+  "OverflowVisibleOnReplacedElement": {
+    "chromeStatusFeature": 5137515594383360,
+    "milestone": 108
+  },
+  "OverrideFlashEmbedwithHTML": {
+    "milestone": 140
+  },
+  "PaymentInstruments": {
+    "chromeStatusFeature": 5099285054488576
+  },
+  "PaymentRequestCSPViolation": {
+    "chromeStatusFeature": 6286595631087616
+  },
+  "PersistentQuotaType": {
+    "chromeStatusFeature": 5176235376246784,
+    "milestone": 106
+  },
+  "PreventSvgFilterPaint": {
+    "chromeStatusFeature": 5117170452398080
+  },
+  "RTCConstraintEnableDtlsSrtpFalse": {
+    "milestone": 97
+  },
+  "RTCConstraintEnableDtlsSrtpTrue": {
+    "milestone": 97
+  },
+  "RTCPeerConnectionGetStatsLegacyNonCompliant": {
+    "chromeStatusFeature": 4631626228695040,
+    "milestone": 117
+  },
+  "RelatedWebsiteSets": {
+    "chromeStatusFeature": 5194473869017088
+  },
+  "RequestedSubresourceWithEmbeddedCredentials": {
+    "chromeStatusFeature": 5669008342777856
+  },
+  "RtcpMuxPolicyNegotiate": {
+    "chromeStatusFeature": 5654810086866944,
+    "milestone": 62
+  },
+  "SharedArrayBufferConstructedWithoutIsolation": {
+    "milestone": 106
+  },
+  "SharedStorage": {
+    "chromeStatusFeature": 5076349064708096
+  },
+  "StorageAccessAPI_requestStorageAccessFor_Method": {
+    "chromeStatusFeature": 5162221567082496
+  },
+  "TextToSpeech_DisallowedByAutoplay": {
+    "chromeStatusFeature": 5687444770914304,
+    "milestone": 71
+  },
+  "UnloadHandler": {
+    "chromeStatusFeature": 5579556305502208
+  },
+  "V8SharedArrayBufferConstructedInExtensionWithoutIsolation": {
+    "milestone": 96
+  },
+  "WebBluetoothRemoteCharacteristicWriteValue": {
+    "chromeStatusFeature": 5088568590598144
+  },
+  "WebTransportDatagramDuplexStreamIncomingHighWaterMark": {
+    "chromeStatusFeature": 5143839699501056,
+    "milestone": 156
+  },
+  "WebTransportDatagramDuplexStreamOutgoingHighWaterMark": {
+    "chromeStatusFeature": 5143839699501056,
+    "milestone": 156
+  },
+  "XHRJSONEncodingDetection": {
+    "milestone": 93
+  },
+  "XSLT": {
+    "chromeStatusFeature": 4709671889534976,
+    "milestone": 143
+  }
+};
+
+// gen/front_end/models/issues_manager/DeprecationIssue.js
+var UIStrings10 = {
+  /**
+   * @description This links to the Chrome feature status page when one exists.
+   */
+  feature: "Check the feature status page for more details.",
+  /**
+   * @description This links to the Chromium Dash schedule when a milestone is set.
+   * @example {100} milestone
+   */
+  milestone: "This change will go into effect with milestone {milestone}.",
+  /**
+   * @description Title of issue raised when a deprecated feature is used.
+   */
+  title: "Deprecated feature used"
+};
+var str_9 = i18n17.i18n.registerUIStrings("models/issues_manager/DeprecationIssue.ts", UIStrings10);
+var i18nLazyString6 = i18n17.i18n.getLazilyComputedLocalizedString.bind(void 0, str_9);
+var strDeprecation = i18n17.i18n.registerUIStrings("generated/Deprecation.ts", UIStrings9);
+var i18nLazyDeprecationString = i18n17.i18n.getLazilyComputedLocalizedString.bind(void 0, strDeprecation);
+var DeprecationIssue = class _DeprecationIssue extends Issue {
+  constructor(issueDetails, issuesModel) {
+    const issueCode = [
+      "DeprecationIssue",
+      issueDetails.type
+    ].join("::");
+    super({ code: issueCode, umaCode: "DeprecationIssue" }, issueDetails, issuesModel);
+  }
+  getCategory() {
+    return "Other";
+  }
+  getDescription() {
+    let messageFunction = () => "";
+    const maybeEnglishMessage = UIStrings9[this.details().type];
+    if (maybeEnglishMessage) {
+      messageFunction = i18nLazyDeprecationString(maybeEnglishMessage);
+    }
+    const links = [];
+    const deprecationMeta = DEPRECATIONS_METADATA[this.details().type];
+    const feature = deprecationMeta?.chromeStatusFeature ?? 0;
+    if (feature !== 0) {
+      links.push({
+        link: `https://chromestatus.com/feature/${feature}`,
+        linkTitle: i18nLazyString6(UIStrings10.feature)
+      });
+    }
+    const milestone = deprecationMeta?.milestone ?? 0;
+    if (milestone !== 0) {
+      links.push({
+        link: "https://chromiumdash.appspot.com/schedule",
+        linkTitle: i18nLazyString6(UIStrings10.milestone, { milestone })
+      });
+    }
+    return resolveLazyDescription({
+      file: "deprecation.md",
+      substitutions: /* @__PURE__ */ new Map([
+        ["PLACEHOLDER_title", i18nLazyString6(UIStrings10.title)],
+        ["PLACEHOLDER_message", messageFunction]
+      ]),
+      links
+    });
+  }
+  sources() {
+    if (this.details().sourceCodeLocation) {
+      return [this.details().sourceCodeLocation];
+    }
+    return [];
+  }
+  primaryKey() {
+    return JSON.stringify(this.details());
+  }
+  getKind() {
+    return "BreakingChange";
+  }
+  static fromInspectorIssue(issuesModel, inspectorIssue) {
+    const details = inspectorIssue.details.deprecationIssueDetails;
+    if (!details) {
+      console.warn("Deprecation issue without details received.");
+      return [];
+    }
+    return [new _DeprecationIssue(details, issuesModel)];
+  }
+};
+
+// gen/front_end/models/issues_manager/ElementAccessibilityIssue.js
+var ElementAccessibilityIssue_exports = {};
+__export(ElementAccessibilityIssue_exports, {
+  ElementAccessibilityIssue: () => ElementAccessibilityIssue
+});
+var ElementAccessibilityIssue = class _ElementAccessibilityIssue extends Issue {
+  constructor(issueDetails, issuesModel, issueId) {
+    const issueCode = [
+      "ElementAccessibilityIssue",
+      issueDetails.elementAccessibilityIssueReason
+    ].join("::");
+    super(issueCode, issueDetails, issuesModel, issueId);
+  }
+  primaryKey() {
+    return JSON.stringify(this.details());
+  }
+  getDescription() {
+    if (this.isInteractiveContentAttributesSelectDescendantIssue()) {
+      return {
+        file: "selectElementAccessibilityInteractiveContentAttributesSelectDescendant.md",
+        links: []
+      };
+    }
+    const description = issueDescriptions5.get(this.details().elementAccessibilityIssueReason);
+    if (!description) {
+      return null;
+    }
+    return resolveLazyDescription(description);
+  }
+  getKind() {
+    return "PageError";
+  }
+  getCategory() {
+    return "Other";
+  }
+  isInteractiveContentAttributesSelectDescendantIssue() {
+    return this.details().hasDisallowedAttributes && (this.details().elementAccessibilityIssueReason !== "InteractiveContentOptionChild" && this.details().elementAccessibilityIssueReason !== "InteractiveContentSummaryDescendant");
+  }
+  static fromInspectorIssue(issuesModel, inspectorIssue) {
+    const elementAccessibilityIssueDetails = inspectorIssue.details.elementAccessibilityIssueDetails;
+    if (!elementAccessibilityIssueDetails) {
+      console.warn("Element Accessibility issue without details received.");
+      return [];
+    }
+    return [new _ElementAccessibilityIssue(elementAccessibilityIssueDetails, issuesModel, inspectorIssue.issueId)];
+  }
+};
+var issueDescriptions5 = /* @__PURE__ */ new Map([
+  [
+    "DisallowedSelectChild",
+    {
+      file: "selectElementAccessibilityDisallowedSelectChild.md",
+      links: []
+    }
+  ],
+  [
+    "DisallowedOptGroupChild",
+    {
+      file: "selectElementAccessibilityDisallowedOptGroupChild.md",
+      links: []
+    }
+  ],
+  [
+    "NonPhrasingContentOptionChild",
+    {
+      file: "selectElementAccessibilityNonPhrasingContentOptionChild.md",
+      links: []
+    }
+  ],
+  [
+    "InteractiveContentOptionChild",
+    {
+      file: "selectElementAccessibilityInteractiveContentOptionChild.md",
+      links: []
+    }
+  ],
+  [
+    "InteractiveContentLegendChild",
+    {
+      file: "selectElementAccessibilityInteractiveContentLegendChild.md",
+      links: []
+    }
+  ],
+  [
+    "InteractiveContentSummaryDescendant",
+    {
+      file: "summaryElementAccessibilityInteractiveContentSummaryDescendant.md",
+      links: []
+    }
+  ]
+]);
+
+// gen/front_end/models/issues_manager/EmailVerificationRequestIssue.js
+var EmailVerificationRequestIssue_exports = {};
+__export(EmailVerificationRequestIssue_exports, {
+  EmailVerificationRequestIssue: () => EmailVerificationRequestIssue
+});
+import * as i18n19 from "./..\\..\\core\\i18n\\i18n.js";
+var UIStrings11 = {
+  /**
+   * @description Title for Email Verification Protocol specification URL link.
+   */
+  emailVerification: "Email Verification Protocol"
+};
+var str_10 = i18n19.i18n.registerUIStrings("models/issues_manager/EmailVerificationRequestIssue.ts", UIStrings11);
+var i18nLazyString7 = i18n19.i18n.getLazilyComputedLocalizedString.bind(void 0, str_10);
+var EmailVerificationRequestIssue = class _EmailVerificationRequestIssue extends Issue {
+  constructor(issueDetails, issuesModel) {
+    super({
+      code: "EmailVerificationRequestIssue",
+      umaCode: [
+        "EmailVerificationRequestIssue",
+        issueDetails.emailVerificationRequestIssueReason
+      ].join("::")
+    }, issueDetails, issuesModel);
+  }
+  getCategory() {
+    return "Other";
+  }
+  getDescription() {
+    const description = issueDescriptions6.get(this.details().emailVerificationRequestIssueReason);
+    if (!description) {
+      return null;
+    }
+    return resolveLazyDescription(description);
+  }
+  primaryKey() {
+    return JSON.stringify(this.details());
+  }
+  getKind() {
+    return "PageError";
+  }
+  static fromInspectorIssue(issuesModel, inspectorIssue) {
+    const details = inspectorIssue.details.emailVerificationRequestIssueDetails;
+    if (!details) {
+      console.warn("Email verification request issue without details received.");
+      return [];
+    }
+    return [new _EmailVerificationRequestIssue(details, issuesModel)];
+  }
+};
+var issueDescriptions6 = /* @__PURE__ */ new Map([
+  [
+    "InvalidEmail",
+    {
+      file: "emailVerificationRequestInvalidEmail.md",
+      links: [{
+        link: "https://github.com/WICG/email-verification-protocol",
+        linkTitle: i18nLazyString7(UIStrings11.emailVerification)
+      }]
+    }
+  ],
+  [
+    "DnsFetchFailed",
+    {
+      file: "emailVerificationRequestDnsFetchFailed.md",
+      links: [{
+        link: "https://github.com/WICG/email-verification-protocol",
+        linkTitle: i18nLazyString7(UIStrings11.emailVerification)
+      }]
+    }
+  ],
+  [
+    "DnsInvalidRecord",
+    {
+      file: "emailVerificationRequestDnsInvalidRecord.md",
+      links: [{
+        link: "https://github.com/WICG/email-verification-protocol",
+        linkTitle: i18nLazyString7(UIStrings11.emailVerification)
+      }]
+    }
+  ],
+  [
+    "WellKnownHttpNotFound",
+    {
+      file: "emailVerificationRequestWellKnownHttpNotFound.md",
+      links: [{
+        link: "https://github.com/WICG/email-verification-protocol",
+        linkTitle: i18nLazyString7(UIStrings11.emailVerification)
+      }]
+    }
+  ],
+  [
+    "WellKnownNoResponse",
+    {
+      file: "emailVerificationRequestWellKnownNoResponse.md",
+      links: [{
+        link: "https://github.com/WICG/email-verification-protocol",
+        linkTitle: i18nLazyString7(UIStrings11.emailVerification)
+      }]
+    }
+  ],
+  [
+    "WellKnownInvalidResponse",
+    {
+      file: "emailVerificationRequestWellKnownInvalidResponse.md",
+      links: [{
+        link: "https://github.com/WICG/email-verification-protocol",
+        linkTitle: i18nLazyString7(UIStrings11.emailVerification)
+      }]
+    }
+  ],
+  [
+    "WellKnownListEmpty",
+    {
+      file: "emailVerificationRequestWellKnownListEmpty.md",
+      links: [{
+        link: "https://github.com/WICG/email-verification-protocol",
+        linkTitle: i18nLazyString7(UIStrings11.emailVerification)
+      }]
+    }
+  ],
+  [
+    "WellKnownInvalidContentType",
+    {
+      file: "emailVerificationRequestWellKnownInvalidContentType.md",
+      links: [{
+        link: "https://github.com/WICG/email-verification-protocol",
+        linkTitle: i18nLazyString7(UIStrings11.emailVerification)
+      }]
+    }
+  ],
+  [
+    "WellKnownMissingIssuanceEndpoint",
+    {
+      file: "emailVerificationRequestWellKnownMissingIssuanceEndpoint.md",
+      links: [{
+        link: "https://github.com/WICG/email-verification-protocol",
+        linkTitle: i18nLazyString7(UIStrings11.emailVerification)
+      }]
+    }
+  ],
+  [
+    "WellKnownIssuanceEndpointCrossOrigin",
+    {
+      file: "emailVerificationRequestWellKnownIssuanceEndpointCrossOrigin.md",
+      links: [{
+        link: "https://github.com/WICG/email-verification-protocol",
+        linkTitle: i18nLazyString7(UIStrings11.emailVerification)
+      }]
+    }
+  ],
+  [
+    "WellKnownUnsupportedSigningAlgorithm",
+    {
+      file: "emailVerificationRequestWellKnownUnsupportedSigningAlgorithm.md",
+      links: [{
+        link: "https://github.com/WICG/email-verification-protocol",
+        linkTitle: i18nLazyString7(UIStrings11.emailVerification)
+      }]
+    }
+  ],
+  [
+    "TokenHttpNotFound",
+    {
+      file: "emailVerificationRequestTokenHttpNotFound.md",
+      links: [{
+        link: "https://github.com/WICG/email-verification-protocol",
+        linkTitle: i18nLazyString7(UIStrings11.emailVerification)
+      }]
+    }
+  ],
+  [
+    "TokenNoResponse",
+    {
+      file: "emailVerificationRequestTokenNoResponse.md",
+      links: [{
+        link: "https://github.com/WICG/email-verification-protocol",
+        linkTitle: i18nLazyString7(UIStrings11.emailVerification)
+      }]
+    }
+  ],
+  [
+    "TokenInvalidResponse",
+    {
+      file: "emailVerificationRequestTokenInvalidResponse.md",
+      links: [{
+        link: "https://github.com/WICG/email-verification-protocol",
+        linkTitle: i18nLazyString7(UIStrings11.emailVerification)
+      }]
+    }
+  ],
+  [
+    "TokenInvalidContentType",
+    {
+      file: "emailVerificationRequestTokenInvalidContentType.md",
+      links: [{
+        link: "https://github.com/WICG/email-verification-protocol",
+        linkTitle: i18nLazyString7(UIStrings11.emailVerification)
+      }]
+    }
+  ],
+  [
+    "TokenMalformedSdJwt",
+    {
+      file: "emailVerificationRequestTokenMalformedSdJwt.md",
+      links: [{
+        link: "https://github.com/WICG/email-verification-protocol",
+        linkTitle: i18nLazyString7(UIStrings11.emailVerification)
+      }]
+    }
+  ],
+  [
+    "TokenInvalidSdJwt",
+    {
+      file: "emailVerificationRequestTokenInvalidSdJwt.md",
+      links: [{
+        link: "https://github.com/WICG/email-verification-protocol",
+        linkTitle: i18nLazyString7(UIStrings11.emailVerification)
+      }]
+    }
+  ],
+  [
+    "KeyBindingSigningFailed",
+    {
+      file: "emailVerificationRequestKeyBindingSigningFailed.md",
+      links: [{
+        link: "https://github.com/WICG/email-verification-protocol",
+        linkTitle: i18nLazyString7(UIStrings11.emailVerification)
+      }]
+    }
+  ],
+  [
+    "RpOriginIsOpaque",
+    {
+      file: "emailVerificationRequestRpOriginIsOpaque.md",
+      links: [{
+        link: "https://github.com/WICG/email-verification-protocol",
+        linkTitle: i18nLazyString7(UIStrings11.emailVerification)
+      }]
+    }
+  ],
+  [
+    "WellKnownMissingAccountsEndpoint",
+    {
+      file: "emailVerificationRequestWellKnownMissingAccountsEndpoint.md",
+      links: [{
+        link: "https://github.com/WICG/email-verification-protocol",
+        linkTitle: i18nLazyString7(UIStrings11.emailVerification)
+      }]
+    }
+  ],
+  [
+    "UserLoggedOut",
+    {
+      file: "emailVerificationRequestUserLoggedOut.md",
+      links: [{
+        link: "https://github.com/WICG/email-verification-protocol",
+        linkTitle: i18nLazyString7(UIStrings11.emailVerification)
+      }]
+    }
+  ],
+  [
+    "WellKnownAccountsEndpointCrossOrigin",
+    {
+      file: "emailVerificationRequestWellKnownAccountsEndpointCrossOrigin.md",
+      links: [{
+        link: "https://github.com/WICG/email-verification-protocol",
+        linkTitle: i18nLazyString7(UIStrings11.emailVerification)
+      }]
+    }
+  ],
+  [
+    "AccountsHttpNotFound",
+    {
+      file: "emailVerificationRequestAccountsHttpNotFound.md",
+      links: [{
+        link: "https://github.com/WICG/email-verification-protocol",
+        linkTitle: i18nLazyString7(UIStrings11.emailVerification)
+      }]
+    }
+  ],
+  [
+    "AccountsNoResponse",
+    {
+      file: "emailVerificationRequestAccountsNoResponse.md",
+      links: [{
+        link: "https://github.com/WICG/email-verification-protocol",
+        linkTitle: i18nLazyString7(UIStrings11.emailVerification)
+      }]
+    }
+  ],
+  [
+    "AccountsInvalidResponse",
+    {
+      file: "emailVerificationRequestAccountsInvalidResponse.md",
+      links: [{
+        link: "https://github.com/WICG/email-verification-protocol",
+        linkTitle: i18nLazyString7(UIStrings11.emailVerification)
+      }]
+    }
+  ],
+  [
+    "AccountsInvalidContentType",
+    {
+      file: "emailVerificationRequestAccountsInvalidContentType.md",
+      links: [{
+        link: "https://github.com/WICG/email-verification-protocol",
+        linkTitle: i18nLazyString7(UIStrings11.emailVerification)
+      }]
+    }
+  ],
+  [
+    "AccountsEmptyList",
+    {
+      file: "emailVerificationRequestAccountsEmptyList.md",
+      links: [{
+        link: "https://github.com/WICG/email-verification-protocol",
+        linkTitle: i18nLazyString7(UIStrings11.emailVerification)
+      }]
+    }
+  ],
+  [
+    "EmailVerificationWellKnownHttpNotFound",
+    {
+      file: "emailVerificationRequestEmailVerificationWellKnownHttpNotFound.md",
+      links: [{
+        link: "https://github.com/WICG/email-verification-protocol",
+        linkTitle: i18nLazyString7(UIStrings11.emailVerification)
+      }]
+    }
+  ],
+  [
+    "EmailVerificationWellKnownNoResponse",
+    {
+      file: "emailVerificationRequestEmailVerificationWellKnownNoResponse.md",
+      links: [{
+        link: "https://github.com/WICG/email-verification-protocol",
+        linkTitle: i18nLazyString7(UIStrings11.emailVerification)
+      }]
+    }
+  ],
+  [
+    "EmailVerificationWellKnownInvalidResponse",
+    {
+      file: "emailVerificationRequestEmailVerificationWellKnownInvalidResponse.md",
+      links: [{
+        link: "https://github.com/WICG/email-verification-protocol",
+        linkTitle: i18nLazyString7(UIStrings11.emailVerification)
+      }]
+    }
+  ],
+  [
+    "EmailVerificationWellKnownInvalidContentType",
+    {
+      file: "emailVerificationRequestEmailVerificationWellKnownInvalidContentType.md",
+      links: [{
+        link: "https://github.com/WICG/email-verification-protocol",
+        linkTitle: i18nLazyString7(UIStrings11.emailVerification)
+      }]
+    }
+  ],
+  [
+    "JwksHttpNotFound",
+    {
+      file: "emailVerificationRequestJwksHttpNotFound.md",
+      links: [{
+        link: "https://github.com/WICG/email-verification-protocol",
+        linkTitle: i18nLazyString7(UIStrings11.emailVerification)
+      }]
+    }
+  ],
+  [
+    "JwksInvalidResponse",
+    {
+      file: "emailVerificationRequestJwksInvalidResponse.md",
+      links: [{
+        link: "https://github.com/WICG/email-verification-protocol",
+        linkTitle: i18nLazyString7(UIStrings11.emailVerification)
+      }]
+    }
+  ],
+  [
+    "TokenVerificationSdJwtUnsupportedHeaderAlg",
+    {
+      file: "emailVerificationRequestTokenVerificationSdJwtUnsupportedHeaderAlg.md",
+      links: [{
+        link: "https://github.com/WICG/email-verification-protocol",
+        linkTitle: i18nLazyString7(UIStrings11.emailVerification)
+      }]
+    }
+  ],
+  [
+    "TokenVerificationSdJwtMissingIss",
+    {
+      file: "emailVerificationRequestTokenVerificationSdJwtMissingIss.md",
+      links: [{
+        link: "https://github.com/WICG/email-verification-protocol",
+        linkTitle: i18nLazyString7(UIStrings11.emailVerification)
+      }]
+    }
+  ],
+  [
+    "TokenVerificationSdJwtMissingIat",
+    {
+      file: "emailVerificationRequestTokenVerificationSdJwtMissingIat.md",
+      links: [{
+        link: "https://github.com/WICG/email-verification-protocol",
+        linkTitle: i18nLazyString7(UIStrings11.emailVerification)
+      }]
+    }
+  ],
+  [
+    "TokenVerificationSdJwtMissingCnf",
+    {
+      file: "emailVerificationRequestTokenVerificationSdJwtMissingCnf.md",
+      links: [{
+        link: "https://github.com/WICG/email-verification-protocol",
+        linkTitle: i18nLazyString7(UIStrings11.emailVerification)
+      }]
+    }
+  ],
+  [
+    "TokenVerificationSdJwtMissingEmail",
+    {
+      file: "emailVerificationRequestTokenVerificationSdJwtMissingEmail.md",
+      links: [{
+        link: "https://github.com/WICG/email-verification-protocol",
+        linkTitle: i18nLazyString7(UIStrings11.emailVerification)
+      }]
+    }
+  ],
+  [
+    "TokenVerificationSdJwtInvalidIssuedAt",
+    {
+      file: "emailVerificationRequestTokenVerificationSdJwtInvalidIssuedAt.md",
+      links: [{
+        link: "https://github.com/WICG/email-verification-protocol",
+        linkTitle: i18nLazyString7(UIStrings11.emailVerification)
+      }]
+    }
+  ],
+  [
+    "TokenVerificationSdJwtInvalidIssuer",
+    {
+      file: "emailVerificationRequestTokenVerificationSdJwtInvalidIssuer.md",
+      links: [{
+        link: "https://github.com/WICG/email-verification-protocol",
+        linkTitle: i18nLazyString7(UIStrings11.emailVerification)
+      }]
+    }
+  ],
+  [
+    "TokenVerificationSdJwtJwksMissingKeys",
+    {
+      file: "emailVerificationRequestTokenVerificationSdJwtJwksMissingKeys.md",
+      links: [{
+        link: "https://github.com/WICG/email-verification-protocol",
+        linkTitle: i18nLazyString7(UIStrings11.emailVerification)
+      }]
+    }
+  ],
+  [
+    "TokenVerificationSdJwtSignatureFailed",
+    {
+      file: "emailVerificationRequestTokenVerificationSdJwtSignatureFailed.md",
+      links: [{
+        link: "https://github.com/WICG/email-verification-protocol",
+        linkTitle: i18nLazyString7(UIStrings11.emailVerification)
+      }]
+    }
+  ],
+  [
+    "TokenVerificationSdJwtInvalidEmailVerified",
+    {
+      file: "emailVerificationRequestTokenVerificationSdJwtInvalidEmailVerified.md",
+      links: [{
+        link: "https://github.com/WICG/email-verification-protocol",
+        linkTitle: i18nLazyString7(UIStrings11.emailVerification)
+      }]
+    }
+  ],
+  [
+    "TokenVerificationSdJwtInvalidEmail",
+    {
+      file: "emailVerificationRequestTokenVerificationSdJwtInvalidEmail.md",
+      links: [{
+        link: "https://github.com/WICG/email-verification-protocol",
+        linkTitle: i18nLazyString7(UIStrings11.emailVerification)
+      }]
+    }
+  ],
+  [
+    "TokenVerificationSdJwtInvalidHolderKey",
+    {
+      file: "emailVerificationRequestTokenVerificationSdJwtInvalidHolderKey.md",
+      links: [{
+        link: "https://github.com/WICG/email-verification-protocol",
+        linkTitle: i18nLazyString7(UIStrings11.emailVerification)
+      }]
+    }
+  ],
+  [
+    "TokenVerificationKbInvalidTyp",
+    {
+      file: "emailVerificationRequestTokenVerificationKbInvalidTyp.md",
+      links: [{
+        link: "https://github.com/WICG/email-verification-protocol",
+        linkTitle: i18nLazyString7(UIStrings11.emailVerification)
+      }]
+    }
+  ],
+  [
+    "TokenVerificationKbMissingAud",
+    {
+      file: "emailVerificationRequestTokenVerificationKbMissingAud.md",
+      links: [{
+        link: "https://github.com/WICG/email-verification-protocol",
+        linkTitle: i18nLazyString7(UIStrings11.emailVerification)
+      }]
+    }
+  ],
+  [
+    "TokenVerificationKbMissingNonce",
+    {
+      file: "emailVerificationRequestTokenVerificationKbMissingNonce.md",
+      links: [{
+        link: "https://github.com/WICG/email-verification-protocol",
+        linkTitle: i18nLazyString7(UIStrings11.emailVerification)
+      }]
+    }
+  ],
+  [
+    "TokenVerificationKbMissingIat",
+    {
+      file: "emailVerificationRequestTokenVerificationKbMissingIat.md",
+      links: [{
+        link: "https://github.com/WICG/email-verification-protocol",
+        linkTitle: i18nLazyString7(UIStrings11.emailVerification)
+      }]
+    }
+  ],
+  [
+    "TokenVerificationKbMissingSdHash",
+    {
+      file: "emailVerificationRequestTokenVerificationKbMissingSdHash.md",
+      links: [{
+        link: "https://github.com/WICG/email-verification-protocol",
+        linkTitle: i18nLazyString7(UIStrings11.emailVerification)
+      }]
+    }
+  ],
+  [
+    "TokenVerificationKbInvalidIssuedAt",
+    {
+      file: "emailVerificationRequestTokenVerificationKbInvalidIssuedAt.md",
+      links: [{
+        link: "https://github.com/WICG/email-verification-protocol",
+        linkTitle: i18nLazyString7(UIStrings11.emailVerification)
+      }]
+    }
+  ],
+  [
+    "TokenVerificationKbInvalidAudience",
+    {
+      file: "emailVerificationRequestTokenVerificationKbInvalidAudience.md",
+      links: [{
+        link: "https://github.com/WICG/email-verification-protocol",
+        linkTitle: i18nLazyString7(UIStrings11.emailVerification)
+      }]
+    }
+  ],
+  [
+    "TokenVerificationKbInvalidNonce",
+    {
+      file: "emailVerificationRequestTokenVerificationKbInvalidNonce.md",
+      links: [{
+        link: "https://github.com/WICG/email-verification-protocol",
+        linkTitle: i18nLazyString7(UIStrings11.emailVerification)
+      }]
+    }
+  ],
+  [
+    "TokenVerificationKbInvalidSdHash",
+    {
+      file: "emailVerificationRequestTokenVerificationKbInvalidSdHash.md",
+      links: [{
+        link: "https://github.com/WICG/email-verification-protocol",
+        linkTitle: i18nLazyString7(UIStrings11.emailVerification)
+      }]
+    }
+  ],
+  [
+    "TokenVerificationKbMissingCnf",
+    {
+      file: "emailVerificationRequestTokenVerificationKbMissingCnf.md",
+      links: [{
+        link: "https://github.com/WICG/email-verification-protocol",
+        linkTitle: i18nLazyString7(UIStrings11.emailVerification)
+      }]
+    }
+  ],
+  [
+    "TokenVerificationKbSignatureFailed",
+    {
+      file: "emailVerificationRequestTokenVerificationKbSignatureFailed.md",
+      links: [{
+        link: "https://github.com/WICG/email-verification-protocol",
+        linkTitle: i18nLazyString7(UIStrings11.emailVerification)
+      }]
+    }
+  ]
+]);
+
+// gen/front_end/models/issues_manager/FederatedAuthRequestIssue.js
+var FederatedAuthRequestIssue_exports = {};
+__export(FederatedAuthRequestIssue_exports, {
+  FederatedAuthRequestIssue: () => FederatedAuthRequestIssue
+});
+import * as i18n21 from "./..\\..\\core\\i18n\\i18n.js";
+var UIStrings12 = {
+  /**
+   * @description Title for Federated Credential Management API specification URL link.
+   */
+  fedCm: "Federated Credential Management API",
+  /**
+   * @description Title for Connection Allowlists API specification URL link.
+   */
+  connectionAllowlist: "Connection Allowlists API"
+};
+var str_11 = i18n21.i18n.registerUIStrings("models/issues_manager/FederatedAuthRequestIssue.ts", UIStrings12);
+var i18nLazyString8 = i18n21.i18n.getLazilyComputedLocalizedString.bind(void 0, str_11);
+var FederatedAuthRequestIssue = class _FederatedAuthRequestIssue extends Issue {
+  constructor(issueDetails, issuesModel) {
+    super({
+      code: "FederatedAuthRequestIssue",
+      umaCode: [
+        "FederatedAuthRequestIssue",
+        issueDetails.federatedAuthRequestIssueReason
+      ].join("::")
+    }, issueDetails, issuesModel);
+  }
+  getCategory() {
+    return "Other";
+  }
+  getDescription() {
+    const description = issueDescriptions7.get(this.details().federatedAuthRequestIssueReason);
+    if (!description) {
+      return null;
+    }
+    return resolveLazyDescription(description);
+  }
+  primaryKey() {
+    return JSON.stringify(this.details());
+  }
+  getKind() {
+    return "PageError";
+  }
+  static fromInspectorIssue(issuesModel, inspectorIssue) {
+    const details = inspectorIssue.details.federatedAuthRequestIssueDetails;
+    if (!details) {
+      console.warn("Federated auth request issue without details received.");
+      return [];
+    }
+    return [new _FederatedAuthRequestIssue(details, issuesModel)];
+  }
+};
+var issueDescriptions7 = /* @__PURE__ */ new Map([
+  [
+    "TooManyRequests",
+    {
+      file: "federatedAuthRequestTooManyRequests.md",
+      links: [{
+        link: "https://fedidcg.github.io/FedCM/",
+        linkTitle: i18nLazyString8(UIStrings12.fedCm)
+      }]
+    }
+  ],
+  [
+    "WellKnownBlockedByConnectionAllowlist",
+    {
+      file: "federatedAuthRequestWellKnownBlockedByConnectionAllowlist.md",
+      links: [{
+        // TODO(crbug.com/543660447): Update this link once connection allowlist is moved out of WICG repo.
+        link: "https://github.com/WICG/connection-allowlists",
+        linkTitle: i18nLazyString8(UIStrings12.connectionAllowlist)
+      }]
+    }
+  ],
+  [
+    "ConfigHttpNotFound",
+    {
+      file: "federatedAuthRequestManifestHttpNotFound.md",
+      links: [{
+        link: "https://fedidcg.github.io/FedCM/",
+        linkTitle: i18nLazyString8(UIStrings12.fedCm)
+      }]
+    }
+  ],
+  [
+    "ConfigNoResponse",
+    {
+      file: "federatedAuthRequestManifestNoResponse.md",
+      links: [{
+        link: "https://fedidcg.github.io/FedCM/",
+        linkTitle: i18nLazyString8(UIStrings12.fedCm)
+      }]
+    }
+  ],
+  [
+    "ConfigBlockedByConnectionAllowlist",
+    {
+      file: "federatedAuthRequestConfigBlockedByConnectionAllowlist.md",
+      links: [{
+        // TODO(crbug.com/543660447): Update this link once connection allowlist is moved out of WICG repo.
+        link: "https://github.com/WICG/connection-allowlists",
+        linkTitle: i18nLazyString8(UIStrings12.connectionAllowlist)
+      }]
+    }
+  ],
+  [
+    "ConfigInvalidResponse",
+    {
+      file: "federatedAuthRequestManifestInvalidResponse.md",
+      links: [{
+        link: "https://fedidcg.github.io/FedCM/",
+        linkTitle: i18nLazyString8(UIStrings12.fedCm)
+      }]
+    }
+  ],
+  [
+    "ErrorFetchingSignin",
+    {
+      file: "federatedAuthRequestErrorFetchingSignin.md",
+      links: [{
+        link: "https://fedidcg.github.io/FedCM/",
+        linkTitle: i18nLazyString8(UIStrings12.fedCm)
+      }]
+    }
+  ],
+  [
+    "InvalidSigninResponse",
+    {
+      file: "federatedAuthRequestInvalidSigninResponse.md",
+      links: [{
+        link: "https://fedidcg.github.io/FedCM/",
+        linkTitle: i18nLazyString8(UIStrings12.fedCm)
+      }]
+    }
+  ],
+  [
+    "AccountsHttpNotFound",
+    {
+      file: "federatedAuthRequestAccountsHttpNotFound.md",
+      links: [{
+        link: "https://fedidcg.github.io/FedCM/",
+        linkTitle: i18nLazyString8(UIStrings12.fedCm)
+      }]
+    }
+  ],
+  [
+    "AccountsNoResponse",
+    {
+      file: "federatedAuthRequestAccountsNoResponse.md",
+      links: [{
+        link: "https://fedidcg.github.io/FedCM/",
+        linkTitle: i18nLazyString8(UIStrings12.fedCm)
+      }]
+    }
+  ],
+  [
+    "AccountsBlockedByConnectionAllowlist",
+    {
+      file: "federatedAuthRequestAccountsBlockedByConnectionAllowlist.md",
+      links: [{
+        // TODO(crbug.com/543660447): Update this link once connection allowlist is moved out of WICG repo.
+        link: "https://github.com/WICG/connection-allowlists",
+        linkTitle: i18nLazyString8(UIStrings12.connectionAllowlist)
+      }]
+    }
+  ],
+  [
+    "AccountsInvalidResponse",
+    {
+      file: "federatedAuthRequestAccountsInvalidResponse.md",
+      links: [{
+        link: "https://fedidcg.github.io/FedCM/",
+        linkTitle: i18nLazyString8(UIStrings12.fedCm)
+      }]
+    }
+  ],
+  [
+    "IdTokenHttpNotFound",
+    {
+      file: "federatedAuthRequestIdTokenHttpNotFound.md",
+      links: [{
+        link: "https://fedidcg.github.io/FedCM/",
+        linkTitle: i18nLazyString8(UIStrings12.fedCm)
+      }]
+    }
+  ],
+  [
+    "IdTokenNoResponse",
+    {
+      file: "federatedAuthRequestIdTokenNoResponse.md",
+      links: [{
+        link: "https://fedidcg.github.io/FedCM/",
+        linkTitle: i18nLazyString8(UIStrings12.fedCm)
+      }]
+    }
+  ],
+  [
+    "IdTokenBlockedByConnectionAllowlist",
+    {
+      file: "federatedAuthRequestIdTokenBlockedByConnectionAllowlist.md",
+      links: [{
+        // TODO(crbug.com/543660447): Update this link once connection allowlist is moved out of WICG repo.
+        link: "https://github.com/WICG/connection-allowlists",
+        linkTitle: i18nLazyString8(UIStrings12.connectionAllowlist)
+      }]
+    }
+  ],
+  [
+    "IdTokenInvalidResponse",
+    {
+      file: "federatedAuthRequestIdTokenInvalidResponse.md",
+      links: [{
+        link: "https://fedidcg.github.io/FedCM/",
+        linkTitle: i18nLazyString8(UIStrings12.fedCm)
+      }]
+    }
+  ],
+  [
+    "IdTokenInvalidRequest",
+    {
+      file: "federatedAuthRequestIdTokenInvalidRequest.md",
+      links: [{
+        link: "https://fedidcg.github.io/FedCM/",
+        linkTitle: i18nLazyString8(UIStrings12.fedCm)
+      }]
+    }
+  ],
+  [
+    "ErrorIdToken",
+    {
+      file: "federatedAuthRequestErrorIdToken.md",
+      links: [{
+        link: "https://fedidcg.github.io/FedCM/",
+        linkTitle: i18nLazyString8(UIStrings12.fedCm)
+      }]
+    }
+  ],
+  [
+    "Canceled",
+    {
+      file: "federatedAuthRequestCanceled.md",
+      links: [{
+        link: "https://fedidcg.github.io/FedCM/",
+        linkTitle: i18nLazyString8(UIStrings12.fedCm)
+      }]
+    }
+  ]
+]);
+
+// gen/front_end/models/issues_manager/FederatedAuthUserInfoRequestIssue.js
+var FederatedAuthUserInfoRequestIssue_exports = {};
+__export(FederatedAuthUserInfoRequestIssue_exports, {
+  FederatedAuthUserInfoRequestIssue: () => FederatedAuthUserInfoRequestIssue
+});
+import * as i18n23 from "./..\\..\\core\\i18n\\i18n.js";
+var UIStrings13 = {
+  /**
+   * @description Title for Federated Credential Management User Info API specification URL link.
+   */
+  fedCmUserInfo: "Federated Credential Management User Info API"
+};
+var str_12 = i18n23.i18n.registerUIStrings("models/issues_manager/FederatedAuthUserInfoRequestIssue.ts", UIStrings13);
+var i18nLazyString9 = i18n23.i18n.getLazilyComputedLocalizedString.bind(void 0, str_12);
+var FederatedAuthUserInfoRequestIssue = class _FederatedAuthUserInfoRequestIssue extends Issue {
+  constructor(issueDetails, issuesModel) {
+    super({
+      code: "FederatedAuthUserInfoRequestIssue",
+      umaCode: [
+        "FederatedAuthUserInfoRequestIssue",
+        issueDetails.federatedAuthUserInfoRequestIssueReason
+      ].join("::")
+    }, issueDetails, issuesModel);
+  }
+  getCategory() {
+    return "Other";
+  }
+  getDescription() {
+    const description = issueDescriptions8.get(this.details().federatedAuthUserInfoRequestIssueReason);
+    if (!description) {
+      return null;
+    }
+    return resolveLazyDescription(description);
+  }
+  primaryKey() {
+    return JSON.stringify(this.details());
+  }
+  getKind() {
+    return "PageError";
+  }
+  static fromInspectorIssue(issuesModel, inspectorIssue) {
+    const details = inspectorIssue.details.federatedAuthUserInfoRequestIssueDetails;
+    if (!details) {
+      console.warn("Federated auth user info request issue without details received.");
+      return [];
+    }
+    return [new _FederatedAuthUserInfoRequestIssue(details, issuesModel)];
+  }
+};
+var issueDescriptions8 = /* @__PURE__ */ new Map([
+  [
+    "NotSameOrigin",
+    {
+      file: "federatedAuthUserInfoRequestNotSameOrigin.md",
+      links: [{
+        link: "https://fedidcg.github.io/FedCM/",
+        linkTitle: i18nLazyString9(UIStrings13.fedCmUserInfo)
+      }]
+    }
+  ],
+  [
+    "NotIframe",
+    {
+      file: "federatedAuthUserInfoRequestNotIframe.md",
+      links: [{
+        link: "https://fedidcg.github.io/FedCM/",
+        linkTitle: i18nLazyString9(UIStrings13.fedCmUserInfo)
+      }]
+    }
+  ],
+  [
+    "NotPotentiallyTrustworthy",
+    {
+      file: "federatedAuthUserInfoRequestNotPotentiallyTrustworthy.md",
+      links: [{
+        link: "https://fedidcg.github.io/FedCM/",
+        linkTitle: i18nLazyString9(UIStrings13.fedCmUserInfo)
+      }]
+    }
+  ],
+  [
+    "NoApiPermission",
+    {
+      file: "federatedAuthUserInfoRequestNoApiPermission.md",
+      links: [{
+        link: "https://fedidcg.github.io/FedCM/",
+        linkTitle: i18nLazyString9(UIStrings13.fedCmUserInfo)
+      }]
+    }
+  ],
+  [
+    "NotSignedInWithIdp",
+    {
+      file: "federatedAuthUserInfoRequestNotSignedInWithIdp.md",
+      links: [{
+        link: "https://fedidcg.github.io/FedCM/",
+        linkTitle: i18nLazyString9(UIStrings13.fedCmUserInfo)
+      }]
+    }
+  ],
+  [
+    "NoAccountSharingPermission",
+    {
+      file: "federatedAuthUserInfoRequestNoAccountSharingPermission.md",
+      links: [{
+        link: "https://fedidcg.github.io/FedCM/",
+        linkTitle: i18nLazyString9(UIStrings13.fedCmUserInfo)
+      }]
+    }
+  ],
+  [
+    "InvalidConfigOrWellKnown",
+    {
+      file: "federatedAuthUserInfoRequestInvalidConfigOrWellKnown.md",
+      links: [{
+        link: "https://fedidcg.github.io/FedCM/",
+        linkTitle: i18nLazyString9(UIStrings13.fedCmUserInfo)
+      }]
+    }
+  ],
+  [
+    "InvalidAccountsResponse",
+    {
+      file: "federatedAuthUserInfoRequestInvalidAccountsResponse.md",
+      links: [{
+        link: "https://fedidcg.github.io/FedCM/",
+        linkTitle: i18nLazyString9(UIStrings13.fedCmUserInfo)
+      }]
+    }
+  ],
+  [
+    "NoReturningUserFromFetchedAccounts",
+    {
+      file: "federatedAuthUserInfoRequestNoReturningUserFromFetchedAccounts.md",
+      links: [{
+        link: "https://fedidcg.github.io/FedCM/",
+        linkTitle: i18nLazyString9(UIStrings13.fedCmUserInfo)
+      }]
+    }
+  ]
+]);
+
+// gen/front_end/models/issues_manager/GenericIssue.js
+var GenericIssue_exports = {};
+__export(GenericIssue_exports, {
+  GenericIssue: () => GenericIssue,
+  genericBackUINavigationWouldSkipAd: () => genericBackUINavigationWouldSkipAd,
+  genericFormAriaLabelledByToNonExistingIdError: () => genericFormAriaLabelledByToNonExistingIdError,
+  genericFormAutocompleteAttributeEmptyError: () => genericFormAutocompleteAttributeEmptyError,
+  genericFormDuplicateIdForInputError: () => genericFormDuplicateIdForInputError,
+  genericFormEmptyIdAndNameAttributesForInputError: () => genericFormEmptyIdAndNameAttributesForInputError,
+  genericFormInputAssignedAutocompleteValueToIdOrNameAttributeError: () => genericFormInputAssignedAutocompleteValueToIdOrNameAttributeError,
+  genericFormInputHasWrongButWellIntendedAutocompleteValue: () => genericFormInputHasWrongButWellIntendedAutocompleteValue,
+  genericFormInputWithNoLabelError: () => genericFormInputWithNoLabelError,
+  genericFormLabelForMatchesNonExistingIdError: () => genericFormLabelForMatchesNonExistingIdError,
+  genericFormLabelForNameError: () => genericFormLabelForNameError,
+  genericFormLabelHasNeitherForNorNestedInputError: () => genericFormLabelHasNeitherForNorNestedInputError,
+  genericFormModelContextMissingToolDescription: () => genericFormModelContextMissingToolDescription,
+  genericFormModelContextMissingToolName: () => genericFormModelContextMissingToolName,
+  genericFormModelContextParameterMissingName: () => genericFormModelContextParameterMissingName,
+  genericFormModelContextParameterMissingTitleAndDescription: () => genericFormModelContextParameterMissingTitleAndDescription,
+  genericFormModelContextRequiredParameterMissingName: () => genericFormModelContextRequiredParameterMissingName,
+  genericNavigationEntryMarkedSkippable: () => genericNavigationEntryMarkedSkippable,
+  genericResponseWasBlockedbyORB: () => genericResponseWasBlockedbyORB
+});
+import * as i18n25 from "./..\\..\\core\\i18n\\i18n.js";
+var UIStrings14 = {
+  /**
+   * @description Title for autofill documentation page.
+   */
+  howDoesAutofillWorkPageTitle: "How does autofill work?",
+  /**
+   * @description Title for label form elements usage example page.
+   */
+  labelFormlementsPageTitle: "The label elements",
+  /**
+   * @description Title for input form elements usage example page.
+   */
+  inputFormElementPageTitle: "The form input element",
+  /**
+   * @description Title for autocomplete attribute documentation page.
+   */
+  autocompleteAttributePageTitle: "HTML attribute: autocomplete",
+  /**
+   * @description Title for CORB explainer.
+   */
+  corbExplainerPageTitle: "CORB explainer",
+  /**
+   * @description Title for history intervention documentation page.
+   */
+  historyManipulationInterventionPageTitle: "History manipulation intervention explainer",
+  /**
+   * @description Title for back-to-ad intervention documentation page.
+   */
+  backToAdInterventionPageTitle: "Back-to-ad intervention explainer"
+};
+var str_13 = i18n25.i18n.registerUIStrings("models/issues_manager/GenericIssue.ts", UIStrings14);
+var i18nLazyString10 = i18n25.i18n.getLazilyComputedLocalizedString.bind(void 0, str_13);
+var GenericIssue = class _GenericIssue extends Issue {
+  constructor(issueDetails, issuesModel, issueId) {
+    const issueCode = [
+      "GenericIssue",
+      issueDetails.errorType
+    ].join("::");
+    super(issueCode, issueDetails, issuesModel, issueId);
+  }
+  requests() {
+    const details = this.details();
+    if (details.request) {
+      return [details.request];
+    }
+    return [];
+  }
+  getCategory() {
+    return "Generic";
+  }
+  primaryKey() {
+    const details = this.details();
+    const requestId = details.request ? details.request.requestId : "no-request";
+    return `${this.code()}-(${details.frameId})-(${details.violatingNodeId})-(${details.violatingNodeAttribute})-(${requestId})`;
+  }
+  getDescription() {
+    const description = issueDescriptions9.get(this.details().errorType);
+    if (!description) {
+      return null;
+    }
+    return resolveLazyDescription(description);
+  }
+  getKind() {
+    return issueTypes.get(this.details().errorType) || "Improvement";
+  }
+  static fromInspectorIssue(issuesModel, inspectorIssue) {
+    const genericDetails = inspectorIssue.details.genericIssueDetails;
+    if (!genericDetails) {
+      console.warn("Generic issue without details received.");
+      return [];
+    }
+    return [new _GenericIssue(genericDetails, issuesModel, inspectorIssue.issueId)];
+  }
+};
+var genericFormLabelForNameError = {
+  file: "genericFormLabelForNameError.md",
+  links: [{
+    link: "https://html.spec.whatwg.org/multipage/forms.html#attr-label-for",
+    // Since the link points to a page with the same title, the 'HTML Standard'
+    // string doesn't need to be translated.
+    linkTitle: i18n25.i18n.lockedLazyString("HTML Standard")
+  }]
+};
+var genericFormInputWithNoLabelError = {
+  file: "genericFormInputWithNoLabelError.md",
+  links: []
+};
+var genericFormAutocompleteAttributeEmptyError = {
+  file: "genericFormAutocompleteAttributeEmptyError.md",
+  links: []
+};
+var genericFormDuplicateIdForInputError = {
+  file: "genericFormDuplicateIdForInputError.md",
+  links: [{
+    link: "https://web.dev/learn/forms/autofill/#how-does-autofill-work",
+    linkTitle: i18nLazyString10(UIStrings14.howDoesAutofillWorkPageTitle)
+  }]
+};
+var genericFormAriaLabelledByToNonExistingIdError = {
+  file: "genericFormAriaLabelledByToNonExistingIdError.md",
+  links: [{
+    link: "https://developer.mozilla.org/en-US/docs/Web/HTML/Element/label",
+    linkTitle: i18nLazyString10(UIStrings14.labelFormlementsPageTitle)
+  }]
+};
+var genericFormEmptyIdAndNameAttributesForInputError = {
+  file: "genericFormEmptyIdAndNameAttributesForInputError.md",
+  links: [{
+    link: "https://developer.mozilla.org/en-US/docs/Web/HTML/Element/input",
+    linkTitle: i18nLazyString10(UIStrings14.inputFormElementPageTitle)
+  }]
+};
+var genericFormInputAssignedAutocompleteValueToIdOrNameAttributeError = {
+  file: "genericFormInputAssignedAutocompleteValueToIdOrNameAttributeError.md",
+  links: [{
+    link: "https://developer.mozilla.org/en-US/docs/Web/HTML/Attributes/autocomplete#values",
+    linkTitle: i18nLazyString10(UIStrings14.autocompleteAttributePageTitle)
+  }]
+};
+var genericFormInputHasWrongButWellIntendedAutocompleteValue = {
+  file: "genericFormInputHasWrongButWellIntendedAutocompleteValueError.md",
+  links: [{
+    link: "https://developer.mozilla.org/en-US/docs/Web/HTML/Attributes/autocomplete#values",
+    linkTitle: i18nLazyString10(UIStrings14.autocompleteAttributePageTitle)
+  }]
+};
+var genericFormLabelForMatchesNonExistingIdError = {
+  file: "genericFormLabelForMatchesNonExistingIdError.md",
+  links: [{
+    link: "https://developer.mozilla.org/en-US/docs/Web/HTML/Element/label",
+    linkTitle: i18nLazyString10(UIStrings14.labelFormlementsPageTitle)
+  }]
+};
+var genericFormLabelHasNeitherForNorNestedInputError = {
+  file: "genericFormLabelHasNeitherForNorNestedInputError.md",
+  links: [{
+    link: "https://developer.mozilla.org/en-US/docs/Web/HTML/Element/label",
+    linkTitle: i18nLazyString10(UIStrings14.labelFormlementsPageTitle)
+  }]
+};
+var genericResponseWasBlockedbyORB = {
+  file: "genericResponseWasBlockedByORB.md",
+  links: [{
+    link: "https://www.chromium.org/Home/chromium-security/corb-for-developers/",
+    linkTitle: i18nLazyString10(UIStrings14.corbExplainerPageTitle)
+  }]
+};
+var genericNavigationEntryMarkedSkippable = {
+  file: "genericNavigationEntryMarkedSkippable.md",
+  links: [{
+    link: "https://chromium.googlesource.com/chromium/src/+/main/docs/history_manipulation_intervention.md",
+    linkTitle: i18nLazyString10(UIStrings14.historyManipulationInterventionPageTitle)
+  }]
+};
+var genericBackUINavigationWouldSkipAd = {
+  file: "genericBackUINavigationWouldSkipAd.md",
+  links: [{
+    link: "https://chromium.googlesource.com/chromium/src/+/main/docs/history_manipulation_intervention.md",
+    linkTitle: i18nLazyString10(UIStrings14.backToAdInterventionPageTitle)
+  }]
+};
+var genericFormModelContextMissingToolName = {
+  file: "genericFormModelContextMissingToolName.md",
+  links: []
+};
+var genericFormModelContextMissingToolDescription = {
+  file: "genericFormModelContextMissingToolDescription.md",
+  links: []
+};
+var genericFormModelContextParameterMissingTitleAndDescription = {
+  file: "genericFormModelContextParameterMissingTitleAndDescription.md",
+  links: []
+};
+var genericFormModelContextRequiredParameterMissingName = {
+  file: "genericFormModelContextRequiredParameterMissingName.md",
+  links: []
+};
+var genericFormModelContextParameterMissingName = {
+  file: "genericFormModelContextParameterMissingName.md",
+  links: []
+};
+var issueDescriptions9 = /* @__PURE__ */ new Map([
+  ["FormLabelForNameError", genericFormLabelForNameError],
+  ["FormInputWithNoLabelError", genericFormInputWithNoLabelError],
+  [
+    "FormAutocompleteAttributeEmptyError",
+    genericFormAutocompleteAttributeEmptyError
+  ],
+  ["FormDuplicateIdForInputError", genericFormDuplicateIdForInputError],
+  [
+    "FormAriaLabelledByToNonExistingIdError",
+    genericFormAriaLabelledByToNonExistingIdError
+  ],
+  [
+    "FormEmptyIdAndNameAttributesForInputError",
+    genericFormEmptyIdAndNameAttributesForInputError
+  ],
+  [
+    "FormInputAssignedAutocompleteValueToIdOrNameAttributeError",
+    genericFormInputAssignedAutocompleteValueToIdOrNameAttributeError
+  ],
+  [
+    "FormLabelForMatchesNonExistingIdError",
+    genericFormLabelForMatchesNonExistingIdError
+  ],
+  [
+    "FormLabelHasNeitherForNorNestedInputError",
+    genericFormLabelHasNeitherForNorNestedInputError
+  ],
+  [
+    "FormInputHasWrongButWellIntendedAutocompleteValueError",
+    genericFormInputHasWrongButWellIntendedAutocompleteValue
+  ],
+  [
+    "ResponseWasBlockedByORB",
+    genericResponseWasBlockedbyORB
+  ],
+  [
+    "NavigationEntryMarkedSkippable",
+    genericNavigationEntryMarkedSkippable
+  ],
+  [
+    "BackUINavigationWouldSkipAd",
+    genericBackUINavigationWouldSkipAd
+  ],
+  [
+    "FormModelContextMissingToolName",
+    genericFormModelContextMissingToolName
+  ],
+  [
+    "FormModelContextMissingToolDescription",
+    genericFormModelContextMissingToolDescription
+  ],
+  [
+    "FormModelContextParameterMissingTitleAndDescription",
+    genericFormModelContextParameterMissingTitleAndDescription
+  ],
+  [
+    "FormModelContextRequiredParameterMissingName",
+    genericFormModelContextRequiredParameterMissingName
+  ],
+  [
+    "FormModelContextParameterMissingName",
+    genericFormModelContextParameterMissingName
+  ]
+]);
+var issueTypes = /* @__PURE__ */ new Map([
+  [
+    "FormLabelForNameError",
+    "PageError"
+    /* IssueKind.PAGE_ERROR */
+  ],
+  [
+    "FormInputWithNoLabelError",
+    "Improvement"
+    /* IssueKind.IMPROVEMENT */
+  ],
+  [
+    "FormAutocompleteAttributeEmptyError",
+    "PageError"
+    /* IssueKind.PAGE_ERROR */
+  ],
+  [
+    "FormDuplicateIdForInputError",
+    "PageError"
+    /* IssueKind.PAGE_ERROR */
+  ],
+  [
+    "FormAriaLabelledByToNonExistingIdError",
+    "Improvement"
+    /* IssueKind.IMPROVEMENT */
+  ],
+  [
+    "FormEmptyIdAndNameAttributesForInputError",
+    "Improvement"
+    /* IssueKind.IMPROVEMENT */
+  ],
+  [
+    "FormInputAssignedAutocompleteValueToIdOrNameAttributeError",
+    "Improvement"
+  ],
+  [
+    "FormLabelForMatchesNonExistingIdError",
+    "PageError"
+    /* IssueKind.PAGE_ERROR */
+  ],
+  [
+    "FormLabelHasNeitherForNorNestedInputError",
+    "Improvement"
+    /* IssueKind.IMPROVEMENT */
+  ],
+  [
+    "FormInputHasWrongButWellIntendedAutocompleteValueError",
+    "Improvement"
+    /* IssueKind.IMPROVEMENT */
+  ],
+  [
+    "FormModelContextMissingToolName",
+    "PageError"
+    /* IssueKind.PAGE_ERROR */
+  ],
+  [
+    "FormModelContextMissingToolDescription",
+    "PageError"
+    /* IssueKind.PAGE_ERROR */
+  ],
+  [
+    "FormModelContextParameterMissingTitleAndDescription",
+    "PageError"
+    /* IssueKind.PAGE_ERROR */
+  ],
+  [
+    "FormModelContextRequiredParameterMissingName",
+    "PageError"
+    /* IssueKind.PAGE_ERROR */
+  ],
+  [
+    "FormModelContextParameterMissingName",
+    "PageError"
+    /* IssueKind.PAGE_ERROR */
+  ]
+]);
+
+// gen/front_end/models/issues_manager/HeavyAdIssue.js
+var HeavyAdIssue_exports = {};
+__export(HeavyAdIssue_exports, {
+  HeavyAdIssue: () => HeavyAdIssue
+});
+import * as i18n27 from "./..\\..\\core\\i18n\\i18n.js";
+var UIStrings15 = {
+  /**
+   * @description Title for a learn more link in heavy ads issue description.
+   */
+  handlingHeavyAdInterventions: "Handling heavy ad interventions"
+};
+var str_14 = i18n27.i18n.registerUIStrings("models/issues_manager/HeavyAdIssue.ts", UIStrings15);
+var i18nString4 = i18n27.i18n.getLocalizedString.bind(void 0, str_14);
+var HeavyAdIssue = class _HeavyAdIssue extends Issue {
+  constructor(issueDetails, issuesModel) {
+    const umaCode = ["HeavyAdIssue", issueDetails.reason].join("::");
+    super({ code: "HeavyAdIssue", umaCode }, issueDetails, issuesModel);
+  }
+  primaryKey() {
+    return `${"HeavyAdIssue"}-${JSON.stringify(this.details())}`;
+  }
+  getDescription() {
+    return {
+      file: "heavyAd.md",
+      links: [
+        {
+          link: "https://developers.google.com/web/updates/2020/05/heavy-ad-interventions",
+          linkTitle: i18nString4(UIStrings15.handlingHeavyAdInterventions)
+        }
+      ]
+    };
+  }
+  getCategory() {
+    return "HeavyAd";
+  }
+  getKind() {
+    switch (this.details().resolution) {
+      case "HeavyAdBlocked":
+        return "PageError";
+      case "HeavyAdWarning":
+        return "BreakingChange";
+    }
+  }
+  static fromInspectorIssue(issuesModel, inspectorIssue) {
+    const heavyAdIssueDetails = inspectorIssue.details.heavyAdIssueDetails;
+    if (!heavyAdIssueDetails) {
+      console.warn("Heavy ad issue without details received.");
+      return [];
+    }
+    return [new _HeavyAdIssue(heavyAdIssueDetails, issuesModel)];
+  }
+};
+
+// gen/front_end/models/issues_manager/IssueAggregator.js
+var IssueAggregator_exports = {};
+__export(IssueAggregator_exports, {
+  AggregatedIssue: () => AggregatedIssue,
+  IssueAggregator: () => IssueAggregator
+});
+import * as Common2 from "./..\\..\\core\\common\\common.js";
+
+// gen/front_end/models/issues_manager/LazyLoadImageIssue.js
+var LazyLoadImageIssue_exports = {};
+__export(LazyLoadImageIssue_exports, {
+  LazyLoadImageIssue: () => LazyLoadImageIssue
+});
+import * as i18n29 from "./..\\..\\core\\i18n\\i18n.js";
+var UIStrings16 = {
+  /**
+   * @description Link title for the lazy-loaded image with zero size issue in the Issues panel.
+   */
+  lazyLoadImageZeroSize: "Lazy-loaded images should have explicit dimensions"
+};
+var str_15 = i18n29.i18n.registerUIStrings("models/issues_manager/LazyLoadImageIssue.ts", UIStrings16);
+var i18nString5 = i18n29.i18n.getLocalizedString.bind(void 0, str_15);
+var LazyLoadImageIssue = class _LazyLoadImageIssue extends Issue {
+  constructor(issueDetails, issuesModel) {
+    const umaCode = ["LazyLoadImageIssue", "ZeroSize"].join("::");
+    super({ code: "LazyLoadImageIssue", umaCode }, issueDetails, issuesModel);
+  }
+  primaryKey() {
+    return `${this.code()}-(${this.details().nodeId})-(${this.details().url})`;
+  }
+  getCategory() {
+    return "Other";
+  }
+  getDescription() {
+    return {
+      file: "lazyLoadImageZeroSize.md",
+      links: [
+        {
+          link: "https://web.dev/articles/browser-level-image-lazy-loading/#dimension-attributes",
+          linkTitle: i18nString5(UIStrings16.lazyLoadImageZeroSize)
+        }
+      ]
+    };
+  }
+  elementCount() {
+    return this.details().nodeId ? 1 : 0;
+  }
+  elements() {
+    if (this.details().nodeId) {
+      const target = this.model()?.target();
+      return [{
+        backendNodeId: this.details().nodeId,
+        nodeName: "img",
+        target: target || null
+      }];
+    }
+    return [];
+  }
+  getKind() {
+    return "Improvement";
+  }
+  static fromInspectorIssue(issuesModel, inspectorIssue) {
+    const details = inspectorIssue.details.lazyLoadImageIssueDetails;
+    if (!details) {
+      console.warn("Lazy-loaded image issue without details received.");
+      return [];
+    }
+    return [new _LazyLoadImageIssue(details, issuesModel)];
+  }
+};
+
+// gen/front_end/models/issues_manager/MixedContentIssue.js
+var MixedContentIssue_exports = {};
+__export(MixedContentIssue_exports, {
+  MixedContentIssue: () => MixedContentIssue
+});
+import * as i18n31 from "./..\\..\\core\\i18n\\i18n.js";
+var UIStrings17 = {
+  /**
+   * @description Label for the link for mixed content issues.
+   */
+  preventingMixedContent: "Preventing mixed content"
+};
+var str_16 = i18n31.i18n.registerUIStrings("models/issues_manager/MixedContentIssue.ts", UIStrings17);
+var i18nString6 = i18n31.i18n.getLocalizedString.bind(void 0, str_16);
+var MixedContentIssue = class _MixedContentIssue extends Issue {
+  constructor(issueDetails, issuesModel) {
+    super("MixedContentIssue", issueDetails, issuesModel);
+  }
+  requests() {
+    const details = this.details();
+    if (details.request) {
+      return [details.request];
+    }
+    return [];
+  }
+  getCategory() {
+    return "MixedContent";
+  }
+  getDescription() {
+    return {
+      file: "mixedContent.md",
+      links: [{ link: "https://web.dev/what-is-mixed-content/", linkTitle: i18nString6(UIStrings17.preventingMixedContent) }]
+    };
+  }
+  primaryKey() {
+    return JSON.stringify(this.details());
+  }
+  getKind() {
+    switch (this.details().resolutionStatus) {
+      case "MixedContentAutomaticallyUpgraded":
+        return "Improvement";
+      case "MixedContentBlocked":
+        return "PageError";
+      case "MixedContentWarning":
+        return "Improvement";
+    }
+  }
+  static fromInspectorIssue(issuesModel, inspectorIssue) {
+    const mixedContentDetails = inspectorIssue.details.mixedContentIssueDetails;
+    if (!mixedContentDetails) {
+      console.warn("Mixed content issue without details received.");
+      return [];
+    }
+    return [new _MixedContentIssue(mixedContentDetails, issuesModel)];
+  }
+};
+
+// gen/front_end/models/issues_manager/PartitioningBlobURLIssue.js
+var PartitioningBlobURLIssue_exports = {};
+__export(PartitioningBlobURLIssue_exports, {
+  PartitioningBlobURLIssue: () => PartitioningBlobURLIssue
+});
+import * as i18n33 from "./..\\..\\core\\i18n\\i18n.js";
+var UIStrings18 = {
+  /**
+   * @description Title for Partitioning BlobURL explainer URL link.
+   */
+  partitioningBlobURL: "Partitioning BlobURL",
+  /**
+   * @description Title for Chrome Status entry URL link.
+   */
+  chromeStatusEntry: "Chrome Status entry"
+};
+var str_17 = i18n33.i18n.registerUIStrings("models/issues_manager/PartitioningBlobURLIssue.ts", UIStrings18);
+var i18nString7 = i18n33.i18n.getLocalizedString.bind(void 0, str_17);
+var PartitioningBlobURLIssue = class _PartitioningBlobURLIssue extends Issue {
+  constructor(issueDetails, issuesModel) {
+    super("PartitioningBlobURLIssue", issueDetails, issuesModel);
+  }
+  getCategory() {
+    return "Other";
+  }
+  getDescription() {
+    const fileName = this.details().partitioningBlobURLInfo === "BlockedCrossPartitionFetching" ? "fetchingPartitionedBlobURL.md" : "navigatingPartitionedBlobURL.md";
+    return {
+      file: fileName,
+      links: [
+        {
+          link: "https://developers.google.com/privacy-sandbox/cookies/storage-partitioning",
+          linkTitle: i18nString7(UIStrings18.partitioningBlobURL)
+        },
+        {
+          link: "https://chromestatus.com/feature/5130361898795008",
+          linkTitle: i18nString7(UIStrings18.chromeStatusEntry)
+        }
+      ]
+    };
+  }
+  getKind() {
+    return "BreakingChange";
+  }
+  primaryKey() {
+    return JSON.stringify(this.details());
+  }
+  static fromInspectorIssue(issuesModel, inspectorIssue) {
+    const details = inspectorIssue.details.partitioningBlobURLIssueDetails;
+    if (!details) {
+      console.warn("Partitioning BlobURL issue without details received.");
+      return [];
+    }
+    return [new _PartitioningBlobURLIssue(details, issuesModel)];
+  }
+};
+
+// gen/front_end/models/issues_manager/PermissionElementIssue.js
+var PermissionElementIssue_exports = {};
+__export(PermissionElementIssue_exports, {
+  PermissionElementIssue: () => PermissionElementIssue
+});
+var PermissionElementIssue = class _PermissionElementIssue extends Issue {
+  #issueDetails;
+  constructor(issueDetails, issuesModel) {
+    const issueCode = [
+      "PermissionElementIssue",
+      issueDetails.issueType
+    ].join("::");
+    super(issueCode, issueDetails, issuesModel);
+    this.#issueDetails = issueDetails;
+  }
+  getCategory() {
+    return "PermissionElement";
+  }
+  getDescription() {
+    const issueType = this.#issueDetails.issueType;
+    switch (issueType) {
+      case "InvalidType":
+        return {
+          file: "permissionElementInvalidType.md",
+          substitutions: /* @__PURE__ */ new Map([
+            ["PLACEHOLDER_Type", this.#issueDetails.type || ""]
+          ]),
+          links: []
+        };
+      case "FencedFrameDisallowed":
+        return {
+          file: "permissionElementFencedFrameDisallowed.md",
+          substitutions: /* @__PURE__ */ new Map([
+            ["PLACEHOLDER_Type", this.#issueDetails.type || ""]
+          ]),
+          links: []
+        };
+      case "CspFrameAncestorsMissing":
+        return {
+          file: "permissionElementCspFrameAncestorsMissing.md",
+          substitutions: /* @__PURE__ */ new Map([
+            ["PLACEHOLDER_Type", this.#issueDetails.type || ""]
+          ]),
+          links: []
+        };
+      case "PermissionsPolicyBlocked":
+        return {
+          file: "permissionElementPermissionsPolicyBlocked.md",
+          substitutions: /* @__PURE__ */ new Map([
+            ["PLACEHOLDER_Type", this.#issueDetails.type || ""],
+            ["PLACEHOLDER_PermissionName", this.#issueDetails.permissionName || ""]
+          ]),
+          links: []
+        };
+      case "PaddingRightUnsupported":
+        return {
+          file: "permissionElementPaddingRightUnsupported.md",
+          substitutions: /* @__PURE__ */ new Map([
+            ["PLACEHOLDER_Type", this.#issueDetails.type || ""]
+          ]),
+          links: []
+        };
+      case "PaddingBottomUnsupported":
+        return {
+          file: "permissionElementPaddingBottomUnsupported.md",
+          substitutions: /* @__PURE__ */ new Map([
+            ["PLACEHOLDER_Type", this.#issueDetails.type || ""]
+          ]),
+          links: []
+        };
+      case "InsetBoxShadowUnsupported":
+        return {
+          file: "permissionElementInsetBoxShadowUnsupported.md",
+          substitutions: /* @__PURE__ */ new Map([
+            ["PLACEHOLDER_Type", this.#issueDetails.type || ""]
+          ]),
+          links: []
+        };
+      case "RequestInProgress":
+        return {
+          file: "permissionElementRequestInProgress.md",
+          substitutions: /* @__PURE__ */ new Map([
+            ["PLACEHOLDER_Type", this.#issueDetails.type || ""]
+          ]),
+          links: []
+        };
+      case "UntrustedEvent":
+        return {
+          file: "permissionElementUntrustedEvent.md",
+          substitutions: /* @__PURE__ */ new Map([
+            ["PLACEHOLDER_Type", this.#issueDetails.type || ""]
+          ]),
+          links: []
+        };
+      case "RegistrationFailed":
+        return {
+          file: "permissionElementRegistrationFailed.md",
+          substitutions: /* @__PURE__ */ new Map([
+            ["PLACEHOLDER_Type", this.#issueDetails.type || ""]
+          ]),
+          links: []
+        };
+      case "TypeNotSupported":
+        return {
+          file: "permissionElementTypeNotSupported.md",
+          substitutions: /* @__PURE__ */ new Map([
+            ["PLACEHOLDER_Type", this.#issueDetails.type || ""]
+          ]),
+          links: []
+        };
+      case "InvalidTypeActivation":
+        return {
+          file: "permissionElementInvalidTypeActivation.md",
+          substitutions: /* @__PURE__ */ new Map([
+            ["PLACEHOLDER_Type", this.#issueDetails.type || ""]
+          ]),
+          links: []
+        };
+      case "SecurityChecksFailed":
+        return {
+          file: "permissionElementSecurityChecksFailed.md",
+          substitutions: /* @__PURE__ */ new Map([
+            ["PLACEHOLDER_Type", this.#issueDetails.type || ""]
+          ]),
+          links: []
+        };
+      case "ActivationDisabled": {
+        if (this.#issueDetails.occluderNodeInfo && this.#issueDetails.occluderParentNodeInfo) {
+          return {
+            file: "permissionElementActivationDisabledWithOccluderParent.md",
+            substitutions: /* @__PURE__ */ new Map([
+              ["PLACEHOLDER_DisableReason", this.#issueDetails.disableReason || ""],
+              ["PLACEHOLDER_OccluderInfo", this.#issueDetails.occluderNodeInfo || ""],
+              ["PLACEHOLDER_Type", this.#issueDetails.type || ""],
+              ["PLACEHOLDER_OccluderParentInfo", this.#issueDetails.occluderParentNodeInfo || ""]
+            ]),
+            links: []
+          };
+        }
+        if (this.#issueDetails.occluderNodeInfo) {
+          return {
+            file: "permissionElementActivationDisabledWithOccluder.md",
+            substitutions: /* @__PURE__ */ new Map([
+              ["PLACEHOLDER_DisableReason", this.#issueDetails.disableReason || ""],
+              ["PLACEHOLDER_OccluderInfo", this.#issueDetails.occluderNodeInfo || ""],
+              ["PLACEHOLDER_Type", this.#issueDetails.type || ""]
+            ]),
+            links: []
+          };
+        }
+        return {
+          file: "permissionElementActivationDisabled.md",
+          substitutions: /* @__PURE__ */ new Map([
+            ["PLACEHOLDER_DisableReason", this.#issueDetails.disableReason || ""],
+            ["PLACEHOLDER_Type", this.#issueDetails.type || ""]
+          ]),
+          links: []
+        };
+      }
+      case "GeolocationDeprecated":
+        return {
+          file: "permissionElementGeolocationDeprecated.md",
+          links: []
+        };
+      case "InvalidDisplayStyle":
+        return {
+          file: "permissionElementInvalidDisplayStyle.md",
+          substitutions: /* @__PURE__ */ new Map([
+            ["PLACEHOLDER_Type", this.#issueDetails.type || ""]
+          ]),
+          links: []
+        };
+      case "NonOpaqueColor":
+        return {
+          file: "permissionElementNonOpaqueColor.md",
+          substitutions: /* @__PURE__ */ new Map([
+            ["PLACEHOLDER_Type", this.#issueDetails.type || ""]
+          ]),
+          links: []
+        };
+      case "LowContrast":
+        return {
+          file: "permissionElementLowContrast.md",
+          substitutions: /* @__PURE__ */ new Map([
+            ["PLACEHOLDER_Type", this.#issueDetails.type || ""]
+          ]),
+          links: []
+        };
+      case "FontSizeTooSmall":
+        return {
+          file: "permissionElementFontSizeTooSmall.md",
+          substitutions: /* @__PURE__ */ new Map([
+            ["PLACEHOLDER_Type", this.#issueDetails.type || ""]
+          ]),
+          links: []
+        };
+      case "FontSizeTooLarge":
+        return {
+          file: "permissionElementFontSizeTooLarge.md",
+          substitutions: /* @__PURE__ */ new Map([
+            ["PLACEHOLDER_Type", this.#issueDetails.type || ""]
+          ]),
+          links: []
+        };
+      case "InvalidSizeValue":
+        return {
+          file: "permissionElementInvalidSizeValue.md",
+          substitutions: /* @__PURE__ */ new Map([
+            ["PLACEHOLDER_Type", this.#issueDetails.type || ""]
+          ]),
+          links: []
+        };
+      default:
+        console.warn("Unknown PermissionElementIssueType:", issueType);
+        return null;
+    }
+  }
+  elements() {
+    if (this.#issueDetails.nodeId) {
+      const target = this.model()?.target();
+      const result = [{
+        backendNodeId: this.#issueDetails.nodeId,
+        nodeName: this.#issueDetails.type || "Affected element",
+        target: target || null
+      }];
+      return result;
+    }
+    return [];
+  }
+  getKind() {
+    return this.#issueDetails.isWarning ? "Improvement" : "PageError";
+  }
+  primaryKey() {
+    return `${"PermissionElementIssue"}-${JSON.stringify(this.#issueDetails)}`;
+  }
+  static fromInspectorIssue(issuesModel, inspectorIssue) {
+    const permissionElementIssueDetails = inspectorIssue.details.permissionElementIssueDetails;
+    if (!permissionElementIssueDetails) {
+      console.warn("Permission element issue without details received.");
+      return [];
+    }
+    return [new _PermissionElementIssue(permissionElementIssueDetails, issuesModel)];
+  }
+};
+
+// gen/front_end/models/issues_manager/QuirksModeIssue.js
+var QuirksModeIssue_exports = {};
+__export(QuirksModeIssue_exports, {
+  QuirksModeIssue: () => QuirksModeIssue
+});
+import * as i18n35 from "./..\\..\\core\\i18n\\i18n.js";
+var UIStrings19 = {
+  /**
+   * @description Link title for the Quirks Mode issue in the Issues panel.
+   */
+  documentCompatibilityMode: "Document compatibility mode"
+};
+var str_18 = i18n35.i18n.registerUIStrings("models/issues_manager/QuirksModeIssue.ts", UIStrings19);
+var i18nString8 = i18n35.i18n.getLocalizedString.bind(void 0, str_18);
+var QuirksModeIssue = class _QuirksModeIssue extends Issue {
+  constructor(issueDetails, issuesModel) {
+    const mode = issueDetails.isLimitedQuirksMode ? "LimitedQuirksMode" : "QuirksMode";
+    const umaCode = ["QuirksModeIssue", mode].join("::");
+    super({ code: "QuirksModeIssue", umaCode }, issueDetails, issuesModel);
+  }
+  primaryKey() {
+    return `${this.code()}-(${this.details().documentNodeId})-(${this.details().url})`;
+  }
+  getCategory() {
+    return "QuirksMode";
+  }
+  getDescription() {
+    return {
+      file: "CompatibilityModeQuirks.md",
+      links: [
+        {
+          link: "https://web.dev/doctype/",
+          linkTitle: i18nString8(UIStrings19.documentCompatibilityMode)
+        }
+      ]
+    };
+  }
+  getKind() {
+    return "Improvement";
+  }
+  static fromInspectorIssue(issuesModel, inspectorIssue) {
+    const quirksModeIssueDetails = inspectorIssue.details.quirksModeIssueDetails;
+    if (!quirksModeIssueDetails) {
+      console.warn("Quirks Mode issue without details received.");
+      return [];
+    }
+    return [new _QuirksModeIssue(quirksModeIssueDetails, issuesModel)];
+  }
+};
+
+// gen/front_end/models/issues_manager/SelectivePermissionsInterventionIssue.js
+var SelectivePermissionsInterventionIssue_exports = {};
+__export(SelectivePermissionsInterventionIssue_exports, {
+  SelectivePermissionsInterventionIssue: () => SelectivePermissionsInterventionIssue
+});
+import * as i18n37 from "./..\\..\\core\\i18n\\i18n.js";
+var UIStrings20 = {
+  /**
+   * @description Title for a learn more link in selective permissions intervention issue description.
+   */
+  selectivePermissionsIntervention: "Selective permissions intervention"
+};
+var str_19 = i18n37.i18n.registerUIStrings("models/issues_manager/SelectivePermissionsInterventionIssue.ts", UIStrings20);
+var i18nString9 = i18n37.i18n.getLocalizedString.bind(void 0, str_19);
+var SelectivePermissionsInterventionIssue = class _SelectivePermissionsInterventionIssue extends Issue {
+  constructor(issueDetails, issuesModel) {
+    super("SelectivePermissionsInterventionIssue", issueDetails, issuesModel);
+  }
+  primaryKey() {
+    return `${"SelectivePermissionsInterventionIssue"}-${JSON.stringify(this.details())}`;
+  }
+  getDescription() {
+    return {
+      file: "selectivePermissionsIntervention.md",
+      links: [
+        {
+          link: "https://crbug.com/435223477",
+          linkTitle: i18nString9(UIStrings20.selectivePermissionsIntervention)
+        }
+      ]
+    };
+  }
+  getCategory() {
+    return "SelectivePermissionsIntervention";
+  }
+  getKind() {
+    return "PageError";
+  }
+  static fromInspectorIssue(issuesModel, inspectorIssue) {
+    const selectivePermissionsInterventionIssueDetails = inspectorIssue.details.selectivePermissionsInterventionIssueDetails;
+    if (!selectivePermissionsInterventionIssueDetails) {
+      console.warn("Selective Permissions Intervention issue without details received.");
+      return [];
+    }
+    return [new _SelectivePermissionsInterventionIssue(selectivePermissionsInterventionIssueDetails, issuesModel)];
+  }
+};
+
+// gen/front_end/models/issues_manager/SharedArrayBufferIssue.js
+var SharedArrayBufferIssue_exports = {};
+__export(SharedArrayBufferIssue_exports, {
+  SharedArrayBufferIssue: () => SharedArrayBufferIssue
+});
+import * as i18n39 from "./..\\..\\core\\i18n\\i18n.js";
+var UIStrings21 = {
+  /**
+   * @description Label for the link for SharedArrayBuffer issues. The full text reads "Enabling SharedArrayBuffer"
+   * and is the title of an article that describes how to enable a JavaScript feature called SharedArrayBuffer.
+   */
+  enablingSharedArrayBuffer: "Enabling SharedArrayBuffer"
+};
+var str_20 = i18n39.i18n.registerUIStrings("models/issues_manager/SharedArrayBufferIssue.ts", UIStrings21);
+var i18nString10 = i18n39.i18n.getLocalizedString.bind(void 0, str_20);
+var SharedArrayBufferIssue = class _SharedArrayBufferIssue extends Issue {
+  constructor(issueDetails, issuesModel) {
+    const umaCode = ["SharedArrayBufferIssue", issueDetails.type].join("::");
+    super({ code: "SharedArrayBufferIssue", umaCode }, issueDetails, issuesModel);
+  }
+  getCategory() {
+    return "Other";
+  }
+  getDescription() {
+    return {
+      file: "sharedArrayBuffer.md",
+      links: [{
+        link: "https://developer.chrome.com/blog/enabling-shared-array-buffer/",
+        linkTitle: i18nString10(UIStrings21.enablingSharedArrayBuffer)
+      }]
+    };
+  }
+  primaryKey() {
+    return JSON.stringify(this.details());
+  }
+  getKind() {
+    if (this.details().isWarning) {
+      return "BreakingChange";
+    }
+    return "PageError";
+  }
+  static fromInspectorIssue(issuesModel, inspectorIssue) {
+    const sabIssueDetails = inspectorIssue.details.sharedArrayBufferIssueDetails;
+    if (!sabIssueDetails) {
+      console.warn("SAB transfer issue without details received.");
+      return [];
+    }
+    return [new _SharedArrayBufferIssue(sabIssueDetails, issuesModel)];
+  }
+};
+
+// gen/front_end/models/issues_manager/IssueAggregator.js
+var AggregatedIssue = class extends Issue {
+  #allIssues = /* @__PURE__ */ new Set();
+  #affectedCookies = /* @__PURE__ */ new Map();
+  #affectedRawCookieLines = /* @__PURE__ */ new Map();
+  #affectedRequests = [];
+  #affectedRequestIds = /* @__PURE__ */ new Set();
+  #affectedLocations = /* @__PURE__ */ new Map();
+  #heavyAdIssues = /* @__PURE__ */ new Set();
+  #blockedByResponseDetails = /* @__PURE__ */ new Map();
+  #bounceTrackingSites = /* @__PURE__ */ new Set();
+  #corsIssues = /* @__PURE__ */ new Set();
+  #cspIssues = /* @__PURE__ */ new Set();
+  #deprecationIssues = /* @__PURE__ */ new Set();
+  #issueKind = "Improvement";
+  #cookieDeprecationMetadataIssues = /* @__PURE__ */ new Set();
+  #mixedContentIssues = /* @__PURE__ */ new Set();
+  #partitioningBlobURLIssues = /* @__PURE__ */ new Set();
+  #permissionElementIssues = /* @__PURE__ */ new Set();
+  #lazyLoadImageIssues = /* @__PURE__ */ new Set();
+  #selectivePermissionsInterventionIssues = /* @__PURE__ */ new Set();
+  #sharedArrayBufferIssues = /* @__PURE__ */ new Set();
+  #quirksModeIssues = /* @__PURE__ */ new Set();
+  #genericIssues = /* @__PURE__ */ new Set();
+  #elementAccessibilityIssues = /* @__PURE__ */ new Set();
+  #representative;
+  #aggregatedIssuesCount = 0;
+  #key;
+  constructor(code, aggregationKey) {
+    super(code, null);
+    this.#key = aggregationKey;
+  }
+  primaryKey() {
+    throw new Error("This should never be called");
+  }
+  aggregationKey() {
+    return this.#key;
+  }
+  getBlockedByResponseDetails() {
+    return this.#blockedByResponseDetails.values();
+  }
+  cookies() {
+    return Array.from(this.#affectedCookies.values()).map((x) => x.cookie);
+  }
+  getRawCookieLines() {
+    return this.#affectedRawCookieLines.values();
+  }
+  sources() {
+    return this.#affectedLocations.values();
+  }
+  getBounceTrackingSites() {
+    return this.#bounceTrackingSites.values();
+  }
+  cookiesWithRequestIndicator() {
+    return this.#affectedCookies.values();
+  }
+  getHeavyAdIssues() {
+    return this.#heavyAdIssues;
+  }
+  getCookieDeprecationMetadataIssues() {
+    return this.#cookieDeprecationMetadataIssues;
+  }
+  getMixedContentIssues() {
+    return this.#mixedContentIssues;
+  }
+  getCorsIssues() {
+    return this.#corsIssues;
+  }
+  getCspIssues() {
+    return this.#cspIssues;
+  }
+  getDeprecationIssues() {
+    return this.#deprecationIssues;
+  }
+  requests() {
+    return this.#affectedRequests.values();
+  }
+  getSelectivePermissionsInterventionIssues() {
+    return this.#selectivePermissionsInterventionIssues;
+  }
+  getSharedArrayBufferIssues() {
+    return this.#sharedArrayBufferIssues;
+  }
+  getQuirksModeIssues() {
+    return this.#quirksModeIssues;
+  }
+  getGenericIssues() {
+    return this.#genericIssues;
+  }
+  getElementAccessibilityIssues() {
+    return this.#elementAccessibilityIssues;
+  }
+  getDescription() {
+    if (this.#representative) {
+      return this.#representative.getDescription();
+    }
+    return null;
+  }
+  getCategory() {
+    if (this.#representative) {
+      return this.#representative.getCategory();
+    }
+    return "Other";
+  }
+  getAggregatedIssuesCount() {
+    return this.#aggregatedIssuesCount;
+  }
+  getPartitioningBlobURLIssues() {
+    return this.#partitioningBlobURLIssues;
+  }
+  getPermissionElementIssues() {
+    return this.#permissionElementIssues;
+  }
+  getLazyLoadImageIssues() {
+    return this.#lazyLoadImageIssues;
+  }
+  /**
+   * Produces a primary key for a cookie. Use this instead of `JSON.stringify` in
+   * case new fields are added to `AffectedCookie`.
+   */
+  #keyForCookie(cookie) {
+    const { domain, path, name } = cookie;
+    return `${domain};${path};${name}`;
+  }
+  addInstance(issue) {
+    this.#aggregatedIssuesCount++;
+    if (!this.#representative) {
+      this.#representative = issue;
+    }
+    this.#allIssues.add(issue);
+    this.#issueKind = unionIssueKind(this.#issueKind, issue.getKind());
+    let hasRequest = false;
+    for (const request of issue.requests()) {
+      const { requestId } = request;
+      hasRequest = true;
+      if (requestId === void 0) {
+        this.#affectedRequests.push(request);
+      } else if (!this.#affectedRequestIds.has(requestId)) {
+        this.#affectedRequests.push(request);
+        this.#affectedRequestIds.add(requestId);
+      }
+    }
+    for (const cookie of issue.cookies()) {
+      const key = this.#keyForCookie(cookie);
+      if (!this.#affectedCookies.has(key)) {
+        this.#affectedCookies.set(key, { cookie, hasRequest });
+      }
+    }
+    for (const rawCookieLine of issue.rawCookieLines()) {
+      if (!this.#affectedRawCookieLines.has(rawCookieLine)) {
+        this.#affectedRawCookieLines.set(rawCookieLine, { rawCookieLine, hasRequest });
+      }
+    }
+    for (const site of issue.trackingSites()) {
+      if (!this.#bounceTrackingSites.has(site)) {
+        this.#bounceTrackingSites.add(site);
+      }
+    }
+    for (const location of issue.sources()) {
+      const key = JSON.stringify(location);
+      if (!this.#affectedLocations.has(key)) {
+        this.#affectedLocations.set(key, location);
+      }
+    }
+    if (issue instanceof CookieDeprecationMetadataIssue) {
+      this.#cookieDeprecationMetadataIssues.add(issue);
+    }
+    if (issue instanceof MixedContentIssue) {
+      this.#mixedContentIssues.add(issue);
+    }
+    if (issue instanceof HeavyAdIssue) {
+      this.#heavyAdIssues.add(issue);
+    }
+    for (const details of issue.getBlockedByResponseDetails()) {
+      const key = JSON.stringify(details, ["parentFrame", "blockedFrame", "requestId", "frameId", "reason", "request"]);
+      this.#blockedByResponseDetails.set(key, details);
+    }
+    if (issue instanceof ContentSecurityPolicyIssue) {
+      this.#cspIssues.add(issue);
+    }
+    if (issue instanceof DeprecationIssue) {
+      this.#deprecationIssues.add(issue);
+    }
+    if (issue instanceof SharedArrayBufferIssue) {
+      this.#sharedArrayBufferIssues.add(issue);
+    }
+    if (issue instanceof CorsIssue) {
+      this.#corsIssues.add(issue);
+    }
+    if (issue instanceof QuirksModeIssue) {
+      this.#quirksModeIssues.add(issue);
+    }
+    if (issue instanceof GenericIssue) {
+      this.#genericIssues.add(issue);
+    }
+    if (issue instanceof ElementAccessibilityIssue) {
+      this.#elementAccessibilityIssues.add(issue);
+    }
+    if (issue instanceof PartitioningBlobURLIssue) {
+      this.#partitioningBlobURLIssues.add(issue);
+    }
+    if (issue instanceof PermissionElementIssue) {
+      this.#permissionElementIssues.add(issue);
+    }
+    if (issue instanceof LazyLoadImageIssue) {
+      this.#lazyLoadImageIssues.add(issue);
+    }
+    if (issue instanceof SelectivePermissionsInterventionIssue) {
+      this.#selectivePermissionsInterventionIssues.add(issue);
+    }
+  }
+  getKind() {
+    return this.#issueKind;
+  }
+  getAllIssues() {
+    return Array.from(this.#allIssues);
+  }
+  isHidden() {
+    return this.#representative?.isHidden() || false;
+  }
+  setHidden(_value) {
+    throw new Error("Should not call setHidden on aggregatedIssue");
+  }
+};
+var IssueAggregator = class extends Common2.ObjectWrapper.ObjectWrapper {
+  issuesManager;
+  #aggregatedIssuesByKey = /* @__PURE__ */ new Map();
+  #hiddenAggregatedIssuesByKey = /* @__PURE__ */ new Map();
+  constructor(issuesManager) {
+    super();
+    this.issuesManager = issuesManager;
+    this.issuesManager.addEventListener("IssueAdded", this.#onIssueAdded, this);
+    this.issuesManager.addEventListener("FullUpdateRequired", this.#onFullUpdateRequired, this);
+    for (const issue of this.issuesManager.issues()) {
+      this.#aggregateIssue(issue);
+    }
+  }
+  #onIssueAdded(event) {
+    this.#aggregateIssue(event.data.issue);
+  }
+  #onFullUpdateRequired() {
+    this.#aggregatedIssuesByKey.clear();
+    this.#hiddenAggregatedIssuesByKey.clear();
+    for (const issue of this.issuesManager.issues()) {
+      this.#aggregateIssue(issue);
+    }
+    this.dispatchEventToListeners(
+      "FullUpdateRequired"
+      /* Events.FULL_UPDATE_REQUIRED */
+    );
+  }
+  #aggregateIssue(issue) {
+    if (CookieIssue.isThirdPartyCookiePhaseoutRelatedIssue(issue)) {
+      return;
+    }
+    const map = issue.isHidden() ? this.#hiddenAggregatedIssuesByKey : this.#aggregatedIssuesByKey;
+    const aggregatedIssue = this.#aggregateIssueByStatus(map, issue);
+    this.dispatchEventToListeners("AggregatedIssueUpdated", aggregatedIssue);
+    return aggregatedIssue;
+  }
+  #aggregateIssueByStatus(aggregatedIssuesMap, issue) {
+    const key = issue.code();
+    let aggregatedIssue = aggregatedIssuesMap.get(key);
+    if (!aggregatedIssue) {
+      aggregatedIssue = new AggregatedIssue(issue.code(), key);
+      aggregatedIssuesMap.set(key, aggregatedIssue);
+    }
+    aggregatedIssue.addInstance(issue);
+    return aggregatedIssue;
+  }
+  aggregatedIssues() {
+    return [...this.#aggregatedIssuesByKey.values(), ...this.#hiddenAggregatedIssuesByKey.values()];
+  }
+  aggregatedIssueCodes() {
+    return /* @__PURE__ */ new Set([...this.#aggregatedIssuesByKey.keys(), ...this.#hiddenAggregatedIssuesByKey.keys()]);
+  }
+  aggregatedIssueCategories() {
+    const result = /* @__PURE__ */ new Set();
+    for (const issue of this.#aggregatedIssuesByKey.values()) {
+      result.add(issue.getCategory());
+    }
+    return result;
+  }
+  aggregatedIssueKinds() {
+    const result = /* @__PURE__ */ new Set();
+    for (const issue of this.#aggregatedIssuesByKey.values()) {
+      result.add(issue.getKind());
+    }
+    return result;
+  }
+  numberOfAggregatedIssues() {
+    return this.#aggregatedIssuesByKey.size;
+  }
+  numberOfHiddenAggregatedIssues() {
+    return this.#hiddenAggregatedIssuesByKey.size;
+  }
+  keyForIssue(issue) {
+    return issue.code();
+  }
+};
+
+// gen/front_end/models/issues_manager/IssueResolver.js
+var IssueResolver_exports = {};
+__export(IssueResolver_exports, {
+  IssueResolver: () => IssueResolver
+});
+import * as Common3 from "./..\\..\\core\\common\\common.js";
+var IssueResolver = class extends Common3.ResolverBase.ResolverBase {
+  #issuesListener = null;
+  #issuesManager;
+  constructor(issuesManager) {
+    super();
+    this.#issuesManager = issuesManager;
+  }
+  getForId(id) {
+    return this.#issuesManager.getIssueById(id) || null;
+  }
+  #onIssueAdded(event) {
+    const { issue } = event.data;
+    const id = issue.getIssueId();
+    if (id) {
+      this.onResolve(id, issue);
+    }
+  }
+  startListening() {
+    if (this.#issuesListener) {
+      return;
+    }
+    this.#issuesListener = this.#issuesManager.addEventListener("IssueAdded", this.#onIssueAdded, this);
+  }
+  stopListening() {
+    if (!this.#issuesListener) {
+      return;
+    }
+    Common3.EventTarget.removeEventListeners([this.#issuesListener]);
+    this.#issuesListener = null;
+  }
+};
+
+// gen/front_end/models/issues_manager/IssuesManager.js
+var IssuesManager_exports = {};
+__export(IssuesManager_exports, {
+  IssuesManager: () => IssuesManager,
+  createIssuesFromProtocolIssue: () => createIssuesFromProtocolIssue,
+  defaultHideIssueByCodeSetting: () => defaultHideIssueByCodeSetting,
+  getHideIssueByCodeSetting: () => getHideIssueByCodeSetting,
+  isIssueCodeSupported: () => isIssueCodeSupported
+});
+import * as Common5 from "./..\\..\\core\\common\\common.js";
+import * as Root from "./..\\..\\core\\root\\root.js";
+import * as SDK2 from "./..\\..\\core\\sdk\\sdk.js";
+import * as Bindings2 from "./..\\bindings\\bindings.js";
+import * as Workspace2 from "./..\\workspace\\workspace.js";
+
+// gen/front_end/models/issues_manager/BounceTrackingIssue.js
+import * as i18n41 from "./..\\..\\core\\i18n\\i18n.js";
+var UIStrings22 = {
+  /**
+   * @description Title for Bounce Tracking Mitigation explainer URL link.
+   */
+  bounceTrackingMitigations: "Bounce tracking mitigations"
+};
+var str_21 = i18n41.i18n.registerUIStrings("models/issues_manager/BounceTrackingIssue.ts", UIStrings22);
+var i18nString11 = i18n41.i18n.getLocalizedString.bind(void 0, str_21);
+var BounceTrackingIssue = class _BounceTrackingIssue extends Issue {
+  constructor(issueDetails, issuesModel) {
+    super("BounceTrackingIssue", issueDetails, issuesModel);
+  }
+  getCategory() {
+    return "Other";
+  }
+  getDescription() {
+    return {
+      file: "bounceTrackingMitigations.md",
+      links: [
+        {
+          link: "https://privacycg.github.io/nav-tracking-mitigations/#bounce-tracking-mitigations",
+          linkTitle: i18nString11(UIStrings22.bounceTrackingMitigations)
+        }
+      ]
+    };
+  }
+  getKind() {
+    return "BreakingChange";
+  }
+  primaryKey() {
+    return JSON.stringify(this.details());
+  }
+  trackingSites() {
+    return this.details().trackingSites;
+  }
+  static fromInspectorIssue(issuesModel, inspectorIssue) {
+    const details = inspectorIssue.details.bounceTrackingIssueDetails;
+    if (!details) {
+      console.warn("Bounce tracking issue without details received.");
+      return [];
+    }
+    return [new _BounceTrackingIssue(details, issuesModel)];
+  }
+};
+
+// gen/front_end/models/issues_manager/PropertyRuleIssue.js
+var PropertyRuleIssue_exports = {};
+__export(PropertyRuleIssue_exports, {
+  PropertyRuleIssue: () => PropertyRuleIssue
+});
+var PropertyRuleIssue = class _PropertyRuleIssue extends Issue {
+  #primaryKey;
+  constructor(issueDetails, issuesModel) {
+    const code = JSON.stringify(issueDetails);
+    super(code, issueDetails, issuesModel);
+    this.#primaryKey = code;
+  }
+  sources() {
+    return [this.details().sourceCodeLocation];
+  }
+  primaryKey() {
+    return this.#primaryKey;
+  }
+  getPropertyName() {
+    switch (this.details().propertyRuleIssueReason) {
+      case "InvalidInherits":
+        return "inherits";
+      case "InvalidInitialValue":
+        return "initial-value";
+      case "InvalidSyntax":
+        return "syntax";
+    }
+    return "";
+  }
+  getDescription() {
+    if (this.details().propertyRuleIssueReason === "InvalidName") {
+      return {
+        file: "propertyRuleInvalidNameIssue.md",
+        links: []
+      };
+    }
+    const value = this.details().propertyValue ? `: ${this.details().propertyValue}` : "";
+    const property = `${this.getPropertyName()}${value}`;
+    return {
+      file: "propertyRuleIssue.md",
+      substitutions: /* @__PURE__ */ new Map([["PLACEHOLDER_property", property]]),
+      links: []
+    };
+  }
+  getCategory() {
+    return "Other";
+  }
+  getKind() {
+    return "PageError";
+  }
+  static fromInspectorIssue(issueModel, inspectorIssue) {
+    const propertyRuleIssueDetails = inspectorIssue.details.propertyRuleIssueDetails;
+    if (!propertyRuleIssueDetails) {
+      console.warn("Property rule issue without details received");
+      return [];
+    }
+    return [new _PropertyRuleIssue(propertyRuleIssueDetails, issueModel)];
+  }
+};
+
+// gen/front_end/models/issues_manager/SharedDictionaryIssue.js
+var SharedDictionaryIssue_exports = {};
+__export(SharedDictionaryIssue_exports, {
+  SharedDictionaryIssue: () => SharedDictionaryIssue
+});
+import * as i18n43 from "./..\\..\\core\\i18n\\i18n.js";
+var UIStrings23 = {
+  /**
+   * @description Title for Compression Dictionary Transport specification URL link.
+   */
+  compressionDictionaryTransport: "Compression Dictionary Transport"
+};
+var str_22 = i18n43.i18n.registerUIStrings("models/issues_manager/SharedDictionaryIssue.ts", UIStrings23);
+var i18nLazyString11 = i18n43.i18n.getLazilyComputedLocalizedString.bind(void 0, str_22);
+function getIssueCode2(details) {
+  switch (details.sharedDictionaryError) {
+    case "UseErrorCrossOriginNoCorsRequest":
+      return "SharedDictionaryIssue::UseErrorCrossOriginNoCorsRequest";
+    case "UseErrorDictionaryLoadFailure":
+      return "SharedDictionaryIssue::UseErrorDictionaryLoadFailure";
+    case "UseErrorMatchingDictionaryNotUsed":
+      return "SharedDictionaryIssue::UseErrorMatchingDictionaryNotUsed";
+    case "UseErrorUnexpectedContentDictionaryHeader":
+      return "SharedDictionaryIssue::UseErrorUnexpectedContentDictionaryHeader";
+    case "WriteErrorCossOriginNoCorsRequest":
+      return "SharedDictionaryIssue::WriteErrorCossOriginNoCorsRequest";
+    case "WriteErrorDisallowedBySettings":
+      return "SharedDictionaryIssue::WriteErrorDisallowedBySettings";
+    case "WriteErrorExpiredResponse":
+      return "SharedDictionaryIssue::WriteErrorExpiredResponse";
+    case "WriteErrorFeatureDisabled":
+      return "SharedDictionaryIssue::WriteErrorFeatureDisabled";
+    case "WriteErrorInsufficientResources":
+      return "SharedDictionaryIssue::WriteErrorInsufficientResources";
+    case "WriteErrorInvalidMatchField":
+      return "SharedDictionaryIssue::WriteErrorInvalidMatchField";
+    case "WriteErrorInvalidStructuredHeader":
+      return "SharedDictionaryIssue::WriteErrorInvalidStructuredHeader";
+    case "WriteErrorInvalidTTLField":
+      return "SharedDictionaryIssue::WriteErrorInvalidTTLField";
+    case "WriteErrorNavigationRequest":
+      return "SharedDictionaryIssue::WriteErrorNavigationRequest";
+    case "WriteErrorNoMatchField":
+      return "SharedDictionaryIssue::WriteErrorNoMatchField";
+    case "WriteErrorNonIntegerTTLField":
+      return "SharedDictionaryIssue::WriteErrorNonIntegerTTLField";
+    case "WriteErrorNonListMatchDestField":
+      return "SharedDictionaryIssue::WriteErrorNonListMatchDestField";
+    case "WriteErrorNonSecureContext":
+      return "SharedDictionaryIssue::WriteErrorNonSecureContext";
+    case "WriteErrorNonStringIdField":
+      return "SharedDictionaryIssue::WriteErrorNonStringIdField";
+    case "WriteErrorNonStringInMatchDestList":
+      return "SharedDictionaryIssue::WriteErrorNonStringInMatchDestList";
+    case "WriteErrorNonStringMatchField":
+      return "SharedDictionaryIssue::WriteErrorNonStringMatchField";
+    case "WriteErrorNonTokenTypeField":
+      return "SharedDictionaryIssue::WriteErrorNonTokenTypeField";
+    case "WriteErrorRequestAborted":
+      return "SharedDictionaryIssue::WriteErrorRequestAborted";
+    case "WriteErrorShuttingDown":
+      return "SharedDictionaryIssue::WriteErrorShuttingDown";
+    case "WriteErrorTooLongIdField":
+      return "SharedDictionaryIssue::WriteErrorTooLongIdField";
+    case "WriteErrorUnsupportedType":
+      return "SharedDictionaryIssue::WriteErrorUnsupportedType";
+    default:
+      return "SharedDictionaryIssue::WriteErrorUnknown";
+  }
+}
+var SharedDictionaryIssue = class _SharedDictionaryIssue extends Issue {
+  constructor(issueDetails, issuesModel) {
+    super({
+      code: getIssueCode2(issueDetails),
+      umaCode: [
+        "SharedDictionaryIssue",
+        issueDetails.sharedDictionaryError
+      ].join("::")
+    }, issueDetails, issuesModel);
+  }
+  requests() {
+    if (this.details().request) {
+      return [this.details().request];
+    }
+    return [];
+  }
+  getCategory() {
+    return "Other";
+  }
+  getDescription() {
+    const description = issueDescriptions10.get(this.details().sharedDictionaryError);
+    if (!description) {
+      return null;
+    }
+    return resolveLazyDescription(description);
+  }
+  primaryKey() {
+    return JSON.stringify(this.details());
+  }
+  getKind() {
+    return "PageError";
+  }
+  static fromInspectorIssue(issuesModel, inspectorIssue) {
+    const details = inspectorIssue.details.sharedDictionaryIssueDetails;
+    if (!details) {
+      console.warn("Shared Dictionary issue without details received.");
+      return [];
+    }
+    return [new _SharedDictionaryIssue(details, issuesModel)];
+  }
+};
+var specLinks = [{
+  link: "https://datatracker.ietf.org/doc/draft-ietf-httpbis-compression-dictionary/",
+  linkTitle: i18nLazyString11(UIStrings23.compressionDictionaryTransport)
+}];
+var issueDescriptions10 = /* @__PURE__ */ new Map([
+  [
+    "UseErrorCrossOriginNoCorsRequest",
+    {
+      file: "sharedDictionaryUseErrorCrossOriginNoCorsRequest.md",
+      links: specLinks
+    }
+  ],
+  [
+    "UseErrorDictionaryLoadFailure",
+    {
+      file: "sharedDictionaryUseErrorDictionaryLoadFailure.md",
+      links: specLinks
+    }
+  ],
+  [
+    "UseErrorMatchingDictionaryNotUsed",
+    {
+      file: "sharedDictionaryUseErrorMatchingDictionaryNotUsed.md",
+      links: specLinks
+    }
+  ],
+  [
+    "UseErrorUnexpectedContentDictionaryHeader",
+    {
+      file: "sharedDictionaryUseErrorUnexpectedContentDictionaryHeader.md",
+      links: specLinks
+    }
+  ],
+  [
+    "WriteErrorCossOriginNoCorsRequest",
+    {
+      file: "sharedDictionaryWriteErrorCossOriginNoCorsRequest.md",
+      links: specLinks
+    }
+  ],
+  [
+    "WriteErrorDisallowedBySettings",
+    {
+      file: "sharedDictionaryWriteErrorDisallowedBySettings.md",
+      links: specLinks
+    }
+  ],
+  [
+    "WriteErrorExpiredResponse",
+    {
+      file: "sharedDictionaryWriteErrorExpiredResponse.md",
+      links: specLinks
+    }
+  ],
+  [
+    "WriteErrorFeatureDisabled",
+    {
+      file: "sharedDictionaryWriteErrorFeatureDisabled.md",
+      links: specLinks
+    }
+  ],
+  [
+    "WriteErrorInsufficientResources",
+    {
+      file: "sharedDictionaryWriteErrorInsufficientResources.md",
+      links: specLinks
+    }
+  ],
+  [
+    "WriteErrorInvalidMatchField",
+    {
+      file: "sharedDictionaryWriteErrorInvalidMatchField.md",
+      links: specLinks
+    }
+  ],
+  [
+    "WriteErrorInvalidStructuredHeader",
+    {
+      file: "sharedDictionaryWriteErrorInvalidStructuredHeader.md",
+      links: specLinks
+    }
+  ],
+  [
+    "WriteErrorInvalidTTLField",
+    {
+      file: "sharedDictionaryWriteErrorInvalidTTLField.md",
+      links: specLinks
+    }
+  ],
+  [
+    "WriteErrorNavigationRequest",
+    {
+      file: "sharedDictionaryWriteErrorNavigationRequest.md",
+      links: specLinks
+    }
+  ],
+  [
+    "WriteErrorNoMatchField",
+    {
+      file: "sharedDictionaryWriteErrorNoMatchField.md",
+      links: specLinks
+    }
+  ],
+  [
+    "WriteErrorNonIntegerTTLField",
+    {
+      file: "sharedDictionaryWriteErrorNonIntegerTTLField.md",
+      links: specLinks
+    }
+  ],
+  [
+    "WriteErrorNonListMatchDestField",
+    {
+      file: "sharedDictionaryWriteErrorNonListMatchDestField.md",
+      links: specLinks
+    }
+  ],
+  [
+    "WriteErrorNonSecureContext",
+    {
+      file: "sharedDictionaryWriteErrorNonSecureContext.md",
+      links: specLinks
+    }
+  ],
+  [
+    "WriteErrorNonStringIdField",
+    {
+      file: "sharedDictionaryWriteErrorNonStringIdField.md",
+      links: specLinks
+    }
+  ],
+  [
+    "WriteErrorNonStringInMatchDestList",
+    {
+      file: "sharedDictionaryWriteErrorNonStringInMatchDestList.md",
+      links: specLinks
+    }
+  ],
+  [
+    "WriteErrorNonStringMatchField",
+    {
+      file: "sharedDictionaryWriteErrorNonStringMatchField.md",
+      links: specLinks
+    }
+  ],
+  [
+    "WriteErrorNonTokenTypeField",
+    {
+      file: "sharedDictionaryWriteErrorNonTokenTypeField.md",
+      links: specLinks
+    }
+  ],
+  [
+    "WriteErrorRequestAborted",
+    {
+      file: "sharedDictionaryWriteErrorRequestAborted.md",
+      links: specLinks
+    }
+  ],
+  [
+    "WriteErrorShuttingDown",
+    {
+      file: "sharedDictionaryWriteErrorShuttingDown.md",
+      links: specLinks
+    }
+  ],
+  [
+    "WriteErrorTooLongIdField",
+    {
+      file: "sharedDictionaryWriteErrorTooLongIdField.md",
+      links: specLinks
+    }
+  ],
+  [
+    "WriteErrorUnsupportedType",
+    {
+      file: "sharedDictionaryWriteErrorUnsupportedType.md",
+      links: specLinks
+    }
+  ]
+]);
+
+// gen/front_end/models/issues_manager/SourceFrameIssuesManager.js
+var SourceFrameIssuesManager_exports = {};
+__export(SourceFrameIssuesManager_exports, {
+  IssueMessage: () => IssueMessage,
+  SourceFrameIssuesManager: () => SourceFrameIssuesManager
+});
+import * as Common4 from "./..\\..\\core\\common\\common.js";
+import * as Bindings from "./..\\bindings\\bindings.js";
+import * as Workspace from "./..\\workspace\\workspace.js";
+
+// gen/front_end/models/issues_manager/StylesheetLoadingIssue.js
+var StylesheetLoadingIssue_exports = {};
+__export(StylesheetLoadingIssue_exports, {
+  StylesheetLoadingIssue: () => StylesheetLoadingIssue,
+  lateImportStylesheetLoadingCode: () => lateImportStylesheetLoadingCode
+});
+var lateImportStylesheetLoadingCode = [
+  "StylesheetLoadingIssue",
+  "LateImportRule"
+].join("::");
+var StylesheetLoadingIssue = class _StylesheetLoadingIssue extends Issue {
+  constructor(issueDetails, issuesModel) {
+    const code = `${"StylesheetLoadingIssue"}::${issueDetails.styleSheetLoadingIssueReason}`;
+    super(code, issueDetails, issuesModel);
+  }
+  sources() {
+    return [this.details().sourceCodeLocation];
+  }
+  requests() {
+    const details = this.details();
+    if (!details.failedRequestInfo) {
+      return [];
+    }
+    const { url, requestId } = details.failedRequestInfo;
+    if (!requestId) {
+      return [];
+    }
+    return [{ url, requestId }];
+  }
+  primaryKey() {
+    return JSON.stringify(this.details());
+  }
+  getDescription() {
+    switch (this.details().styleSheetLoadingIssueReason) {
+      case "LateImportRule":
+        return {
+          file: "stylesheetLateImport.md",
+          links: []
+        };
+      case "RequestFailed":
+        return {
+          file: "stylesheetRequestFailed.md",
+          links: []
+        };
+    }
+  }
+  getCategory() {
+    return "Other";
+  }
+  getKind() {
+    return "PageError";
+  }
+  static fromInspectorIssue(issueModel, inspectorIssue) {
+    const stylesheetLoadingDetails = inspectorIssue.details.stylesheetLoadingIssueDetails;
+    if (!stylesheetLoadingDetails) {
+      console.warn("Stylesheet loading issue without details received");
+      return [];
+    }
+    return [new _StylesheetLoadingIssue(stylesheetLoadingDetails, issueModel)];
+  }
+};
+
+// gen/front_end/models/issues_manager/SourceFrameIssuesManager.js
+var SourceFrameIssuesManager = class {
+  issuesManager;
+  #sourceFrameMessageManager;
+  constructor(issuesManager, targetManager, workspace, debuggerWorkspaceBinding, cssWorkspaceBinding) {
+    this.issuesManager = issuesManager;
+    this.#sourceFrameMessageManager = new Bindings.PresentationConsoleMessageHelper.PresentationSourceFrameMessageManager(targetManager, workspace, debuggerWorkspaceBinding, cssWorkspaceBinding);
+    this.#sourceFrameMessageManager.enable();
+    this.issuesManager.addEventListener("IssueAdded", this.#onIssueAdded, this);
+    this.issuesManager.addEventListener("FullUpdateRequired", this.#onFullUpdateRequired, this);
+  }
+  #onIssueAdded(event) {
+    const { issue } = event.data;
+    void this.#addIssue(issue);
+  }
+  async #addIssue(issue) {
+    if (!this.#isTrustedTypeIssue(issue) && !this.#isLateImportIssue(issue) && !this.#isPropertyRuleIssue(issue)) {
+      return;
+    }
+    const issuesModel = issue.model();
+    if (!issuesModel) {
+      return;
+    }
+    const srcLocation = toZeroBasedLocation(issue.details().sourceCodeLocation);
+    const description = issue.getDescription();
+    if (!description || !srcLocation) {
+      return;
+    }
+    const messageText = await getIssueTitleFromMarkdownDescription(description);
+    if (!messageText) {
+      return;
+    }
+    const clickHandler = () => {
+      void Common4.Revealer.reveal(issue);
+    };
+    this.#sourceFrameMessageManager.addMessage(new IssueMessage(messageText, issue.getKind(), clickHandler), {
+      line: srcLocation.lineNumber,
+      column: srcLocation.columnNumber ?? -1,
+      url: srcLocation.url,
+      scriptId: srcLocation.scriptId
+    }, issuesModel.target());
+  }
+  #onFullUpdateRequired() {
+    this.#resetMessages();
+    const issues = this.issuesManager.issues();
+    for (const issue of issues) {
+      void this.#addIssue(issue);
+    }
+  }
+  #isTrustedTypeIssue(issue) {
+    return issue instanceof ContentSecurityPolicyIssue && issue.code() === trustedTypesSinkViolationCode || issue.code() === trustedTypesPolicyViolationCode;
+  }
+  #isPropertyRuleIssue(issue) {
+    return issue instanceof PropertyRuleIssue;
+  }
+  #isLateImportIssue(issue) {
+    return issue.code() === lateImportStylesheetLoadingCode;
+  }
+  #resetMessages() {
+    this.#sourceFrameMessageManager.clear();
+  }
+};
+var IssueMessage = class extends Workspace.UISourceCode.Message {
+  #kind;
+  constructor(title, kind, clickHandler) {
+    super("Issue", title, clickHandler);
+    this.#kind = kind;
+  }
+  getIssueKind() {
+    return this.#kind;
+  }
+};
+
+// gen/front_end/models/issues_manager/SRIMessageSignatureIssue.js
+var SRIMessageSignatureIssue_exports = {};
+__export(SRIMessageSignatureIssue_exports, {
+  SRIMessageSignatureIssue: () => SRIMessageSignatureIssue
+});
+import * as i18n45 from "./..\\..\\core\\i18n\\i18n.js";
+var UIStrings24 = {
+  /**
+   * @description Title for HTTP Message Signatures specification URL.
+   */
+  httpMessageSignatures: "HTTP Message Signatures (RFC9421)",
+  /**
+   * @description Title for Signature-based Integrity specification URL.
+   */
+  signatureBasedIntegrity: "Signature-based Integrity"
+};
+var str_23 = i18n45.i18n.registerUIStrings("models/issues_manager/SRIMessageSignatureIssue.ts", UIStrings24);
+var i18nLazyString12 = i18n45.i18n.getLazilyComputedLocalizedString.bind(void 0, str_23);
+function generateGroupingIssueCode(details) {
+  const issueCode = `${"SRIMessageSignatureIssue"}::${details.error}`;
+  if (details.error === "ValidationFailedSignatureMismatch") {
+    return issueCode + details.signatureBase;
+  }
+  if (details.error === "ValidationFailedIntegrityMismatch") {
+    return issueCode + details.integrityAssertions.join();
+  }
+  return issueCode;
+}
+var SRIMessageSignatureIssue = class _SRIMessageSignatureIssue extends Issue {
+  constructor(issueDetails, issuesModel) {
+    super({
+      code: generateGroupingIssueCode(issueDetails),
+      umaCode: `${"SRIMessageSignatureIssue"}::${issueDetails.error}`
+    }, issueDetails, issuesModel);
+  }
+  // Overriding `Issue<String>`:
+  primaryKey() {
+    return JSON.stringify(this.details());
+  }
+  getDescription() {
+    const details = this.details();
+    const description = {
+      file: `sri${details.error}.md`,
+      links: [
+        {
+          link: "https://www.rfc-editor.org/rfc/rfc9421.html",
+          linkTitle: i18nLazyString12(UIStrings24.httpMessageSignatures)
+        },
+        {
+          link: "https://wicg.github.io/signature-based-sri/",
+          linkTitle: i18nLazyString12(UIStrings24.signatureBasedIntegrity)
+        }
+      ],
+      substitutions: /* @__PURE__ */ new Map()
+    };
+    if (details.error === "ValidationFailedSignatureMismatch") {
+      description.substitutions?.set("PLACEHOLDER_signatureBase", () => details.signatureBase);
+    }
+    if (details.error === "ValidationFailedIntegrityMismatch") {
+      description.substitutions?.set("PLACEHOLDER_integrityAssertions", () => {
+        const prefix = "\n* ";
+        return prefix + this.details().integrityAssertions.join(prefix);
+      });
+    }
+    return resolveLazyDescription(description);
+  }
+  getCategory() {
+    return "Other";
+  }
+  getKind() {
+    return "PageError";
+  }
+  requests() {
+    return this.details().request ? [this.details().request] : [];
+  }
+  static fromInspectorIssue(issuesModel, inspectorIssue) {
+    const details = inspectorIssue.details.sriMessageSignatureIssueDetails;
+    if (!details) {
+      console.warn("SRI Message Signature issue without details received.");
+      return [];
+    }
+    return [new _SRIMessageSignatureIssue(details, issuesModel)];
+  }
+};
+
+// gen/front_end/models/issues_manager/UnencodedDigestIssue.js
+var UnencodedDigestIssue_exports = {};
+__export(UnencodedDigestIssue_exports, {
+  UnencodedDigestIssue: () => UnencodedDigestIssue
+});
+import * as i18n47 from "./..\\..\\core\\i18n\\i18n.js";
+var UIStrings25 = {
+  /**
+   * @description Title for HTTP Unencoded Digest specification URL.
+   */
+  unencodedDigestHeader: "HTTP Unencoded Digest specification",
+  /**
+   * @description Title for the URL of the integration of unencoded-digest and SRI.
+   */
+  integrityIntegration: "Server-initiated integrity checks"
+};
+var str_24 = i18n47.i18n.registerUIStrings("models/issues_manager/UnencodedDigestIssue.ts", UIStrings25);
+var i18nLazyString13 = i18n47.i18n.getLazilyComputedLocalizedString.bind(void 0, str_24);
+var UnencodedDigestIssue = class _UnencodedDigestIssue extends Issue {
+  constructor(issueDetails, issuesModel) {
+    super({
+      code: `${"UnencodedDigestIssue"}::${issueDetails.error}`,
+      umaCode: `${"UnencodedDigestIssue"}::${issueDetails.error}`
+    }, issueDetails, issuesModel);
+  }
+  primaryKey() {
+    return JSON.stringify(this.details());
+  }
+  getDescription() {
+    const description = {
+      file: `unencodedDigest${this.details().error}.md`,
+      links: [
+        {
+          link: "https://www.ietf.org/archive/id/draft-ietf-httpbis-unencoded-digest-01.html",
+          linkTitle: i18nLazyString13(UIStrings25.unencodedDigestHeader)
+        },
+        {
+          link: "https://wicg.github.io/signature-based-sri/#unencoded-digest-validation",
+          linkTitle: i18nLazyString13(UIStrings25.integrityIntegration)
+        }
+      ]
+    };
+    return resolveLazyDescription(description);
+  }
+  getCategory() {
+    return "Other";
+  }
+  getKind() {
+    return "PageError";
+  }
+  requests() {
+    return this.details().request ? [this.details().request] : [];
+  }
+  static fromInspectorIssue(issuesModel, inspectorIssue) {
+    const details = inspectorIssue.details.unencodedDigestIssueDetails;
+    if (!details) {
+      console.warn("Unencoded-Digest issue without details received.");
+      return [];
+    }
+    return [new _UnencodedDigestIssue(details, issuesModel)];
+  }
+};
+
+// gen/front_end/models/issues_manager/IssuesManager.js
+function createIssuesForBlockedByResponseIssue(issuesModel, inspectorIssue) {
+  const blockedByResponseIssueDetails = inspectorIssue.details.blockedByResponseIssueDetails;
+  if (!blockedByResponseIssueDetails) {
+    console.warn("BlockedByResponse issue without details received.");
+    return [];
+  }
+  if (isCrossOriginEmbedderPolicyIssue(blockedByResponseIssueDetails.reason)) {
+    return [new CrossOriginEmbedderPolicyIssue(blockedByResponseIssueDetails, issuesModel)];
+  }
+  return [];
+}
+var issueCodeHandlers = /* @__PURE__ */ new Map([
+  [
+    "CookieIssue",
+    CookieIssue.fromInspectorIssue
+  ],
+  [
+    "MixedContentIssue",
+    MixedContentIssue.fromInspectorIssue
+  ],
+  [
+    "HeavyAdIssue",
+    HeavyAdIssue.fromInspectorIssue
+  ],
+  [
+    "ContentSecurityPolicyIssue",
+    ContentSecurityPolicyIssue.fromInspectorIssue
+  ],
+  ["BlockedByResponseIssue", createIssuesForBlockedByResponseIssue],
+  [
+    "SharedArrayBufferIssue",
+    SharedArrayBufferIssue.fromInspectorIssue
+  ],
+  [
+    "SharedDictionaryIssue",
+    SharedDictionaryIssue.fromInspectorIssue
+  ],
+  [
+    "CorsIssue",
+    CorsIssue.fromInspectorIssue
+  ],
+  [
+    "QuirksModeIssue",
+    QuirksModeIssue.fromInspectorIssue
+  ],
+  [
+    "GenericIssue",
+    GenericIssue.fromInspectorIssue
+  ],
+  [
+    "DeprecationIssue",
+    DeprecationIssue.fromInspectorIssue
+  ],
+  [
+    "ClientHintIssue",
+    ClientHintIssue.fromInspectorIssue
+  ],
+  [
+    "EmailVerificationRequestIssue",
+    EmailVerificationRequestIssue.fromInspectorIssue
+  ],
+  [
+    "FederatedAuthRequestIssue",
+    FederatedAuthRequestIssue.fromInspectorIssue
+  ],
+  [
+    "BounceTrackingIssue",
+    BounceTrackingIssue.fromInspectorIssue
+  ],
+  [
+    "StylesheetLoadingIssue",
+    StylesheetLoadingIssue.fromInspectorIssue
+  ],
+  [
+    "PartitioningBlobURLIssue",
+    PartitioningBlobURLIssue.fromInspectorIssue
+  ],
+  [
+    "PropertyRuleIssue",
+    PropertyRuleIssue.fromInspectorIssue
+  ],
+  [
+    "CookieDeprecationMetadataIssue",
+    CookieDeprecationMetadataIssue.fromInspectorIssue
+  ],
+  [
+    "ElementAccessibilityIssue",
+    ElementAccessibilityIssue.fromInspectorIssue
+  ],
+  [
+    "SRIMessageSignatureIssue",
+    SRIMessageSignatureIssue.fromInspectorIssue
+  ],
+  [
+    "UnencodedDigestIssue",
+    UnencodedDigestIssue.fromInspectorIssue
+  ],
+  [
+    "ConnectionAllowlistIssue",
+    ConnectionAllowlistIssue.fromInspectorIssue
+  ],
+  [
+    "PermissionElementIssue",
+    PermissionElementIssue.fromInspectorIssue
+  ],
+  [
+    "SelectivePermissionsInterventionIssue",
+    SelectivePermissionsInterventionIssue.fromInspectorIssue
+  ],
+  [
+    "LazyLoadImageIssue",
+    LazyLoadImageIssue.fromInspectorIssue
+  ]
+]);
+function isIssueCodeSupported(code) {
+  return issueCodeHandlers.has(code);
+}
+function createIssuesFromProtocolIssue(issuesModel, inspectorIssue, frameManager = SDK2.FrameManager.FrameManager.instance()) {
+  const handler = issueCodeHandlers.get(inspectorIssue.code);
+  if (handler) {
+    return handler(issuesModel, inspectorIssue, frameManager);
+  }
+  console.warn(`No handler registered for issue code ${inspectorIssue.code}`);
+  return [];
+}
+function defaultHideIssueByCodeSetting() {
+  const setting = {};
+  return setting;
+}
+function getHideIssueByCodeSetting(settings = Common5.Settings.Settings.instance()) {
+  return settings.createSetting("hide-issue-by-code-setting-experiment-2021", defaultHideIssueByCodeSetting());
+}
+var IssuesManager = class _IssuesManager extends Common5.ObjectWrapper.ObjectWrapper {
+  showThirdPartyIssuesSetting;
+  hideIssueSetting;
+  #eventListeners = /* @__PURE__ */ new WeakMap();
+  #allIssues = /* @__PURE__ */ new Map();
+  #filteredIssues = /* @__PURE__ */ new Map();
+  #issueCounts = /* @__PURE__ */ new Map();
+  #hiddenIssueCount = /* @__PURE__ */ new Map();
+  #thirdPartyCookiePhaseoutIssueCount = /* @__PURE__ */ new Map();
+  #issuesById = /* @__PURE__ */ new Map();
+  #issuesByOutermostTarget = /* @__PURE__ */ new Map();
+  #frameManager;
+  #targetManager;
+  constructor(showThirdPartyIssuesSetting, hideIssueSetting, frameManager = SDK2.FrameManager.FrameManager.instance(), targetManager = SDK2.TargetManager.TargetManager.instance(), workspace = Workspace2.Workspace.WorkspaceImpl.instance(), debuggerWorkspaceBinding = (
+    // eslint-disable-next-line @devtools/no-instance-of-migrated-singletons
+    Bindings2.DebuggerWorkspaceBinding.DebuggerWorkspaceBinding.instance()
+  ), cssWorkspaceBinding = (
+    // eslint-disable-next-line @devtools/no-instance-of-migrated-singletons
+    Bindings2.CSSWorkspaceBinding.CSSWorkspaceBinding.instance()
+  )) {
+    super();
+    this.showThirdPartyIssuesSetting = showThirdPartyIssuesSetting;
+    this.hideIssueSetting = hideIssueSetting;
+    this.#frameManager = frameManager;
+    this.#targetManager = targetManager;
+    new SourceFrameIssuesManager(this, targetManager, workspace, debuggerWorkspaceBinding, cssWorkspaceBinding);
+    this.#targetManager.observeModels(SDK2.IssuesModel.IssuesModel, this);
+    this.#targetManager.addModelListener(SDK2.ResourceTreeModel.ResourceTreeModel, SDK2.ResourceTreeModel.Events.PrimaryPageChanged, this.#onPrimaryPageChanged, this);
+    this.#frameManager.addEventListener("FrameAddedToTarget", this.#onFrameAddedToTarget, this);
+    this.showThirdPartyIssuesSetting?.addChangeListener(() => this.#updateFilteredIssues());
+    this.hideIssueSetting?.addChangeListener(() => this.#updateFilteredIssues());
+    this.#targetManager.observeTargets({
+      targetAdded: (target) => {
+        if (target.outermostTarget() === target) {
+          this.#updateFilteredIssues();
+        }
+      },
+      targetRemoved: (_) => {
+      }
+    }, { scoped: true });
+  }
+  static instance(opts = {
+    forceNew: false,
+    ensureFirst: false
+  }) {
+    if (Root.DevToolsContext.globalInstance().has(_IssuesManager) && opts.ensureFirst) {
+      throw new Error('IssuesManager was already created. Either set "ensureFirst" to false or make sure that this invocation is really the first one.');
+    }
+    if (!Root.DevToolsContext.globalInstance().has(_IssuesManager) || opts.forceNew) {
+      Root.DevToolsContext.globalInstance().set(_IssuesManager, new _IssuesManager(opts.showThirdPartyIssuesSetting, opts.hideIssueSetting, opts.frameManager));
+    }
+    return Root.DevToolsContext.globalInstance().get(_IssuesManager);
+  }
+  static removeInstance() {
+    Root.DevToolsContext.globalInstance().delete(_IssuesManager);
+  }
+  #onPrimaryPageChanged(event) {
+    const { frame, type } = event.data;
+    const keptIssues = /* @__PURE__ */ new Map();
+    for (const [key, issue] of this.#allIssues.entries()) {
+      if (issue.isAssociatedWithRequestId(frame.loaderId)) {
+        keptIssues.set(key, issue);
+      } else if (type === "Activation" && frame.resourceTreeModel().target() === issue.model()?.target()) {
+        keptIssues.set(key, issue);
+      } else if (issue.code() === "BounceTrackingIssue" || issue.code() === "CookieIssue") {
+        const networkManager = frame.resourceTreeModel().target().model(SDK2.NetworkManager.NetworkManager);
+        if (networkManager?.requestForLoaderId(frame.loaderId)?.hasUserGesture() === false) {
+          keptIssues.set(key, issue);
+        }
+      }
+    }
+    this.#allIssues = keptIssues;
+    this.#updateFilteredIssues();
+  }
+  #onFrameAddedToTarget(event) {
+    const { frame } = event.data;
+    if (frame.isOutermostFrame() && this.#targetManager.isInScope(frame.resourceTreeModel())) {
+      this.#updateFilteredIssues();
+    }
+  }
+  modelAdded(issuesModel) {
+    const listener = issuesModel.addEventListener("IssueAdded", this.#onIssueAddedEvent, this);
+    this.#eventListeners.set(issuesModel, listener);
+  }
+  modelRemoved(issuesModel) {
+    const listener = this.#eventListeners.get(issuesModel);
+    if (listener) {
+      Common5.EventTarget.removeEventListeners([listener]);
+    }
+  }
+  #onIssueAddedEvent(event) {
+    const { issuesModel, inspectorIssue } = event.data;
+    const issues = createIssuesFromProtocolIssue(issuesModel, inspectorIssue, this.#frameManager);
+    for (const issue of issues) {
+      this.addIssue(issuesModel, issue);
+      const message = issue.maybeCreateConsoleMessage();
+      if (!message) {
+        continue;
+      }
+      issuesModel.target().model(SDK2.ConsoleModel.ConsoleModel)?.addMessage(message);
+    }
+  }
+  addIssue(issuesModel, issue) {
+    if (!issue.getDescription()) {
+      return;
+    }
+    const primaryKey = issue.primaryKey();
+    if (this.#allIssues.has(primaryKey)) {
+      return;
+    }
+    this.#allIssues.set(primaryKey, issue);
+    const outermostTarget = issuesModel.target().outermostTarget();
+    if (outermostTarget) {
+      let issuesForTarget = this.#issuesByOutermostTarget.get(outermostTarget);
+      if (!issuesForTarget) {
+        issuesForTarget = /* @__PURE__ */ new Set();
+        this.#issuesByOutermostTarget.set(outermostTarget, issuesForTarget);
+      }
+      issuesForTarget.add(issue);
+    }
+    if (this.#issueFilter(issue)) {
+      this.#filteredIssues.set(primaryKey, issue);
+      this.#issueCounts.set(issue.getKind(), 1 + (this.#issueCounts.get(issue.getKind()) || 0));
+      const issueId = issue.getIssueId();
+      if (issueId) {
+        this.#issuesById.set(issueId, issue);
+      }
+      const values = this.hideIssueSetting?.get();
+      this.#updateIssueHiddenStatus(issue, values);
+      if (CookieIssue.isThirdPartyCookiePhaseoutRelatedIssue(issue)) {
+        this.#thirdPartyCookiePhaseoutIssueCount.set(issue.getKind(), 1 + (this.#thirdPartyCookiePhaseoutIssueCount.get(issue.getKind()) || 0));
+      } else if (issue.isHidden()) {
+        this.#hiddenIssueCount.set(issue.getKind(), 1 + (this.#hiddenIssueCount.get(issue.getKind()) || 0));
+      }
+      this.dispatchEventToListeners("IssueAdded", { issuesModel, issue });
+    }
+    this.dispatchEventToListeners(
+      "IssuesCountUpdated"
+      /* Events.ISSUES_COUNT_UPDATED */
+    );
+  }
+  issues() {
+    return this.#filteredIssues.values();
+  }
+  numberOfIssues(kind) {
+    if (kind) {
+      return (this.#issueCounts.get(kind) ?? 0) - this.numberOfHiddenIssues(kind) - this.numberOfThirdPartyCookiePhaseoutIssues(kind);
+    }
+    return this.#filteredIssues.size - this.numberOfHiddenIssues() - this.numberOfThirdPartyCookiePhaseoutIssues();
+  }
+  numberOfHiddenIssues(kind) {
+    if (kind) {
+      return this.#hiddenIssueCount.get(kind) ?? 0;
+    }
+    let count = 0;
+    for (const num of this.#hiddenIssueCount.values()) {
+      count += num;
+    }
+    return count;
+  }
+  numberOfThirdPartyCookiePhaseoutIssues(kind) {
+    if (kind) {
+      return this.#thirdPartyCookiePhaseoutIssueCount.get(kind) ?? 0;
+    }
+    let count = 0;
+    for (const num of this.#thirdPartyCookiePhaseoutIssueCount.values()) {
+      count += num;
+    }
+    return count;
+  }
+  numberOfAllStoredIssues() {
+    return this.#allIssues.size;
+  }
+  #issueFilter(issue) {
+    const scopeTarget = this.#targetManager.scopeTarget();
+    if (!scopeTarget) {
+      return false;
+    }
+    if (!this.#issuesByOutermostTarget.get(scopeTarget)?.has(issue)) {
+      return false;
+    }
+    return this.showThirdPartyIssuesSetting?.get() || !issue.isCausedByThirdParty();
+  }
+  #updateIssueHiddenStatus(issue, values) {
+    const code = issue.code();
+    if (values?.[code]) {
+      const isHidden = values[code] === "Hidden";
+      if (issue.isHidden() !== isHidden) {
+        issue.setHidden(isHidden);
+        this.dispatchEventToListeners("IssueHiddenStatusUpdated", { issue });
+      }
+    }
+  }
+  #updateFilteredIssues() {
+    this.#filteredIssues.clear();
+    this.#issueCounts.clear();
+    this.#issuesById.clear();
+    this.#hiddenIssueCount.clear();
+    this.#thirdPartyCookiePhaseoutIssueCount.clear();
+    const values = this.hideIssueSetting?.get();
+    for (const [key, issue] of this.#allIssues) {
+      if (this.#issueFilter(issue)) {
+        this.#updateIssueHiddenStatus(issue, values);
+        this.#filteredIssues.set(key, issue);
+        this.#issueCounts.set(issue.getKind(), 1 + (this.#issueCounts.get(issue.getKind()) ?? 0));
+        if (issue.isHidden()) {
+          this.#hiddenIssueCount.set(issue.getKind(), 1 + (this.#hiddenIssueCount.get(issue.getKind()) || 0));
+        }
+        const issueId = issue.getIssueId();
+        if (issueId) {
+          this.#issuesById.set(issueId, issue);
+        }
+      }
+    }
+    this.dispatchEventToListeners(
+      "FullUpdateRequired"
+      /* Events.FULL_UPDATE_REQUIRED */
+    );
+    this.dispatchEventToListeners(
+      "IssuesCountUpdated"
+      /* Events.ISSUES_COUNT_UPDATED */
+    );
+  }
+  unhideAllIssues() {
+    for (const issue of this.#allIssues.values()) {
+      if (issue.isHidden()) {
+        issue.setHidden(false);
+        this.dispatchEventToListeners("IssueHiddenStatusUpdated", { issue });
+      }
+    }
+    this.hideIssueSetting?.set(defaultHideIssueByCodeSetting());
+  }
+  getIssueById(id) {
+    return this.#issuesById.get(id);
+  }
+};
+globalThis.addIssueForTest = (issue) => {
+  const mainTarget = SDK2.TargetManager.TargetManager.instance().primaryPageTarget();
+  const issuesModel = mainTarget?.model(SDK2.IssuesModel.IssuesModel);
+  issuesModel?.issueAdded({ issue });
+};
+
+// gen/front_end/models/issues_manager/RelatedIssue.js
+var RelatedIssue_exports = {};
+__export(RelatedIssue_exports, {
+  hasIssueOfCategory: () => hasIssueOfCategory,
+  hasIssues: () => hasIssues,
+  issuesAssociatedWith: () => issuesAssociatedWith,
+  reveal: () => reveal
+});
+import * as Common6 from "./..\\..\\core\\common\\common.js";
+import * as SDK3 from "./..\\..\\core\\sdk\\sdk.js";
+function issuesAssociatedWithNetworkRequest(issues, request) {
+  return issues.filter((issue) => {
+    for (const affectedRequest of issue.requests()) {
+      if (affectedRequest.requestId === request.requestId()) {
+        return true;
+      }
+    }
+    return false;
+  });
+}
+function issuesAssociatedWithCookie(issues, domain, name, path) {
+  return issues.filter((issue) => {
+    for (const cookie of issue.cookies()) {
+      if (cookie.domain === domain && cookie.name === name && cookie.path === path) {
+        return true;
+      }
+    }
+    return false;
+  });
+}
+function issuesAssociatedWith(issues, obj) {
+  if (obj instanceof SDK3.NetworkRequest.NetworkRequest) {
+    return issuesAssociatedWithNetworkRequest(issues, obj);
+  }
+  if (obj instanceof SDK3.Cookie.Cookie) {
+    return issuesAssociatedWithCookie(issues, obj.domain(), obj.name(), obj.path());
+  }
+  throw new Error(`issues can not be associated with ${JSON.stringify(obj)}`);
+}
+function hasIssues(obj, issuesManager) {
+  const issues = Array.from(issuesManager.issues());
+  return issuesAssociatedWith(issues, obj).length > 0;
+}
+function hasIssueOfCategory(obj, category, issuesManager) {
+  const issues = Array.from(issuesManager.issues());
+  return issuesAssociatedWith(issues, obj).some((issue) => issue.getCategory() === category);
+}
+async function reveal(obj, issuesManager, category) {
+  if (typeof obj === "string") {
+    const issue = issuesManager.getIssueById(obj);
+    if (issue) {
+      return await Common6.Revealer.reveal(issue);
+    }
+  }
+  const issues = Array.from(issuesManager.issues());
+  const candidates = issuesAssociatedWith(issues, obj).filter((issue) => !category || issue.getCategory() === category);
+  if (candidates.length > 0) {
+    return await Common6.Revealer.reveal(candidates[0]);
+  }
+}
+export {
+  ClientHintIssue_exports as ClientHintIssue,
+  ConnectionAllowlistIssue_exports as ConnectionAllowlistIssue,
+  ContentSecurityPolicyIssue_exports as ContentSecurityPolicyIssue,
+  CookieDeprecationMetadataIssue_exports as CookieDeprecationMetadataIssue,
+  CookieIssue_exports as CookieIssue,
+  CorsIssue_exports as CorsIssue,
+  CrossOriginEmbedderPolicyIssue_exports as CrossOriginEmbedderPolicyIssue,
+  DeprecationIssue_exports as DeprecationIssue,
+  ElementAccessibilityIssue_exports as ElementAccessibilityIssue,
+  EmailVerificationRequestIssue_exports as EmailVerificationRequestIssue,
+  FederatedAuthRequestIssue_exports as FederatedAuthRequestIssue,
+  FederatedAuthUserInfoRequestIssue_exports as FederatedAuthUserInfoRequestIssue,
+  GenericIssue_exports as GenericIssue,
+  HeavyAdIssue_exports as HeavyAdIssue,
+  Issue_exports as Issue,
+  IssueAggregator_exports as IssueAggregator,
+  IssueResolver_exports as IssueResolver,
+  IssuesManager_exports as IssuesManager,
+  LazyLoadImageIssue_exports as LazyLoadImageIssue,
+  MarkdownIssueDescription_exports as MarkdownIssueDescription,
+  MixedContentIssue_exports as MixedContentIssue,
+  PartitioningBlobURLIssue_exports as PartitioningBlobURLIssue,
+  PermissionElementIssue_exports as PermissionElementIssue,
+  PropertyRuleIssue_exports as PropertyRuleIssue,
+  QuirksModeIssue_exports as QuirksModeIssue,
+  RelatedIssue_exports as RelatedIssue,
+  SRIMessageSignatureIssue_exports as SRIMessageSignatureIssue,
+  SelectivePermissionsInterventionIssue_exports as SelectivePermissionsInterventionIssue,
+  SharedArrayBufferIssue_exports as SharedArrayBufferIssue,
+  SharedDictionaryIssue_exports as SharedDictionaryIssue,
+  SourceFrameIssuesManager_exports as SourceFrameIssuesManager,
+  StylesheetLoadingIssue_exports as StylesheetLoadingIssue,
+  UnencodedDigestIssue_exports as UnencodedDigestIssue
+};
+//# sourceMappingURL=issues_manager.js.map

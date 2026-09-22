@@ -1,0 +1,3091 @@
+var __defProp = Object.defineProperty;
+var __export = (target, all) => {
+  for (var name in all)
+    __defProp(target, name, { get: all[name], enumerable: true });
+};
+
+// gen/front_end/ui/legacy/components/object_ui/CSSStyleSanitizer.js
+var CSSStyleSanitizer_exports = {};
+__export(CSSStyleSanitizer_exports, {
+  cssEscapeRegex: () => cssEscapeRegex,
+  sanitizeStyle: () => sanitizeStyle
+});
+import * as Common from "./..\\..\\..\\..\\core\\common\\common.js";
+function cssEscapeRegex(cssString) {
+  return [...cssString].map((char) => {
+    const charCodes = new Set([char.toLowerCase(), char.toUpperCase()].map((c) => c.charCodeAt(0).toString(16)));
+    const charCodeRegex = [...charCodes].map((charCode) => `\\\\0{0,${6 - charCode.length}}${charCode}[ \\n\\t]?`).join("|");
+    return `\\\\?(?:${charCodeRegex}|${char})`;
+  }).join("");
+}
+var ALLOWED_PROPERTY_PREFIXES = ["background", "border", "color", "font", "line", "margin", "padding", "text"];
+var URL_REGEX = new RegExp(`(?=${cssEscapeRegex("url")}\\(['"]?([^\\)]*))`, "gi");
+var IMAGESET_REGEX = new RegExp(`(?=(${cssEscapeRegex("image-set")}\\(.*))`, "gi");
+var GOOD_IMAGESET_REGEX = /^image-set\((?:(?:(?:url|type)\("[^\\"]*"\)|[\d.]+(?:x|dpi|dpcm|dppx)),?\s*)+\)/i;
+function sanitizeStyle(currentStyle, styleToAdd) {
+  currentStyle.clear();
+  const buffer = document.createElement("span");
+  buffer.setAttribute("style", styleToAdd);
+  for (const property of buffer.style) {
+    if (!ALLOWED_PROPERTY_PREFIXES.some((prefix) => property.startsWith(prefix) || property.startsWith(`-webkit-${prefix}`))) {
+      continue;
+    }
+    const value = buffer.style.getPropertyValue(property);
+    const imageSets = [...value.matchAll(IMAGESET_REGEX)];
+    if (imageSets.some((match) => !GOOD_IMAGESET_REGEX.test(match[1]))) {
+      continue;
+    }
+    const potentialUrls = [...value.matchAll(URL_REGEX)].map((match) => match[1]);
+    if (potentialUrls.some((potentialUrl) => !Common.ParsedURL.schemeIs(potentialUrl, "data:"))) {
+      continue;
+    }
+    currentStyle.set(property, {
+      value,
+      priority: buffer.style.getPropertyPriority(property)
+    });
+  }
+}
+
+// gen/front_end/ui/legacy/components/object_ui/CustomPreviewComponent.js
+var CustomPreviewComponent_exports = {};
+__export(CustomPreviewComponent_exports, {
+  CustomPreviewComponent: () => CustomPreviewComponent,
+  CustomPreviewSection: () => CustomPreviewSection
+});
+import * as Common3 from "./..\\..\\..\\..\\core\\common\\common.js";
+import * as i18n5 from "./..\\..\\..\\..\\core\\i18n\\i18n.js";
+import { createIcon } from "./..\\..\\..\\kit\\kit.js";
+import { render as render3 } from "./..\\..\\..\\lit\\lit.js";
+import * as UI3 from "./..\\..\\legacy.js";
+
+// gen/front_end/ui/legacy/components/object_ui/customPreviewComponent.css.js
+var customPreviewComponent_css_default = `/*
+ * Copyright 2015 The Chromium Authors
+ * Use of this source code is governed by a BSD-style license that can be
+ * found in the LICENSE file.
+ */
+
+.custom-expandable-section {
+  display: inline-flex;
+  flex-direction: column;
+}
+
+.custom-expand-icon {
+  user-select: none;
+  margin-right: 4px;
+  margin-bottom: -4px;
+}
+
+.custom-expandable-section-standard-section {
+  display: inline-flex;
+}
+
+.custom-expandable-section-default-body {
+  padding-left: 12px;
+}
+
+/*# sourceURL=${import.meta.resolve("./customPreviewComponent.css")} */`;
+
+// gen/front_end/ui/legacy/components/object_ui/ObjectPropertiesSection.js
+var ObjectPropertiesSection_exports = {};
+__export(ObjectPropertiesSection_exports, {
+  ArrayGroupTreeNode: () => ArrayGroupTreeNode,
+  ArrayGroupingTreeElement: () => ArrayGroupingTreeElement,
+  EXPANDABLE_MAX_DEPTH: () => EXPANDABLE_MAX_DEPTH,
+  EXPANDABLE_TEXT_DEFAULT_VIEW: () => EXPANDABLE_TEXT_DEFAULT_VIEW,
+  ExpandableTextPropertyValue: () => ExpandableTextPropertyValue,
+  InitialVisibleChildrenLimit: () => InitialVisibleChildrenLimit,
+  OBJECT_PROPERTIES_SECTION_DEFAULT_VIEW: () => OBJECT_PROPERTIES_SECTION_DEFAULT_VIEW,
+  OBJECT_PROPERTY_DEFAULT_VIEW: () => OBJECT_PROPERTY_DEFAULT_VIEW,
+  OBJECT_TREE_DEFAULT_VIEW: () => OBJECT_TREE_DEFAULT_VIEW,
+  ObjectPropertiesSectionWidget: () => ObjectPropertiesSectionWidget,
+  ObjectPropertiesSectionsTreeOutline: () => ObjectPropertiesSectionsTreeOutline,
+  ObjectPropertyTreeElement: () => ObjectPropertyTreeElement,
+  ObjectPropertyWidget: () => ObjectPropertyWidget,
+  ObjectTree: () => ObjectTree,
+  ObjectTreeExpansionTracker: () => ObjectTreeExpansionTracker,
+  ObjectTreeNode: () => ObjectTreeNode,
+  ObjectTreeNodeBase: () => ObjectTreeNodeBase,
+  ObjectTreeWidget: () => ObjectTreeWidget,
+  compareProperties: () => compareProperties,
+  defaultObjectPresentation: () => defaultObjectPresentation,
+  formatObjectAsFunction: () => formatObjectAsFunction,
+  getMemoryIcon: () => getMemoryIcon,
+  isWasmObject: () => isWasmObject,
+  objectPropertiesSectionStyles: () => objectPropertiesSection_css_default,
+  objectValueStyles: () => objectValue_css_default,
+  populateObjectTreeContextMenu: () => populateObjectTreeContextMenu,
+  renderObjectTree: () => renderObjectTree,
+  renderPropertyName: () => renderPropertyName,
+  renderPropertyValue: () => renderPropertyValue,
+  valueElementForFunctionDescription: () => valueElementForFunctionDescription
+});
+import * as Common2 from "./..\\..\\..\\..\\core\\common\\common.js";
+import * as Host from "./..\\..\\..\\..\\core\\host\\host.js";
+import * as i18n3 from "./..\\..\\..\\..\\core\\i18n\\i18n.js";
+import * as Platform2 from "./..\\..\\..\\..\\core\\platform\\platform.js";
+import * as SDK3 from "./..\\..\\..\\..\\core\\sdk\\sdk.js";
+import * as TextUtils from "./..\\..\\..\\..\\core\\text_utils\\text_utils.js";
+import * as uiI18n from "./..\\..\\..\\i18n\\i18n.js";
+import * as Highlighting from "./..\\..\\..\\components\\highlighting\\highlighting.js";
+import * as TextEditor from "./..\\..\\..\\components\\text_editor\\text_editor.js";
+import { Directives as Directives2, html as html2, nothing as nothing2, render as render2 } from "./..\\..\\..\\lit\\lit.js";
+import * as VisualLogging from "./..\\..\\..\\visual_logging\\visual_logging.js";
+import * as UI2 from "./..\\..\\legacy.js";
+
+// gen/front_end/ui/legacy/components/object_ui/JavaScriptREPL.js
+var JavaScriptREPL_exports = {};
+__export(JavaScriptREPL_exports, {
+  JavaScriptREPL: () => JavaScriptREPL
+});
+import * as SDK2 from "./..\\..\\..\\..\\core\\sdk\\sdk.js";
+import * as Bindings from "./..\\..\\..\\..\\models\\bindings\\bindings.js";
+import * as Formatter from "./..\\..\\..\\..\\models\\formatter\\formatter.js";
+import * as SourceMapScopes from "./..\\..\\..\\..\\models\\source_map_scopes\\source_map_scopes.js";
+import * as Acorn from "./..\\..\\..\\..\\third_party\\acorn\\acorn.js";
+import * as UI from "./..\\..\\legacy.js";
+
+// gen/front_end/ui/legacy/components/object_ui/RemoteObjectPreviewFormatter.js
+var RemoteObjectPreviewFormatter_exports = {};
+__export(RemoteObjectPreviewFormatter_exports, {
+  RemoteObjectPreviewFormatter: () => RemoteObjectPreviewFormatter,
+  renderNodeTitle: () => renderNodeTitle,
+  renderTrustedType: () => renderTrustedType
+});
+import * as i18n from "./..\\..\\..\\..\\core\\i18n\\i18n.js";
+import * as Platform from "./..\\..\\..\\..\\core\\platform\\platform.js";
+import * as SDK from "./..\\..\\..\\..\\core\\sdk\\sdk.js";
+import { Directives, html, nothing, render } from "./..\\..\\..\\lit\\lit.js";
+var { ifDefined, repeat } = Directives;
+var UIStrings = {
+  /**
+   * @description Placeholder text shown in an object preview when there are multiple consecutive empty slots in an array.
+   * @example {3} PH1
+   */
+  emptyD: "empty \xD7 {PH1}",
+  /**
+   * @description Placeholder text shown in an object preview when there is a single empty slot in an array.
+   */
+  empty: "empty",
+  /**
+   * @description Tooltip text for an accessor property in an object preview when its value needs to be evaluated via a getter.
+   */
+  thePropertyIsComputedWithAGetter: "The property is computed with a getter"
+};
+var str_ = i18n.i18n.registerUIStrings("ui/legacy/components/object_ui/RemoteObjectPreviewFormatter.ts", UIStrings);
+var i18nString = i18n.i18n.getLocalizedString.bind(void 0, str_);
+var RemoteObjectPreviewFormatter = class _RemoteObjectPreviewFormatter {
+  static objectPropertyComparator(a, b) {
+    return sortValue(a) - sortValue(b);
+    function sortValue(property) {
+      if (property.name === "[[PromiseState]]") {
+        return 1;
+      }
+      if (property.name === "[[PromiseResult]]") {
+        return 2;
+      }
+      if (property.name === "[[GeneratorState]]" || property.name === "[[PrimitiveValue]]" || property.name === "[[WeakRefTarget]]") {
+        return 3;
+      }
+      if (property.type !== "function" && !property.name.startsWith("#")) {
+        return 4;
+      }
+      return 5;
+    }
+  }
+  renderObjectPreview(preview, includeNullOrUndefined = true) {
+    const description = preview.description;
+    const subTypesWithoutValuePreview = /* @__PURE__ */ new Set([
+      "arraybuffer",
+      "dataview",
+      "error",
+      "null",
+      "regexp",
+      "webassemblymemory",
+      "internal#entry",
+      "trustedtype"
+    ]);
+    if (preview.type !== "object" || preview.subtype && subTypesWithoutValuePreview.has(preview.subtype)) {
+      return this.renderPropertyPreview(preview.type, preview.subtype, void 0, description);
+    }
+    const isArrayOrTypedArray = preview.subtype === "array" || preview.subtype === "typedarray";
+    let objectDescription = "";
+    if (description) {
+      if (isArrayOrTypedArray) {
+        const arrayLength = SDK.RemoteObject.RemoteObject.arrayLength(preview);
+        const arrayLengthText = arrayLength > 1 ? "(" + arrayLength + ")" : "";
+        const arrayName = SDK.RemoteObject.RemoteObject.arrayNameFromDescription(description);
+        objectDescription = arrayName === "Array" ? arrayLengthText : arrayName + arrayLengthText;
+      } else {
+        const hideDescription = description === "Object";
+        objectDescription = hideDescription ? "" : description;
+      }
+    }
+    const items = Array.from(preview.entries ? this.renderEntries(preview) : isArrayOrTypedArray ? this.renderArrayProperties(preview) : this.renderObjectProperties(preview, includeNullOrUndefined));
+    const renderName = (name) => html`<span class=name>${/^\s|\s$|^$|\n/.test(name) ? '"' + name.replace(/\n/g, "\u21B5") + '"' : name}</span>`;
+    const renderPlaceholder = (placeholder) => html`<span class=object-value-undefined>${placeholder}</span>`;
+    const renderValue = (value) => this.renderPropertyPreview(value.type, value.subtype, value.name, value.value);
+    const renderEntry = (entry) => html`${entry.key && html`${this.renderPropertyPreview(entry.key.type, entry.key.subtype, void 0, entry.key.description)} => `}
+          ${this.renderPropertyPreview(entry.value.type, entry.value.subtype, void 0, entry.value.description)}`;
+    const renderItem = ({ name, entry, value, placeholder }, index) => html`${index > 0 ? ", " : ""}${placeholder !== void 0 ? renderPlaceholder(placeholder) : nothing}${name !== void 0 ? renderName(name) : nothing}${name !== void 0 && value ? ": " : ""}${value ? renderValue(value) : nothing}${entry ? renderEntry(entry) : nothing}`;
+    return html`${objectDescription.length > 0 ? html`<span class=object-description>${objectDescription + "\xA0"}</span>` : nothing}<span class=object-properties-preview>${isArrayOrTypedArray ? "[" : "{"}${repeat(items, renderItem)}${preview.overflow ? html`<span>${items.length > 0 ? ",\xA0\u2026" : "\u2026"}</span>` : ""}
+    ${isArrayOrTypedArray ? "]" : "}"}</span>`;
+  }
+  *renderObjectProperties(preview, includeNullOrUndefined) {
+    const properties = preview.properties.filter((p) => p.type !== "accessor").sort(_RemoteObjectPreviewFormatter.objectPropertyComparator);
+    for (let i = 0; i < properties.length; ++i) {
+      const property = properties[i];
+      const name = property.name;
+      if (!includeNullOrUndefined && (property.type === "undefined" || property.type === "object" && property.subtype === "null")) {
+        continue;
+      }
+      if (preview.subtype === "promise" && name === "[[PromiseState]]") {
+        const promiseResult = properties.at(i + 1)?.name === "[[PromiseResult]]" ? properties.at(i + 1) : void 0;
+        if (promiseResult) {
+          i++;
+        }
+        yield { name: "<" + property.value + ">", value: property.value !== "pending" ? promiseResult : void 0 };
+      } else if (preview.subtype === "generator" && name === "[[GeneratorState]]") {
+        yield { name: "<" + property.value + ">" };
+      } else if (name === "[[PrimitiveValue]]") {
+        yield { value: property };
+      } else if (name === "[[WeakRefTarget]]") {
+        if (property.type === "undefined") {
+          yield { name: "<cleared>" };
+        } else {
+          yield { value: property };
+        }
+      } else {
+        yield { name, value: property };
+      }
+    }
+  }
+  *renderArrayProperties(preview) {
+    const arrayLength = SDK.RemoteObject.RemoteObject.arrayLength(preview);
+    const indexProperties = preview.properties.filter((p) => toArrayIndex(p.name) !== -1).sort(arrayEntryComparator);
+    const otherProperties = preview.properties.filter((p) => toArrayIndex(p.name) === -1).sort(_RemoteObjectPreviewFormatter.objectPropertyComparator);
+    function arrayEntryComparator(a, b) {
+      return toArrayIndex(a.name) - toArrayIndex(b.name);
+    }
+    function toArrayIndex(name) {
+      const index = Number(name) >>> 0;
+      if (String(index) === name && index < arrayLength) {
+        return index;
+      }
+      return -1;
+    }
+    const canShowGaps = !preview.overflow;
+    const indexedProperties = [];
+    for (const property of indexProperties) {
+      const index = toArrayIndex(property.name);
+      const gap = index - (indexedProperties.at(-1)?.index ?? -1) - 1;
+      const hasGaps = index !== indexedProperties.length;
+      indexedProperties.push({ property, index, gap, hasGaps });
+    }
+    const trailingGap = arrayLength - (indexedProperties.at(-1)?.index ?? -1) - 1;
+    const renderGap = (count) => ({ placeholder: count !== 1 ? i18nString(UIStrings.emptyD, { PH1: count }) : i18nString(UIStrings.empty) });
+    for (const { property, gap, hasGaps } of indexedProperties) {
+      if (canShowGaps && gap > 0) {
+        yield renderGap(gap);
+      }
+      yield { name: !canShowGaps && hasGaps ? property.name : void 0, value: property };
+    }
+    if (canShowGaps && trailingGap > 0) {
+      yield renderGap(trailingGap);
+    }
+    for (const property of otherProperties) {
+      yield { name: property.name, value: property };
+    }
+  }
+  *renderEntries(preview) {
+    for (const entry of preview.entries ?? []) {
+      yield { entry };
+    }
+  }
+  renderPropertyPreview(type, subtype, className, description) {
+    let title;
+    switch (type) {
+      case "accessor":
+        title = i18nString(UIStrings.thePropertyIsComputedWithAGetter);
+        break;
+      case "string":
+        title = description;
+        break;
+      case "object":
+        if (!subtype) {
+          title = description;
+        }
+        break;
+    }
+    const abbreviateFullQualifiedClassName = (description2) => {
+      const abbreviatedDescription = description2.split(".");
+      for (let i = 0; i < abbreviatedDescription.length - 1; ++i) {
+        abbreviatedDescription[i] = Platform.StringUtilities.trimMiddle(abbreviatedDescription[i], 3);
+      }
+      return abbreviatedDescription.length === 1 && abbreviatedDescription[0] === "Object" ? "{\u2026}" : abbreviatedDescription.join(".");
+    };
+    const preview = () => type === "accessor" ? "(...)" : type === "function" ? "\u0192" : type === "object" && subtype === "trustedtype" && className ? renderTrustedType(description ?? "", className) : type === "object" && subtype === "node" && description ? renderNodeTitle(description) : type === "string" ? Platform.StringUtilities.formatAsJSLiteral(description ?? "") : type === "object" && !subtype ? abbreviateFullQualifiedClassName(description ?? "") : description;
+    return html`<span class='object-value-${subtype || type}' title=${ifDefined(title)}>${preview()}</span>`;
+  }
+  renderEvaluationResultPreview(result, allowErrors) {
+    if ("error" in result) {
+      return nothing;
+    }
+    if (result.exceptionDetails?.exception?.description) {
+      const exception = result.exceptionDetails.exception.description;
+      if (exception.startsWith("TypeError: ") || allowErrors) {
+        return html`<span>${result.exceptionDetails.text} ${exception}</span>`;
+      }
+      return nothing;
+    }
+    const { preview, type, subtype, className, description } = result.object;
+    if (preview && type === "object" && subtype !== "node" && subtype !== "trustedtype") {
+      return this.renderObjectPreview(preview);
+    }
+    return this.renderPropertyPreview(type, subtype, className, Platform.StringUtilities.trimEndWithMaxLength(description || "", 400));
+  }
+  /** @deprecated (crbug.com/457388389) Use lit version instead */
+  renderEvaluationResultPreviewFragment(result, allowErrors) {
+    const fragment = document.createDocumentFragment();
+    render(this.renderEvaluationResultPreview(result, allowErrors), fragment);
+    return fragment;
+  }
+};
+function renderNodeTitle(nodeTitle) {
+  const match = nodeTitle.match(/([^#.]+)(#[^.]+)?(\..*)?/);
+  if (!match) {
+    return null;
+  }
+  return html`<span class=webkit-html-tag-name>${match[1]}</span>${match[2] && html`<span class=webkit-html-attribute-value>${match[2]}</span>`}${match[3] && html`<span class=webkit-html-attribute-name>${match[3]}</span>`}`;
+}
+function renderTrustedType(description, className) {
+  return html`${className} <span class=object-value-string title=${description}>"${description.replace(/\n/g, "\u21B5")}"</span>`;
+}
+
+// gen/front_end/ui/legacy/components/object_ui/JavaScriptREPL.js
+var JavaScriptREPL = class _JavaScriptREPL {
+  static wrapObjectLiteral(code) {
+    const result = /^\s*\{\s*(.*)\s*\}[\s;]*$/.exec(code);
+    if (result === null) {
+      return code;
+    }
+    const [, body] = result;
+    let level = 0;
+    for (const c of body) {
+      if (c === "{") {
+        level++;
+      } else if (c === "}" && --level < 0) {
+        return code;
+      }
+    }
+    const parse2 = (expression) => void Acorn.parse(expression, { ecmaVersion: 2022, allowAwaitOutsideFunction: true, ranges: false, allowReturnOutsideFunction: true });
+    try {
+      parse2("return {" + body + "};");
+      const wrappedCode = "({" + body + "})";
+      parse2(wrappedCode);
+      return wrappedCode;
+    } catch {
+      return code;
+    }
+  }
+  static async evaluate(text, executionContext, throwOnSideEffect, replMode, timeout, objectGroup, awaitPromise = false, silent = false) {
+    const isTextLong = text.length > maxLengthForEvaluation;
+    if (!text || throwOnSideEffect && isTextLong) {
+      return null;
+    }
+    let expression = text;
+    const callFrame = executionContext.debuggerModel.selectedCallFrame();
+    if (callFrame?.script.isJavaScript()) {
+      const nameMap = await SourceMapScopes.NamesResolver.allVariablesInCallFrame(callFrame, Bindings.DebuggerWorkspaceBinding.DebuggerWorkspaceBinding.instance());
+      try {
+        expression = await Formatter.FormatterWorkerPool.formatterWorkerPool().javaScriptSubstitute(expression, nameMap);
+      } catch {
+      }
+    }
+    expression = _JavaScriptREPL.wrapObjectLiteral(expression);
+    const options = {
+      expression,
+      generatePreview: true,
+      includeCommandLineAPI: true,
+      throwOnSideEffect,
+      timeout,
+      objectGroup,
+      disableBreaks: true,
+      replMode,
+      silent
+    };
+    return await executionContext.evaluateWithSelectedFrameFallback(options, false, awaitPromise);
+  }
+  static async evaluateAndBuildPreview(text, throwOnSideEffect, replMode, timeout, allowErrors, objectGroup, awaitPromise = false, silent = false) {
+    const executionContext = UI.Context.Context.instance().flavor(SDK2.RuntimeModel.ExecutionContext);
+    if (!executionContext) {
+      return { preview: document.createDocumentFragment(), result: null };
+    }
+    const result = await _JavaScriptREPL.evaluate(text, executionContext, throwOnSideEffect, replMode, timeout, objectGroup, awaitPromise, silent);
+    if (!result) {
+      return { preview: document.createDocumentFragment(), result: null };
+    }
+    const formatter = new RemoteObjectPreviewFormatter();
+    const preview = formatter.renderEvaluationResultPreviewFragment(result, allowErrors);
+    return { preview, result };
+  }
+};
+var maxLengthForEvaluation = 2e3;
+
+// gen/front_end/ui/legacy/components/object_ui/objectPropertiesSection.css.js
+var objectPropertiesSection_css_default = `/*
+ * Copyright 2015 The Chromium Authors
+ * Use of this source code is governed by a BSD-style license that can be
+ * found in the LICENSE file.
+ */
+
+.object-properties-section-dimmed {
+  opacity: 60%;
+}
+
+:host {
+  display: block;
+}
+
+.object-properties-section {
+  padding: 0;
+  margin: 0;
+  color: var(--sys-color-on-surface);
+  display: flex;
+  flex-direction: column;
+  overflow-x: auto;
+}
+
+.object-properties-section li,
+li.object-properties-section  {
+  user-select: text;
+
+  &::before {
+    flex-shrink: 0;
+    margin-right: 2px;
+    align-self: flex-start;
+  }
+}
+
+.object-properties-section li.editing-sub-part {
+  padding: 3px 12px 8px 6px;
+  margin: -1px -6px -8px;
+  text-overflow: clip;
+}
+
+.object-properties-section li.editing {
+  margin-left: 10px;
+  text-overflow: clip;
+}
+
+.tree-outline ol.title-less-mode {
+  padding-left: 0;
+}
+
+.object-properties-section .own-property {
+  font-weight: bold;
+}
+
+.object-properties-section .synthetic-property {
+  color: var(--sys-color-token-subtle);
+}
+
+.object-properties-section .private-property-hash {
+  color: var(--sys-color-on-surface);
+}
+
+.object-properties-section-root-element {
+  display: flex;
+  flex-direction: row;
+}
+
+.object-properties-section .editable-div {
+  overflow: hidden;
+}
+
+.name-and-value {
+  line-height: 16px;
+  display: flex;
+  white-space: nowrap;
+}
+
+.name-and-value .separator {
+  white-space: pre;
+  flex-shrink: 0;
+}
+
+.editing-sub-part .name-and-value {
+  overflow: visible;
+  display: inline-flex;
+}
+
+.property-prompt {
+  margin-left: 4px;
+}
+
+.tree-outline.hide-selection-when-blurred .selected:focus-visible {
+  background: none;
+}
+
+.tree-outline.hide-selection-when-blurred .selected:focus-visible ::slotted(*),
+.tree-outline.hide-selection-when-blurred .selected:focus-visible .tree-element-title,
+.tree-outline.hide-selection-when-blurred .selected:focus-visible .name-and-value,
+.tree-outline.hide-selection-when-blurred .selected:focus-visible .gray-info-message {
+  background: var(--sys-color-state-focus-highlight);
+  border-radius: 2px;
+}
+
+@media (forced-colors: active) {
+  .object-properties-section-dimmed {
+    opacity: 100%;
+  }
+
+  .tree-outline.hide-selection-when-blurred .selected:focus-visible {
+    background: Highlight;
+  }
+
+  .tree-outline li:hover .tree-element-title,
+  .tree-outline li.selected .tree-element-title {
+    color: ButtonText;
+  }
+
+  .tree-outline.hide-selection-when-blurred .selected:focus-visible .tree-element-title,
+  .tree-outline.hide-selection-when-blurred .selected:focus-visible .name-and-value {
+    background: transparent;
+    box-shadow: none;
+  }
+
+  .tree-outline.hide-selection-when-blurred .selected:focus-visible span,
+  .tree-outline.hide-selection-when-blurred .selected:focus-visible .gray-info-message {
+    color: HighlightText;
+  }
+
+  .tree-outline-disclosure:hover li.parent::before {
+    background-color: ButtonText;
+  }
+}
+
+/*# sourceURL=${import.meta.resolve("./objectPropertiesSection.css")} */`;
+
+// gen/front_end/ui/legacy/components/object_ui/objectValue.css.js
+var objectValue_css_default = `/*
+ * Copyright 2015 The Chromium Authors
+ * Use of this source code is governed by a BSD-style license that can be
+ * found in the LICENSE file.
+ */
+
+.value.object-value-node:hover {
+  background-color: var(--sys-color-state-hover-on-subtle);
+}
+
+.object-value-function-prefix,
+.object-value-boolean {
+  color: var(--sys-color-token-attribute-value);
+}
+
+.object-value-function {
+  font-style: italic;
+}
+
+.object-value-function.linkified:hover {
+  --override-linkified-hover-background: rgb(0 0 0 / 10%);
+
+  background-color: var(--override-linkified-hover-background);
+  cursor: pointer;
+}
+
+.theme-with-dark-background .object-value-function.linkified:hover,
+:host-context(.theme-with-dark-background) .object-value-function.linkified:hover {
+  --override-linkified-hover-background: rgb(230 230 230 / 10%);
+}
+
+.object-value-number {
+  color: var(--sys-color-token-attribute-value);
+}
+
+.object-value-bigint {
+  color: var(--sys-color-token-comment);
+}
+
+.object-value-string,
+.object-value-regexp,
+.object-value-symbol {
+  white-space: pre;
+  unicode-bidi: isolate;
+  color: var(--sys-color-token-property-special);
+}
+
+.object-value-node {
+  position: relative;
+  vertical-align: baseline;
+  color: var(--sys-color-token-variable);
+  white-space: nowrap;
+}
+
+.object-value-null,
+.object-value-undefined {
+  color: var(--sys-color-state-disabled);
+}
+
+.object-value-unavailable {
+  color: var(--sys-color-token-tag);
+}
+
+.object-value-calculate-value-button:hover {
+  text-decoration: underline;
+}
+
+.object-properties-section-custom-section {
+  display: inline-flex;
+  flex-direction: column;
+}
+
+.theme-with-dark-background .object-value-number,
+:host-context(.theme-with-dark-background) .object-value-number,
+.theme-with-dark-background .object-value-boolean,
+:host-context(.theme-with-dark-background) .object-value-boolean {
+  --override-primitive-dark-mode-color: hsl(252deg 100% 75%);
+
+  color: var(--override-primitive-dark-mode-color);
+}
+
+.object-properties-section .object-description {
+  color: var(--sys-color-token-subtle);
+}
+
+.value .object-properties-preview {
+  white-space: nowrap;
+}
+
+.name {
+  color: var(--sys-color-token-tag);
+  flex-shrink: 0;
+  unicode-bidi: isolate;
+}
+
+.object-properties-preview .name {
+  color: var(--sys-color-token-subtle);
+}
+
+@media (forced-colors: active) {
+  .object-value-calculate-value-button:hover {
+    forced-color-adjust: none;
+    color: Highlight;
+  }
+}
+
+/*# sourceURL=${import.meta.resolve("./objectValue.css")} */`;
+
+// gen/front_end/ui/legacy/components/object_ui/ObjectPropertiesSection.js
+var { widget, widgetRef } = UI2.Widget;
+var { ref, repeat: repeat2, ifDefined: ifDefined2, classMap } = Directives2;
+var UIStrings2 = {
+  /**
+   * @description Text shown in an object properties tree when evaluating a property throws an exception.
+   * @example {function alert()  [native code] } PH1
+   */
+  exceptionS: "[Exception: {PH1}]",
+  /**
+   * @description Placeholder text shown for a property value whose type or value is unknown.
+   */
+  unknown: "unknown",
+  /**
+   * @description Context menu item to expand an object and all of its child properties recursively.
+   */
+  expandRecursively: "Expand recursively",
+  /**
+   * @description Context menu item to collapse all child properties of an object.
+   */
+  collapseChildren: "Collapse children",
+  /**
+   * @description Context menu item to sort object properties alphabetically.
+   */
+  sortPropertiesAlphabetically: "Sort properties alphabetically",
+  /**
+   * @description Message displayed in an object properties tree when an object has no properties.
+   */
+  noProperties: "No properties",
+  /**
+   * @description Placeholder text indicating more content or an invocable getter in an object properties tree.
+   */
+  dots: "(...)",
+  /**
+   * @description Tooltip text for the button that invokes an object property getter.
+   */
+  invokePropertyGetter: "Invoke property getter",
+  /**
+   * @description Tooltip text on a button to expand and show all hidden child properties.
+   * @example {50} PH1
+   */
+  showAllD: "Show all {PH1}",
+  /**
+   * @description Context menu checkbox item to show all properties, including null and undefined values.
+   */
+  showAll: "Show all",
+  /**
+   * @description Text shown when a variable or property value is unavailable, such as when optimized out by the JavaScript engine or missing a getter.
+   */
+  valueUnavailable: "<value unavailable>",
+  /**
+   * @description Tooltip text for property values that aren't accessible to the debugger.
+   */
+  valueNotAccessibleToTheDebugger: "Value isn\u2019t accessible to the debugger",
+  /**
+   * @description Context menu item to copy the value of a property to the clipboard.
+   */
+  copyValue: "Copy value",
+  /**
+   * @description Context menu item to copy the property path of an object property to the clipboard.
+   */
+  copyPropertyPath: "Copy property path",
+  /**
+   * @description Placeholder text shown when a string property is too large to display in a text editor.
+   */
+  stringIsTooLargeToEdit: "<string is too large to edit>",
+  /**
+   * @description Context menu item and button text to expand truncated long text and show the remaining size.
+   * @example {30 MB} PH1
+   */
+  showMoreS: "Show more ({PH1})",
+  /**
+   * @description Button text indicating that a long text string was truncated and showing its total size.
+   * @example {30 MB} PH1
+   */
+  longTextWasTruncatedS: "Long text was truncated ({PH1})",
+  /**
+   * @description Button and context menu item to copy text to the clipboard.
+   */
+  copy: "Copy",
+  /**
+   * @description Tooltip text for the button to open a memory buffer object in the Memory inspector panel.
+   */
+  openInMemoryInpector: "Open in Memory inspector panel"
+};
+var str_2 = i18n3.i18n.registerUIStrings("ui/legacy/components/object_ui/ObjectPropertiesSection.ts", UIStrings2);
+var i18nString2 = i18n3.i18n.getLocalizedString.bind(void 0, str_2);
+var EXPANDABLE_MAX_DEPTH = 100;
+var topLevelNodesCache = /* @__PURE__ */ new WeakMap();
+function isWasmObject(object) {
+  return object?.subtype === "webassemblymemory" || object?.subtype === "wasmvalue";
+}
+var NodeExpansionLog = class _NodeExpansionLog {
+  properties = /* @__PURE__ */ new Map();
+  internalProperties = /* @__PURE__ */ new Map();
+  arrayRanges = /* @__PURE__ */ new Map();
+  accessors = /* @__PURE__ */ new Map();
+  remove(key) {
+    return this[key.type].delete(_NodeExpansionLog.#serializeKey(key));
+  }
+  get(key) {
+    return this[key.type].get(_NodeExpansionLog.#serializeKey(key));
+  }
+  getOrInsert(key) {
+    const map = this[key.type];
+    const serializedKey = _NodeExpansionLog.#serializeKey(key);
+    const log = map.get(serializedKey) ?? new _NodeExpansionLog();
+    if (!map.has(serializedKey)) {
+      map.set(serializedKey, log);
+    }
+    return log;
+  }
+  clear(type) {
+    this[type].clear();
+  }
+  clearMissing(type, seen) {
+    const seenSet = new Set(seen.map(_NodeExpansionLog.#serializeKey));
+    const map = this[type];
+    for (const key of map.keys()) {
+      if (!seenSet.has(key)) {
+        map.delete(key);
+      }
+    }
+  }
+  get empty() {
+    return this.properties.size === 0 && this.internalProperties.size === 0 && this.arrayRanges.size === 0 && this.accessors.size === 0;
+  }
+  static #serializeKey(key) {
+    if (typeof key.key === "string") {
+      return `${key.type}:${key.key}`;
+    }
+    return `${key.type}:${key.key.fromIndex}-${key.key.toIndex}`;
+  }
+};
+var ObjectTreeExpansionTracker = class _ObjectTreeExpansionTracker {
+  #log = null;
+  /**
+   * For nodes physically nested within a parent's [[Prototype]] internal property, the node's
+   * parent property points to the logical parent (skipping the [[Prototype]] node). This helper
+   * finds that skipped [[Prototype]] node if it contains the given node.
+   */
+  static #protoParent(node) {
+    if (!(node instanceof ObjectTreeNode)) {
+      return void 0;
+    }
+    return node.parent?.children?.internalProperties?.find((p) => p.name === "[[Prototype]]" && p.children?.properties?.includes(node));
+  }
+  static #keyType(node) {
+    if (node instanceof ObjectTreeNode) {
+      if (node.parent?.children?.properties?.includes(node)) {
+        return "properties";
+      }
+      if (node.parent?.children?.internalProperties?.includes(node)) {
+        return "internalProperties";
+      }
+      if (node.parent?.children?.accessors?.includes(node)) {
+        return "accessors";
+      }
+      const proto = _ObjectTreeExpansionTracker.#protoParent(node);
+      if (proto) {
+        return "properties";
+      }
+    }
+    if (node instanceof ArrayGroupTreeNode && node.parent?.children?.arrayRanges?.includes(node)) {
+      return "arrayRanges";
+    }
+    return null;
+  }
+  static #key(type, node) {
+    switch (type) {
+      case "arrayRanges":
+        return node instanceof ArrayGroupTreeNode ? { type, key: node.range } : null;
+      default:
+        return node instanceof ObjectTreeNode ? { type, key: node.name } : null;
+    }
+  }
+  clear() {
+    this.#log = null;
+  }
+  async #apply(log, node) {
+    const apply = async (type) => {
+      const nodes = node.children?.[type];
+      if (!nodes) {
+        log.clear(type);
+        return;
+      }
+      const seen = [];
+      for (const childNode of nodes) {
+        const key = _ObjectTreeExpansionTracker.#key(type, childNode);
+        if (!key) {
+          continue;
+        }
+        const childLog = log.get(key);
+        if (childLog) {
+          await this.#apply(childLog, childNode);
+          seen.push(key);
+        }
+      }
+      log.clearMissing(type, seen);
+    };
+    node.expanded = true;
+    await node.populateChildrenIfNeeded();
+    await apply("properties");
+    await apply("internalProperties");
+    await apply("arrayRanges");
+    await apply("accessors");
+  }
+  async apply(node) {
+    if (this.#log) {
+      return await this.#apply(this.#log, node);
+    }
+  }
+  static *#path(node) {
+    if (!node) {
+      return;
+    }
+    const proto = _ObjectTreeExpansionTracker.#protoParent(node);
+    if (proto) {
+      yield* this.#path(proto);
+    } else {
+      yield* this.#path(node.parent);
+    }
+    const keyType = this.#keyType(node);
+    const key = keyType && _ObjectTreeExpansionTracker.#key(keyType, node);
+    if (key) {
+      yield key;
+    }
+  }
+  collapse(node) {
+    if (!this.#log) {
+      return;
+    }
+    if (node instanceof ObjectTree) {
+      this.#log = null;
+      return;
+    }
+    let lastKey;
+    let parent = null;
+    let log = this.#log;
+    for (const key of _ObjectTreeExpansionTracker.#path(node)) {
+      lastKey = key;
+      parent = log;
+      const nextLog = log.get(key);
+      if (!nextLog) {
+        return;
+      }
+      log = nextLog;
+    }
+    if (lastKey && parent) {
+      parent.remove(lastKey);
+    }
+  }
+  expand(node) {
+    if (!this.#log) {
+      this.#log = new NodeExpansionLog();
+    }
+    let log = this.#log;
+    for (const key of _ObjectTreeExpansionTracker.#path(node)) {
+      log = log.getOrInsert(key);
+    }
+  }
+};
+var ObjectTreeNodeBase = class _ObjectTreeNodeBase extends Common2.ObjectWrapper.ObjectWrapper {
+  parent;
+  #children;
+  options;
+  filter = null;
+  extraProperties = [];
+  #expanded = false;
+  #sortPropertiesAlphabeticallySetting;
+  constructor(parent, options) {
+    super();
+    this.parent = parent;
+    this.filter = parent?.filter ?? null;
+    this.options = { ...options };
+    this.#sortPropertiesAlphabeticallySetting = parent ? parent.#sortPropertiesAlphabeticallySetting : Common2.Settings.Settings.instance().createSetting("object-properties-sort-alphabetically", true);
+  }
+  get isWasm() {
+    return isWasmObject(this.object);
+  }
+  get expanded() {
+    return this.#expanded;
+  }
+  set expanded(val) {
+    if (val) {
+      this.options.expansionTracker?.expand(this);
+    } else {
+      this.options.expansionTracker?.collapse(this);
+    }
+    if (this.#expanded !== val) {
+      this.#expanded = val;
+      this.dispatchEventToListeners("expanded-changed", val);
+    }
+  }
+  get readOnly() {
+    return this.options.readOnly;
+  }
+  get propertiesMode() {
+    return this.options.propertiesMode;
+  }
+  get search() {
+    return this.options.search;
+  }
+  get includeNullOrUndefinedValues() {
+    return this.filter?.includeNullOrUndefinedValues ?? true;
+  }
+  set includeNullOrUndefinedValues(value) {
+    this.setFilter({ includeNullOrUndefinedValues: value, regex: this.filter?.regex ?? null });
+  }
+  get canExpandRecursively() {
+    return true;
+  }
+  get sortPropertiesAlphabetically() {
+    if (this.isWasm) {
+      return false;
+    }
+    return this.#sortPropertiesAlphabeticallySetting.get();
+  }
+  set sortPropertiesAlphabetically(value) {
+    if (this.isWasm || this.#sortPropertiesAlphabeticallySetting.get() === value) {
+      return;
+    }
+    this.#sortPropertiesAlphabeticallySetting.set(value);
+    this.removeChildren();
+  }
+  *treeNodeChildren() {
+    if (this.#children) {
+      yield* this.#children.properties ?? [];
+      yield* this.#children.arrayRanges ?? [];
+      yield* this.#children.internalProperties ?? [];
+    }
+  }
+  // Performs a pre-order tree traversal over the populated children. If any children need to be populated, callers must
+  // do that while walking (pre-order visitation enables that).
+  *#walk(maxDepth = -1, filter) {
+    if (filter && !filter(this)) {
+      return;
+    }
+    yield this;
+    if (maxDepth !== 0) {
+      for (const child of this.treeNodeChildren()) {
+        yield* child.#walk(Math.max(-1, maxDepth - 1), filter);
+      }
+    }
+  }
+  async expandRecursively(maxDepth) {
+    for (const node of this.#walk(maxDepth, (n) => n.canExpandRecursively)) {
+      await node.populateChildrenIfNeeded();
+      node.expanded = true;
+    }
+  }
+  collapseRecursively() {
+    for (const node of this.#walk()) {
+      node.expanded = false;
+    }
+  }
+  setFilter(filter) {
+    this.filter = filter;
+    this.dispatchEventToListeners(
+      "filter-changed"
+      /* ObjectTreeNodeBase.Events.FILTER_CHANGED */
+    );
+    this.#walk().forEach((c) => {
+      c.filter = filter;
+      c.dispatchEventToListeners(
+        "filter-changed"
+        /* ObjectTreeNodeBase.Events.FILTER_CHANGED */
+      );
+    });
+  }
+  removeChildren() {
+    this.#children = void 0;
+    this.dispatchEventToListeners(
+      "children-changed"
+      /* ObjectTreeNodeBase.Events.CHILDREN_CHANGED */
+    );
+  }
+  match(_regex) {
+    return [];
+  }
+  removeChild(child) {
+    remove(this.#children?.arrayRanges, child);
+    remove(this.#children?.internalProperties, child);
+    remove(this.#children?.properties, child);
+    this.dispatchEventToListeners(
+      "children-changed"
+      /* ObjectTreeNodeBase.Events.CHILDREN_CHANGED */
+    );
+    function remove(array, element) {
+      if (!array) {
+        return;
+      }
+      const index = array.indexOf(element);
+      if (index >= 0) {
+        array.splice(index, 1);
+      }
+    }
+  }
+  selfOrParentIfInternal() {
+    return this;
+  }
+  get children() {
+    return this.#children;
+  }
+  #populatePromise;
+  async populateChildrenIfNeeded() {
+    if (this.#children) {
+      return this.#children;
+    }
+    if (!this.#populatePromise) {
+      this.#populatePromise = this.populateChildrenIfNeededImpl().then((children) => {
+        this.#children = children;
+        return children;
+      }).finally(() => {
+        this.#populatePromise = void 0;
+      });
+    }
+    return await this.#populatePromise;
+  }
+  async populateChildrenIfNeededImpl() {
+    const object = this.object;
+    if (!object) {
+      return {};
+    }
+    const effectiveParent = this.selfOrParentIfInternal();
+    if (this.arrayLength > ARRAY_LOAD_THRESHOLD) {
+      const ranges = await arrayRangeGroups(object, 0, this.arrayLength - 1);
+      const arrayRanges = ranges?.ranges.map(([fromIndex, toIndex, count]) => new ArrayGroupTreeNode(object, { fromIndex, toIndex, count }, effectiveParent, {
+        ...this.options
+      }));
+      if (!arrayRanges) {
+        return {};
+      }
+      const { properties: objectProperties2, internalProperties: objectInternalProperties2 } = await SDK3.RemoteObject.RemoteObject.loadFromObjectPerProto(
+        this.object,
+        true,
+        true
+        /* nonIndexedPropertiesOnly */
+      );
+      const properties2 = objectProperties2?.map((p) => new ObjectTreeNode(p, effectiveParent, {
+        ...this.options,
+        propertiesMode: 1
+      }));
+      const internalProperties2 = objectInternalProperties2?.map((p) => new ObjectTreeNode(p, effectiveParent, {
+        ...this.options,
+        propertiesMode: 1
+      }));
+      return { arrayRanges, properties: properties2, internalProperties: internalProperties2 };
+    }
+    let objectProperties = null;
+    let objectInternalProperties = null;
+    switch (this.propertiesMode) {
+      case 0:
+        ({ properties: objectProperties } = await object.getAllProperties(
+          false,
+          true
+          /* generatePreview */
+        ));
+        break;
+      case 1:
+        ({ properties: objectProperties, internalProperties: objectInternalProperties } = await SDK3.RemoteObject.RemoteObject.loadFromObjectPerProto(
+          object,
+          true
+          /* generatePreview */
+        ));
+        break;
+    }
+    const properties = objectProperties?.map((p) => new ObjectTreeNode(p, effectiveParent, {
+      ...this.options,
+      propertiesMode: 1
+    }));
+    properties?.push(...this.extraProperties);
+    properties?.sort((a, b) => compareProperties(a, b, this.sortPropertiesAlphabetically));
+    const accessors = properties && _ObjectTreeNodeBase.getGettersAndSetters(properties, this.options);
+    const internalProperties = objectInternalProperties?.map((p) => new ObjectTreeNode(p, effectiveParent, {
+      ...this.options,
+      propertiesMode: 1
+    }));
+    return { properties, internalProperties, accessors };
+  }
+  get hasChildren() {
+    return this.object?.hasChildren ?? false;
+  }
+  get arrayLength() {
+    return this.object?.arrayLength() ?? 0;
+  }
+  // This is used in web tests
+  async setPropertyValue(name, value) {
+    return await this.object?.setPropertyValue(name, value);
+  }
+  addExtraProperties(...properties) {
+    this.extraProperties.push(...properties.map((p) => new ObjectTreeNode(p, this, {
+      ...this.options,
+      propertiesMode: 1
+    })));
+  }
+  static getGettersAndSetters(properties, options) {
+    const gettersAndSetters = [];
+    for (const property of properties) {
+      if (property.property.isOwn) {
+        if (property.property.getter) {
+          const getterProperty = new SDK3.RemoteObject.RemoteObjectProperty("get " + property.property.name, property.property.getter, false);
+          gettersAndSetters.push(new ObjectTreeNode(getterProperty, property.parent, {
+            ...options,
+            propertiesMode: property.propertiesMode,
+            readOnly: property.readOnly
+          }));
+        }
+        if (property.property.setter) {
+          const setterProperty = new SDK3.RemoteObject.RemoteObjectProperty("set " + property.property.name, property.property.setter, false);
+          gettersAndSetters.push(new ObjectTreeNode(setterProperty, property.parent, {
+            ...options,
+            propertiesMode: property.propertiesMode,
+            readOnly: property.readOnly
+          }));
+        }
+      }
+    }
+    return gettersAndSetters;
+  }
+};
+var ObjectTree = class extends ObjectTreeNodeBase {
+  #object;
+  constructor(object, options) {
+    super(void 0, options);
+    this.#object = object;
+  }
+  get object() {
+    return this.#object;
+  }
+};
+var ArrayGroupTreeNode = class _ArrayGroupTreeNode extends ObjectTreeNodeBase {
+  #object;
+  #range;
+  constructor(object, range, parent, options) {
+    super(parent, options);
+    this.#object = object;
+    this.#range = range;
+  }
+  async populateChildrenIfNeededImpl() {
+    if (this.#range.count > ArrayGroupingTreeElement.bucketThreshold) {
+      const ranges = await arrayRangeGroups(this.object, this.#range.fromIndex, this.#range.toIndex);
+      const arrayRanges = ranges?.ranges.map(([fromIndex, toIndex, count]) => new _ArrayGroupTreeNode(this.object, { fromIndex, toIndex, count }, this, {
+        readOnly: this.readOnly,
+        propertiesMode: this.propertiesMode,
+        expansionTracker: this.options.expansionTracker
+      }));
+      return { arrayRanges };
+    }
+    const result = await this.#object.callFunction(buildArrayFragment, [
+      { value: this.#range.fromIndex },
+      { value: this.#range.toIndex },
+      { value: ArrayGroupingTreeElement.sparseIterationThreshold }
+    ]);
+    if (!result.object || result.wasThrown) {
+      return {};
+    }
+    const arrayFragment = result.object;
+    const allProperties = await arrayFragment.getAllProperties(
+      false,
+      true
+      /* generatePreview */
+    );
+    arrayFragment.release();
+    const properties = allProperties.properties?.map((p) => new ObjectTreeNode(p, this, {
+      ...this.options
+    }));
+    properties?.push(...this.extraProperties);
+    properties?.sort((a, b) => compareProperties(a, b, this.sortPropertiesAlphabetically));
+    const accessors = properties && ObjectTreeNodeBase.getGettersAndSetters(properties, this.options);
+    return { properties, accessors };
+  }
+  get singular() {
+    return this.#range.fromIndex === this.#range.toIndex;
+  }
+  get range() {
+    return this.#range;
+  }
+  get object() {
+    return this.#object;
+  }
+};
+var ObjectTreeNode = class _ObjectTreeNode extends ObjectTreeNodeBase {
+  property;
+  nonSyntheticParent;
+  #path;
+  constructor(property, parent, options, nonSyntheticParent) {
+    super(parent, options);
+    this.property = property;
+    this.nonSyntheticParent = nonSyntheticParent;
+  }
+  get object() {
+    return this.property.value;
+  }
+  get isFiltered() {
+    return Boolean(this.filter && !this.property.match(this.filter));
+  }
+  get canExpandRecursively() {
+    return this.property.name !== "[[Prototype]]";
+  }
+  get name() {
+    return this.property.name;
+  }
+  get path() {
+    if (!this.#path) {
+      if (this.property.synthetic) {
+        this.#path = this.name;
+        return this.name;
+      }
+      const useDotNotation = /^(?:[$_\p{ID_Start}])(?:[$_\u200C\u200D\p{ID_Continue}])*$/u;
+      const isInteger = /^(?:0|[1-9]\d*)$/;
+      const parentPath = this.parent instanceof _ObjectTreeNode && !this.parent.property.synthetic ? this.parent.path : "";
+      if (this.property.private || useDotNotation.test(this.name)) {
+        this.#path = parentPath ? `${parentPath}.${this.name}` : this.name;
+      } else if (isInteger.test(this.name)) {
+        this.#path = `${parentPath}[${this.name}]`;
+      } else {
+        this.#path = `${parentPath}[${Platform2.StringUtilities.formatAsJSLiteral(this.name)}]`;
+      }
+    }
+    return this.#path;
+  }
+  selfOrParentIfInternal() {
+    return this.name === "[[Prototype]]" ? this.parent ?? this : this;
+  }
+  async setValue(expression) {
+    const property = SDK3.RemoteObject.RemoteObject.toCallArgument(this.property.symbol || this.name);
+    expression = JavaScriptREPL.wrapObjectLiteral(expression.trim());
+    if (this.property.synthetic) {
+      let invalidate = false;
+      if (expression) {
+        invalidate = await this.property.setSyntheticValue(expression);
+      }
+      if (invalidate) {
+        this.parent?.removeChildren();
+      } else {
+        this.dispatchEventToListeners(
+          "value-changed"
+          /* ObjectTreeNodeBase.Events.VALUE_CHANGED */
+        );
+      }
+      return;
+    }
+    const parentObject = this.parent?.object;
+    const errorPromise = expression ? parentObject.setPropertyValue(property, expression) : parentObject.deleteProperty(property);
+    const error = await errorPromise;
+    if (error) {
+      this.dispatchEventToListeners(
+        "value-changed"
+        /* ObjectTreeNodeBase.Events.VALUE_CHANGED */
+      );
+      return;
+    }
+    if (!expression) {
+      this.parent?.removeChild(this);
+    } else {
+      this.parent?.removeChildren();
+    }
+  }
+  async invokeGetter(getter) {
+    const invokeGetter = `
+          function invokeGetter(getter) {
+            return Reflect.apply(getter, this, []);
+          }`;
+    const result = await this.parent?.object?.callFunction(invokeGetter, [SDK3.RemoteObject.RemoteObject.toCallArgument(getter)]);
+    if (!result?.object) {
+      return;
+    }
+    this.property.value = result.object;
+    this.property.wasThrown = result.wasThrown || false;
+    this.dispatchEventToListeners(
+      "value-changed"
+      /* ObjectTreeNodeBase.Events.VALUE_CHANGED */
+    );
+  }
+  #getSearchableNameText() {
+    return /^\s|\s$|^$|\n/.test(this.property.name) ? `"${this.property.name.replace(/\n/g, "\u21B5")}"` : this.property.name;
+  }
+  #getSearchableValueText() {
+    const value = this.property.value;
+    if (!value || value.type !== "string" && value.type !== "number" || value.description === void 0) {
+      return "";
+    }
+    if (value.type === "string" && typeof value.description === "string") {
+      const text = Platform2.StringUtilities.safeEscapeUnicode(JSON.stringify(value.description));
+      if (value.description.length > maxRenderableStringLength) {
+        return text.slice(0, ExpandableTextPropertyValue.EXPANDABLE_MAX_LENGTH);
+      }
+      return text;
+    }
+    return value.description;
+  }
+  match(regex) {
+    const results = [];
+    const nameText = this.#getSearchableNameText();
+    const nameGlobalRegex = regex.global ? regex : new RegExp(regex.source, regex.flags + "g");
+    for (const m of nameText.matchAll(nameGlobalRegex)) {
+      results.push({
+        node: this,
+        isPostOrderMatch: false,
+        matchIndexInNode: results.length,
+        matchType: "name",
+        range: new TextUtils.TextRange.SourceRange(m.index ?? 0, m[0].length)
+      });
+    }
+    const valueText = this.#getSearchableValueText();
+    if (valueText) {
+      const valueGlobalRegex = regex.global ? regex : new RegExp(regex.source, regex.flags + "g");
+      for (const m of valueText.matchAll(valueGlobalRegex)) {
+        results.push({
+          node: this,
+          isPostOrderMatch: false,
+          matchIndexInNode: results.length,
+          matchType: "value",
+          range: new TextUtils.TextRange.SourceRange(m.index ?? 0, m[0].length)
+        });
+      }
+    }
+    return results;
+  }
+};
+function compareProperties(propertyA, propertyB, sortPropertiesAlphabetically = true) {
+  if (propertyA instanceof ObjectTreeNode) {
+    propertyA = propertyA.property;
+  }
+  if (propertyB instanceof ObjectTreeNode) {
+    propertyB = propertyB.property;
+  }
+  if (!propertyA.synthetic && propertyB.synthetic) {
+    return 1;
+  }
+  if (!propertyB.synthetic && propertyA.synthetic) {
+    return -1;
+  }
+  if (!propertyA.isOwn && propertyB.isOwn) {
+    return 1;
+  }
+  if (!propertyB.isOwn && propertyA.isOwn) {
+    return -1;
+  }
+  if (!propertyA.enumerable && propertyB.enumerable) {
+    return 1;
+  }
+  if (!propertyB.enumerable && propertyA.enumerable) {
+    return -1;
+  }
+  if (propertyA.symbol && !propertyB.symbol) {
+    return 1;
+  }
+  if (propertyB.symbol && !propertyA.symbol) {
+    return -1;
+  }
+  if (propertyA.private && !propertyB.private) {
+    return 1;
+  }
+  if (propertyB.private && !propertyA.private) {
+    return -1;
+  }
+  if (sortPropertiesAlphabetically) {
+    const nameA = propertyA.name;
+    const nameB = propertyB.name;
+    if (nameA.startsWith("_") && !nameB.startsWith("_")) {
+      return 1;
+    }
+    if (nameB.startsWith("_") && !nameA.startsWith("_")) {
+      return -1;
+    }
+    return Platform2.StringUtilities.naturalOrderComparator(nameA, nameB);
+  }
+  return 0;
+}
+function valueElementForFunctionDescription(description, includePreview, defaultName, details, linkify) {
+  const contents = (description2, defaultName2) => {
+    const text = description2.replace(/^function [gs]et /, "function ").replace(/^function [gs]et\(/, "function(").replace(/^[gs]et /, "");
+    const asyncMatch = text.match(/^(async\s+function)/);
+    const isGenerator = text.startsWith("function*");
+    const isGeneratorShorthand = text.startsWith("*");
+    const isBasic = !isGenerator && text.startsWith("function");
+    const isClass = text.startsWith("class ") || text.startsWith("class{");
+    const firstArrowIndex = text.indexOf("=>");
+    const isArrow = !asyncMatch && !isGenerator && !isBasic && !isClass && firstArrowIndex > 0;
+    if (isClass) {
+      const body2 = text.substring("class".length);
+      const classNameMatch = /^[^{\s]+/.exec(body2.trim());
+      let className = defaultName2;
+      if (classNameMatch) {
+        className = classNameMatch[0].trim() || defaultName2;
+      }
+      return { prefix: "class", body: body2, abbreviation: className };
+    }
+    if (asyncMatch) {
+      const body2 = text.substring(asyncMatch[1].length);
+      return { prefix: "async \u0192", body: body2, abbreviation: nameAndArguments(body2) };
+    }
+    if (isGenerator) {
+      const body2 = text.substring("function*".length);
+      return { prefix: "\u0192*", body: body2, abbreviation: nameAndArguments(body2) };
+    }
+    if (isGeneratorShorthand) {
+      const body2 = text.substring("*".length);
+      return { prefix: "\u0192*", body: body2, abbreviation: nameAndArguments(body2) };
+    }
+    if (isBasic) {
+      const body2 = text.substring("function".length);
+      return { prefix: "\u0192", body: body2, abbreviation: nameAndArguments(body2) };
+    }
+    if (isArrow) {
+      const maxArrowFunctionCharacterLength = 60;
+      let abbreviation2 = text;
+      if (defaultName2) {
+        abbreviation2 = defaultName2 + "()";
+      } else if (text.length > maxArrowFunctionCharacterLength) {
+        abbreviation2 = text.substring(0, firstArrowIndex + 2) + " {\u2026}";
+      }
+      return { prefix: "", body: text, abbreviation: abbreviation2 };
+    }
+    return { prefix: "\u0192", body: text, abbreviation: nameAndArguments(text) };
+  };
+  const { prefix, body, abbreviation } = contents(description ?? "", defaultName ?? "");
+  const maxFunctionBodyLength = 200;
+  const location = details?.location;
+  const clickHandler = linkify && location ? (event) => {
+    void Common2.Revealer.reveal(location);
+    event.consume(true);
+  } : void 0;
+  const classes = classMap({
+    "object-value-function": true,
+    linkified: Boolean(linkify && location)
+  });
+  const title = description ? Platform2.StringUtilities.trimEndWithMaxLength(description, 500) : void 0;
+  return html2`<span
+    class=${classes}
+    @click=${clickHandler || nothing2}
+    title=${ifDefined2(title)}>${prefix && html2`<span class=object-value-function-prefix>${prefix} </span>`}${includePreview ? Platform2.StringUtilities.trimEndWithMaxLength(body.trim(), maxFunctionBodyLength) : abbreviation.replace(/\n/g, " ")}</span>`;
+  function nameAndArguments(contents2) {
+    const startOfArgumentsIndex = contents2.indexOf("(");
+    const endOfArgumentsMatch = contents2.match(/\)\s*{/);
+    if (startOfArgumentsIndex !== -1 && endOfArgumentsMatch?.index !== void 0 && endOfArgumentsMatch.index > startOfArgumentsIndex) {
+      const name = contents2.substring(0, startOfArgumentsIndex).trim() || (defaultName ?? "");
+      const args = contents2.substring(startOfArgumentsIndex, endOfArgumentsMatch.index + 1);
+      return name + args;
+    }
+    return defaultName + "()";
+  }
+}
+function getMemoryIcon(object, expression) {
+  return !object.isLinearMemoryInspectable() ? nothing2 : html2`<devtools-icon
+    name=memory
+    style="width: var(--sys-size-8); height: 13px; vertical-align: sub; cursor: pointer;"
+    @click=${(event) => {
+    event.consume();
+    void Common2.Revealer.reveal(new SDK3.RemoteObject.LinearMemoryInspectable(object, expression));
+  }}
+    jslog=${VisualLogging.action("open-memory-inspector").track({ click: true })}
+    title=${i18nString2(UIStrings2.openInMemoryInpector)}
+    aria-label=${i18nString2(UIStrings2.openInMemoryInpector)}></devtools-icon>`;
+}
+function isDisplayableProperty(property, parentProperty) {
+  if (!parentProperty?.synthetic) {
+    return true;
+  }
+  const name = property.name;
+  const useless = parentProperty.name === "[[Entries]]" && (name === "length" || name === "__proto__");
+  return !useless;
+}
+var ObjectPropertiesSectionWidget = class extends UI2.Widget.Widget {
+  #root;
+  #title;
+  #skipProto = false;
+  #linkifier;
+  #showOverflow = true;
+  #view = OBJECT_PROPERTIES_SECTION_DEFAULT_VIEW;
+  constructor(element, view = OBJECT_PROPERTIES_SECTION_DEFAULT_VIEW) {
+    super(element);
+    this.#view = view;
+  }
+  get root() {
+    return this.#root?.object;
+  }
+  set root(val) {
+    if (val === this.#root?.object) {
+      return;
+    }
+    this.objectTree = new ObjectTree(val, {
+      readOnly: false,
+      propertiesMode: 1
+    });
+  }
+  get objectTree() {
+    return this.#root;
+  }
+  set objectTree(val) {
+    if (val === this.#root) {
+      return;
+    }
+    this.#root?.removeEventListener("children-changed", this.requestUpdate, this);
+    this.#root?.removeEventListener("expanded-changed", this.requestUpdate, this);
+    this.#root = val;
+    this.#root?.addEventListener("children-changed", this.requestUpdate, this);
+    this.#root?.addEventListener("expanded-changed", this.requestUpdate, this);
+    this.requestUpdate();
+  }
+  get title() {
+    return this.#title;
+  }
+  set title(val) {
+    if (val === this.#title) {
+      return;
+    }
+    this.#title = val;
+    this.requestUpdate();
+  }
+  get skipProto() {
+    return this.#skipProto;
+  }
+  set skipProto(val) {
+    if (val === this.#skipProto) {
+      return;
+    }
+    this.#skipProto = val;
+    this.requestUpdate();
+  }
+  get linkifier() {
+    return this.#linkifier;
+  }
+  set linkifier(val) {
+    if (val === this.#linkifier) {
+      return;
+    }
+    this.#linkifier = val;
+    this.requestUpdate();
+  }
+  get showOverflow() {
+    return this.#showOverflow;
+  }
+  set showOverflow(val) {
+    if (val === this.#showOverflow) {
+      return;
+    }
+    this.#showOverflow = val;
+    this.requestUpdate();
+  }
+  onExpand = (expanded) => {
+    if (this.#root) {
+      this.#root.expanded = expanded;
+    }
+  };
+  performUpdate() {
+    if (!this.#root) {
+      return;
+    }
+    this.#view({
+      objectTree: this.#root,
+      title: this.#title,
+      linkifier: this.#linkifier,
+      skipProto: this.#skipProto,
+      showOverflow: this.#showOverflow,
+      onRootItemContextMenu: this.onRootItemContextMenu,
+      onExpand: this.onExpand
+    }, {}, this.contentElement);
+  }
+  onDetach() {
+    this.#root?.removeEventListener("children-changed", this.requestUpdate, this);
+    this.#root?.removeEventListener("expanded-changed", this.requestUpdate, this);
+  }
+  wasShown() {
+    super.wasShown();
+    this.#root?.removeEventListener("children-changed", this.requestUpdate, this);
+    this.#root?.removeEventListener("expanded-changed", this.requestUpdate, this);
+    this.#root?.addEventListener("children-changed", this.requestUpdate, this);
+    this.#root?.addEventListener("expanded-changed", this.requestUpdate, this);
+  }
+  onRootItemContextMenu = (contextMenu) => {
+    const root = this.#root;
+    if (!root) {
+      return;
+    }
+    populateObjectTreeContextMenu(contextMenu, root, root.expandRecursively.bind(root, EXPANDABLE_MAX_DEPTH), root.collapseRecursively.bind(root), () => {
+      root.sortPropertiesAlphabetically = !root.sortPropertiesAlphabetically;
+    }, () => {
+      root.includeNullOrUndefinedValues = !root.includeNullOrUndefinedValues;
+    });
+  };
+};
+var ARRAY_LOAD_THRESHOLD = 100;
+var maxRenderableStringLength = 1e4;
+var ObjectPropertiesSectionsTreeOutline = class extends UI2.TreeOutline.TreeOutlineInShadow {
+  constructor() {
+    super();
+    this.registerRequiredCSS(objectValue_css_default, objectPropertiesSection_css_default);
+    this.contentElement.classList.add("source-code");
+    this.contentElement.classList.add("object-properties-section");
+  }
+};
+function populateObjectTreeContextMenu(contextMenu, object, expandRecursively, collapseChildren, sortPropertiesAlphabetically, onShowAllToggled) {
+  contextMenu.appendApplicableItems(object.object);
+  if (object.object instanceof SDK3.RemoteObject.LocalJSONObject) {
+    const { value } = object.object;
+    const propertyValue = typeof value === "object" ? Platform2.StringUtilities.escapeUnicodeAsText(JSON.stringify(value, null, 2)) : value;
+    const copyValueHandler = () => {
+      Host.userMetrics.actionTaken(Host.UserMetrics.Action.NetworkPanelCopyValue);
+      Host.InspectorFrontendHost.InspectorFrontendHostInstance.copyText(propertyValue);
+    };
+    contextMenu.clipboardSection().appendItem(i18nString2(UIStrings2.copyValue), copyValueHandler, { jslogContext: "copy-value" });
+  }
+  contextMenu.viewSection().appendItem(i18nString2(UIStrings2.expandRecursively), expandRecursively, { jslogContext: "expand-recursively" });
+  contextMenu.viewSection().appendItem(i18nString2(UIStrings2.collapseChildren), collapseChildren, { jslogContext: "collapse-children" });
+  if (!object.isWasm) {
+    contextMenu.viewSection().appendCheckboxItem(i18nString2(UIStrings2.sortPropertiesAlphabetically), sortPropertiesAlphabetically, {
+      checked: object.sortPropertiesAlphabetically,
+      jslogContext: "sort-properties-alphabetically"
+    });
+  }
+  contextMenu.viewSection().appendCheckboxItem(i18nString2(UIStrings2.showAll), onShowAllToggled, { checked: object.includeNullOrUndefinedValues, jslogContext: "show-all" });
+}
+var OBJECT_TREE_DEFAULT_VIEW = (input, output, target) => {
+  const objectTree = input.objectTree;
+  if (!objectTree) {
+    render2(nothing2, target);
+    return;
+  }
+  const classes = input.renderAsSubtree ? ["source-code", "object-properties-section"] : [];
+  let entry = topLevelNodesCache.get(objectTree);
+  if (!entry || entry.linkifier !== input.linkifier || !entry.nodes.length && objectTree.children) {
+    if (entry) {
+      objectTree.removeEventListener("children-changed", entry.listener);
+    }
+    const nodes = Array.from(ObjectPropertyTreeElement.createNodes(objectTree, input.skipProto, false, input.linkifier, input.emptyPlaceholder));
+    const listener = () => {
+      topLevelNodesCache.delete(objectTree);
+      objectTree.removeEventListener("children-changed", listener);
+    };
+    entry = { linkifier: input.linkifier, nodes, listener };
+    topLevelNodesCache.set(objectTree, entry);
+    objectTree.addEventListener("children-changed", listener);
+  }
+  render2(entry.nodes.map((node) => html2`<devtools-tree-wrapper .treeElement=${node}></devtools-tree-wrapper>`), target, {
+    container: {
+      classes,
+      interceptedListeners: {
+        expand: (e) => input.onExpand(e.detail.expanded)
+      }
+    }
+  });
+};
+var ObjectTreeWidget = class extends UI2.Widget.Widget {
+  #objectTree = void 0;
+  #linkifier = void 0;
+  #emptyPlaceholder;
+  #renderAsSubtree = false;
+  #skipProto = false;
+  #view;
+  constructor(element, view = OBJECT_TREE_DEFAULT_VIEW) {
+    super(element);
+    this.#view = view;
+  }
+  onExpand = (expanded) => {
+    if (this.#objectTree) {
+      this.#objectTree.expanded = expanded;
+    }
+  };
+  get skipProto() {
+    return this.#skipProto;
+  }
+  set skipProto(val) {
+    this.#skipProto = val;
+    this.requestUpdate();
+  }
+  get objectTree() {
+    return this.#objectTree;
+  }
+  set objectTree(val) {
+    if (val === this.#objectTree) {
+      return;
+    }
+    this.#objectTree?.removeEventListener("children-changed", this.requestUpdate, this);
+    this.#objectTree?.removeEventListener("expanded-changed", this.requestUpdate, this);
+    this.#objectTree = val;
+    this.#objectTree?.addEventListener("children-changed", this.requestUpdate, this);
+    this.#objectTree?.addEventListener("expanded-changed", this.requestUpdate, this);
+    this.requestUpdate();
+  }
+  get linkifier() {
+    return this.#linkifier;
+  }
+  set linkifier(val) {
+    if (val === this.#linkifier) {
+      return;
+    }
+    this.#linkifier = val;
+    this.requestUpdate();
+  }
+  get emptyPlaceholder() {
+    return this.#emptyPlaceholder;
+  }
+  set emptyPlaceholder(val) {
+    if (val === this.#emptyPlaceholder) {
+      return;
+    }
+    this.#emptyPlaceholder = val;
+    this.requestUpdate();
+  }
+  get renderAsSubtree() {
+    return this.#renderAsSubtree;
+  }
+  set renderAsSubtree(val) {
+    if (val === this.#renderAsSubtree) {
+      return;
+    }
+    this.#renderAsSubtree = val;
+    this.requestUpdate();
+  }
+  async performUpdate() {
+    if (this.#objectTree?.expanded) {
+      await ObjectPropertyTreeElement.populateChildrenIfNeeded(this.#objectTree);
+    }
+    this.#view(this, {}, this.contentElement);
+  }
+  onDetach() {
+    this.#objectTree?.removeEventListener("children-changed", this.requestUpdate, this);
+    this.#objectTree?.removeEventListener("expanded-changed", this.requestUpdate, this);
+  }
+  wasShown() {
+    super.wasShown();
+    this.#objectTree?.removeEventListener("children-changed", this.requestUpdate, this);
+    this.#objectTree?.removeEventListener("expanded-changed", this.requestUpdate, this);
+    this.#objectTree?.addEventListener("children-changed", this.requestUpdate, this);
+    this.#objectTree?.addEventListener("expanded-changed", this.requestUpdate, this);
+  }
+};
+function renderObjectTree(objectTree, linkifier, emptyPlaceholder) {
+  return html2`<ul role="group" ${widget(ObjectTreeWidget, { objectTree, linkifier, emptyPlaceholder, renderAsSubtree: true })} ${/* The empty widgetRef forces the widget to be materialized in the template DOM */
+  widgetRef(ObjectTreeWidget, () => {
+  })}></ul>`;
+}
+var OBJECT_PROPERTIES_SECTION_DEFAULT_VIEW = (input, _output, target) => {
+  const onRootItemContextMenuHandler = (event) => {
+    event.consume(true);
+    const contextMenu = new UI2.ContextMenu.ContextMenu(event);
+    input.onRootItemContextMenu(contextMenu);
+    void contextMenu.show();
+  };
+  render2(html2`
+    <devtools-tree
+        class="object-properties-section"
+        ?hide-overflow=${!input.showOverflow}
+        show-selection-on-keyboard-focus
+        .template=${input.title ? html2`
+      <ul role="tree" class="source-code object-properties-section">
+        <style>${objectValue_css_default}</style>
+        <style>${objectPropertiesSection_css_default}</style>
+        <li role="treeitem" class="object-properties-section-root-element" toggle-on-click ?open=${input.objectTree.expanded} @expand=${(e) => input.onExpand(e.detail.expanded)} @contextmenu=${onRootItemContextMenuHandler}>
+          ${input.title}
+          <ul role="group" ${widget(ObjectTreeWidget, {
+    objectTree: input.objectTree,
+    linkifier: input.linkifier,
+    skipProto: input.skipProto
+  })} ${widgetRef(ObjectTreeWidget, () => {
+  })}></ul>
+        </li>
+      </ul>` : html2`
+      <ul role="tree" class="source-code object-properties-section title-less-mode" open ${widget(ObjectTreeWidget, { objectTree: input.objectTree, linkifier: input.linkifier, skipProto: input.skipProto })} ${/* The empty widgetRef forces the widget to be materialized in the template DOM */
+  widgetRef(ObjectTreeWidget, () => {
+  })}>
+        <style>${objectValue_css_default}</style>
+        <style>${objectPropertiesSection_css_default}</style>
+      </ul>`}>
+    </devtools-tree>`, target);
+};
+function renderPropertyName(name, isPrivate, title) {
+  if (name === null) {
+    return html2`<span class="name" title=${ifDefined2(title)}></span>`;
+  }
+  const escapedName = Platform2.StringUtilities.escapeUnicodeAsText(name);
+  if (/^\s|\s$|^$|\n/.test(escapedName)) {
+    return html2`<span class="name" title=${ifDefined2(title)}>"${escapedName.replace(/\n/g, "\u21B5")}"</span>`;
+  }
+  if (isPrivate) {
+    return html2`<span class="name" title=${ifDefined2(title)}><span class="private-property-hash">${escapedName[0]}</span>${escapedName.substring(1)}</span>`;
+  }
+  return html2`<span class="name" title=${ifDefined2(title)}>${escapedName}</span>`;
+}
+async function formatObjectAsFunction(func, linkify, includePreview) {
+  const details = await func.debuggerModel().functionDetailsPromise(func);
+  const defaultName = details?.functionName ?? (includePreview ? "" : "anonymous");
+  return valueElementForFunctionDescription(func.description, includePreview, defaultName, details, linkify);
+}
+function renderPropertyValue(value, wasThrown, showPreview, linkifier, isSyntheticProperty = false, variableName, includeNullOrUndefined, useCustomPreview = false, valueRef) {
+  if (useCustomPreview && value.customPreview()) {
+    const result = new CustomPreviewComponent(value).element;
+    result.classList.add("object-properties-section-custom-section");
+    valueRef?.(result);
+    return html2`${result}`;
+  }
+  const type = value.type;
+  const subtype = value.subtype;
+  const description = value.description || "";
+  const className = value.className;
+  const isInternalLocation = type === "object" && subtype === "internal#location";
+  const isString = type === "string" && typeof description === "string";
+  const isTrustedType = type === "object" && subtype === "trustedtype";
+  const isFunction = type === "function";
+  const isNode = type === "object" && subtype === "node" && Boolean(description);
+  const isDefault = !isInternalLocation && !isString && !isTrustedType && !isFunction && !isNode;
+  const classes = classMap({
+    value: true,
+    [`object-value-${subtype || type}`]: isDefault,
+    "object-value-string": isString,
+    "object-value-trustedtype": isTrustedType,
+    "object-value-node": isNode
+  });
+  const onNodeClick = (event) => {
+    void Common2.Revealer.reveal(value);
+    event.consume(true);
+  };
+  const onNodeMouseMove = () => SDK3.OverlayModel.OverlayModel.highlightObjectAsDOMNode(value);
+  const onNodeMouseLeave = () => SDK3.OverlayModel.OverlayModel.hideDOMNodeHighlight(SDK3.TargetManager.TargetManager.instance());
+  let title;
+  let content = description;
+  if (isNode) {
+    content = renderNodeTitle(description);
+  } else if (isInternalLocation) {
+    const rawLocation = value.debuggerModel().createRawLocationByScriptId(value.value.scriptId, value.value.lineNumber, value.value.columnNumber);
+    const linkifiedLocation = rawLocation && linkifier ? linkifier.linkifyRawLocation(rawLocation, Platform2.DevToolsPath.EmptyUrlString, "value") : null;
+    if (linkifiedLocation) {
+      valueRef?.(linkifiedLocation);
+      return html2`${linkifiedLocation}`;
+    }
+    title = description || void 0;
+    content = "<" + i18nString2(UIStrings2.unknown) + ">";
+  } else if (isString) {
+    const text = Platform2.StringUtilities.escapeUnicodeAsText(JSON.stringify(description));
+    const tooLong = description.length > maxRenderableStringLength;
+    title = tooLong ? void 0 : description;
+    content = tooLong ? widget(ExpandableTextPropertyValue, { text }) : text;
+  } else if (isTrustedType) {
+    const text = `${className} "${description}"`;
+    const tooLong = text.length > maxRenderableStringLength;
+    title = tooLong ? void 0 : text;
+    content = tooLong ? widget(ExpandableTextPropertyValue, { text }) : renderTrustedType(description, className);
+  } else if (isFunction) {
+    content = valueElementForFunctionDescription(description);
+  } else if (description.length > maxRenderableStringLength) {
+    title = description;
+    content = widget(ExpandableTextPropertyValue, { text: description });
+  } else {
+    title = description;
+    const hasPreview = value.preview && showPreview;
+    const previewContent = hasPreview ? new RemoteObjectPreviewFormatter().renderObjectPreview(value.preview, includeNullOrUndefined) : description;
+    content = html2`${previewContent}${isSyntheticProperty ? nothing2 : getMemoryIcon(value, variableName)}`;
+  }
+  if (wasThrown) {
+    return html2`<span ${valueRef ? ref(valueRef) : nothing2} class="error value">${uiI18n.getFormatLocalizedStringTemplate(str_2, UIStrings2.exceptionS, {
+      PH1: html2`<span
+        class=${classes}
+        title=${ifDefined2(title)}
+        @click=${isNode ? onNodeClick : nothing2}
+        @mousemove=${isNode ? onNodeMouseMove : nothing2}
+        @mouseleave=${isNode ? onNodeMouseLeave : nothing2}>${content}</span>`
+    })}</span>`;
+  }
+  return html2`<span
+      ${valueRef ? ref(valueRef) : nothing2}
+      class=${classes}
+      title=${ifDefined2(title)}
+      @click=${isNode ? onNodeClick : nothing2}
+      @mousemove=${isNode ? onNodeMouseMove : nothing2}
+      @mouseleave=${isNode ? onNodeMouseLeave : nothing2}>${content}</span>`;
+}
+function defaultObjectPresentation(objectOrTree, linkifier, skipProto, readOnly) {
+  const objectTree = objectOrTree instanceof ObjectTree ? objectOrTree : new ObjectTree(objectOrTree, {
+    readOnly: Boolean(readOnly),
+    propertiesMode: 1
+  });
+  const object = objectTree.object;
+  const title = html2`<span class="source-code"><style>${objectValue_css_default}</style>${renderPropertyValue(
+    object,
+    /* wasThrown= */
+    false,
+    /* showPreview= */
+    true
+  )}</span>`;
+  if (!object.hasChildren) {
+    return title;
+  }
+  return html2`${widget(ObjectPropertiesSectionWidget, { objectTree, title, linkifier, skipProto: !!skipProto, showOverflow: !readOnly })}`;
+}
+var InitialVisibleChildrenLimit = 200;
+var OBJECT_PROPERTY_DEFAULT_VIEW = (input, output, target) => {
+  const { property } = input.node;
+  const isInternalEntries = property.synthetic && input.node.name === "[[Entries]]";
+  const completionsId = `completions-${input.node.parent?.object?.objectId?.replaceAll(".", "-")}-${input.node.name}`;
+  const onAutoComplete = async (e) => {
+    if (!(e.target instanceof UI2.TextPrompt.TextPromptElement)) {
+      return;
+    }
+    input.onAutoComplete(e.detail.expression, e.detail.filter, e.detail.force);
+  };
+  const nameClasses = classMap({
+    name: true,
+    "object-properties-section-dimmed": !property.enumerable,
+    "own-property": property.isOwn,
+    "synthetic-property": property.synthetic
+  });
+  const quotedName = /^\s|\s$|^$|\n/.test(property.name) ? `"${property.name.replace(/\n/g, "\u21B5")}"` : property.name;
+  const isExpandable = !isInternalEntries && property.value && !property.wasThrown && property.value.hasChildren && !property.value.customPreview() && property.value.subtype !== "node" && property.value.type !== "function" && (property.value.type !== "object" || property.value.preview);
+  const search = input.search;
+  const entries = search?.getResults(input.node);
+  const currentMatch = search?.currentMatch();
+  const isCurrentNode = currentMatch?.node === input.node;
+  const nameCurrent = isCurrentNode && currentMatch?.matchType === "name" ? currentMatch.range.cssValue() : "";
+  const valueCurrent = isCurrentNode && currentMatch?.matchType === "value" ? currentMatch.range.cssValue() : "";
+  const nameRanges = (entries ?? []).filter((e) => e !== currentMatch && e.matchType === "name").map((e) => e.range.cssValue()).join(" ");
+  const valueRanges = (entries ?? []).filter((e) => e !== currentMatch && e.matchType === "value").map((e) => e.range.cssValue()).join(" ");
+  const value = () => {
+    const valueRef = ref((e) => {
+      output.valueElement = e;
+    });
+    if (isInternalEntries) {
+      return html2`<span ${valueRef} class=value></span>`;
+    }
+    if (property.value) {
+      const showPreview = property.name !== "[[Prototype]]";
+      return renderPropertyValue(
+        property.value,
+        property.wasThrown,
+        showPreview,
+        input.linkifier,
+        property.synthetic,
+        input.node.path,
+        input.node.includeNullOrUndefinedValues,
+        /* useCustomPreview */
+        true,
+        (e) => {
+          output.valueElement = e;
+        }
+      );
+    }
+    if (property.getter) {
+      const getter = property.getter;
+      const invokeGetter = (event) => {
+        event.consume();
+        input.invokeGetter(getter);
+      };
+      return html2`<span ${valueRef}><span
+        class=object-value-calculate-value-button
+        title=${i18nString2(UIStrings2.invokePropertyGetter)}
+        @click=${invokeGetter}
+        >${i18nString2(UIStrings2.dots)}</span></span>`;
+    }
+    return html2`<span ${valueRef}
+        class=object-value-unavailable
+        title=${i18nString2(UIStrings2.valueNotAccessibleToTheDebugger)}>${i18nString2(UIStrings2.valueUnavailable)}</span>`;
+  };
+  const onActivate = (event) => {
+    if (event instanceof KeyboardEvent && !Platform2.KeyboardUtilities.isEnterOrSpaceKey(event)) {
+      return;
+    }
+    event.consume(true);
+    if (input.editable && property.value && !property.value.customPreview() && (property.writable || property.setter)) {
+      input.startEditing();
+    }
+  };
+  render2(html2`<span class=name-and-value><span
+          ${ref((e) => {
+    output.nameElement = e;
+  })}
+          class=${nameClasses}
+          title=${input.node.path}><devtools-highlight ranges=${nameRanges} current-range=${nameCurrent}>${property.private ? html2`<span class="private-property-hash">${property.name[0]}</span>${property.name.substring(1)}` : quotedName}</devtools-highlight></span>${isInternalEntries ? nothing2 : html2`<span class='separator'>: </span><devtools-prompt
+                @commit=${(e) => input.editingCommitted(e.detail)}
+                @cancel=${() => input.editingEnded()}
+                @beforeautocomplete=${onAutoComplete}
+                @dblclick=${onActivate}
+                @keydown=${onActivate}
+                completions=${completionsId}
+                placeholder=${i18nString2(UIStrings2.stringIsTooLargeToEdit)}
+                ?editing=${input.editing}>
+                  <devtools-highlight ranges=${valueRanges} current-range=${valueCurrent}>${input.expanded && isExpandable && property.value ? html2`<span
+                      class="value object-value-${property.value.subtype || property.value.type}"
+                      title=${ifDefined2(property.value.description)}>${property.value.description === "Object" ? "" : Platform2.StringUtilities.trimMiddle(property.value.description ?? "", maxRenderableStringLength)}${property.synthetic ? nothing2 : getMemoryIcon(property.value)}</span>` : value()}</devtools-highlight>
+                  <datalist id=${completionsId}>${repeat2(input.completions, (c) => html2`<option>${c}</option>`)}</datalist>
+                </devtools-prompt></span>`}</span>`, target);
+};
+var ObjectPropertyWidget = class extends UI2.Widget.Widget {
+  #highlightChanges = [];
+  #property;
+  #nameElement;
+  #valueElement;
+  #completions = [];
+  #editing = false;
+  #view;
+  #expanded = false;
+  #linkifier;
+  #editable = false;
+  #search;
+  constructor(target, view = OBJECT_PROPERTY_DEFAULT_VIEW) {
+    super(target);
+    this.#view = view;
+  }
+  get property() {
+    return this.#property;
+  }
+  set property(property) {
+    if (this.#property) {
+      this.#property.removeEventListener("value-changed", this.requestUpdate, this);
+      this.#property.removeEventListener("children-changed", this.requestUpdate, this);
+      this.#property.removeEventListener("filter-changed", this.requestUpdate, this);
+    }
+    this.#search?.removeEventListener("SearchChanged", this.requestUpdate, this);
+    this.#property = property;
+    this.#property.addEventListener("value-changed", this.requestUpdate, this);
+    this.#property.addEventListener("children-changed", this.requestUpdate, this);
+    this.#property.addEventListener("filter-changed", this.requestUpdate, this);
+    this.#search = property.search;
+    this.#search?.addEventListener("SearchChanged", this.requestUpdate, this);
+    this.requestUpdate();
+  }
+  get expanded() {
+    return this.#expanded;
+  }
+  set expanded(expanded) {
+    this.#expanded = expanded;
+    this.requestUpdate();
+  }
+  get linkifier() {
+    return this.#linkifier;
+  }
+  set linkifier(linkifier) {
+    this.#linkifier = linkifier;
+    this.requestUpdate();
+  }
+  get editable() {
+    return this.#editable;
+  }
+  set editable(val) {
+    this.#editable = val;
+    this.requestUpdate();
+  }
+  performUpdate() {
+    if (!this.#property) {
+      return;
+    }
+    const input = {
+      editable: this.#editable,
+      expanded: this.#expanded,
+      editing: this.#editing,
+      editingEnded: this.#editingEnded.bind(this),
+      editingCommitted: this.#editingCommitted.bind(this),
+      node: this.#property,
+      linkifier: this.#linkifier,
+      completions: this.#editing ? this.#completions : [],
+      onAutoComplete: this.#updateCompletions.bind(this),
+      invokeGetter: this.#invokeGetter.bind(this),
+      startEditing: this.startEditing.bind(this),
+      search: this.#search
+    };
+    const that = this;
+    const output = {
+      set nameElement(e) {
+        that.#nameElement = e;
+      },
+      set valueElement(e) {
+        that.#valueElement = e;
+      }
+    };
+    this.#view(input, output, this.element);
+  }
+  setSearchRegex(regex, additionalCssClassName) {
+    let cssClasses = Highlighting.highlightedSearchResultClassName;
+    if (additionalCssClassName) {
+      cssClasses += " " + additionalCssClassName;
+    }
+    this.revertHighlightChanges();
+    if (this.#nameElement) {
+      this.#applySearch(regex, this.#nameElement, cssClasses);
+    }
+    if (this.property?.object) {
+      const valueType = this.property?.object.type;
+      if (valueType !== "object" && this.#valueElement) {
+        this.#applySearch(regex, this.#valueElement, cssClasses);
+      }
+    }
+    return Boolean(this.#highlightChanges.length);
+  }
+  #applySearch(regex, element, cssClassName) {
+    const ranges = [];
+    const content = element.textContent || "";
+    regex.lastIndex = 0;
+    let match = regex.exec(content);
+    while (match) {
+      ranges.push(new TextUtils.TextRange.SourceRange(match.index, match[0].length));
+      match = regex.exec(content);
+    }
+    if (ranges.length) {
+      Highlighting.highlightRangesWithStyleClass(element, ranges, cssClassName, this.#highlightChanges);
+    }
+  }
+  revertHighlightChanges() {
+    Highlighting.revertDomChanges(this.#highlightChanges);
+    this.#highlightChanges = [];
+  }
+  async #updateCompletions(expression, filter, force) {
+    const suggestions = await TextEditor.JavaScript.completeInContext(expression, filter, force);
+    this.#completions = suggestions.map((v) => v.text);
+    this.requestUpdate();
+  }
+  get editing() {
+    return this.#editing;
+  }
+  startEditing() {
+    this.#editing = true;
+    this.requestUpdate();
+  }
+  #editingEnded() {
+    this.#completions = [];
+    this.#editing = false;
+    this.requestUpdate();
+  }
+  async #editingCommitted(newContent) {
+    this.#editingEnded();
+    await this.#property?.setValue(newContent);
+  }
+  #invokeGetter(getter) {
+    void this.#property?.invokeGetter(getter);
+  }
+};
+var ObjectPropertyTreeElement = class _ObjectPropertyTreeElement extends UI2.TreeOutline.TreeElement {
+  property;
+  toggleOnClick;
+  linkifier;
+  maxNumPropertiesToShow;
+  #widget;
+  constructor(property, linkifier) {
+    super();
+    this.#widget = new ObjectPropertyWidget();
+    this.#widget.markAsRoot();
+    this.property = property;
+    this.hidden = property.isFiltered;
+    this.property.addEventListener("value-changed", this.#updateValue, this);
+    this.property.addEventListener("children-changed", this.#updateChildren, this);
+    this.property.addEventListener("filter-changed", this.#updateFilter, this);
+    this.property.addEventListener("expanded-changed", this.#onExpandedChanged, this);
+    this.toggleOnClick = true;
+    this.linkifier = linkifier;
+    this.maxNumPropertiesToShow = InitialVisibleChildrenLimit;
+    this.listItemElement.addEventListener("contextmenu", this.contextMenuFired.bind(this), false);
+    this.listItemElement.dataset.objectPropertyNameForTest = property.name;
+    this.updateExpandable();
+    this.setExpandRecursively(property.name !== "[[Prototype]]");
+    if (property.expanded) {
+      this.expand();
+    }
+  }
+  static async populate(treeElement, value, skipProto, skipGettersAndSetters, linkifier, emptyPlaceholder) {
+    await _ObjectPropertyTreeElement.populateChildrenIfNeeded(value);
+    _ObjectPropertyTreeElement.populateImpl(treeElement, value, skipProto, skipGettersAndSetters, linkifier, emptyPlaceholder);
+  }
+  static async populateChildrenIfNeeded(value) {
+    const children = await value.populateChildrenIfNeeded();
+    await ArrayGroupingTreeElement.populateChildrenIfNeeded(children);
+  }
+  static populateImpl(treeElement, value, skipProto, skipGettersAndSetters, linkifier, emptyPlaceholder) {
+    for (const childNode of _ObjectPropertyTreeElement.createNodes(value, skipProto, skipGettersAndSetters, linkifier, emptyPlaceholder, (property) => treeElement instanceof _ObjectPropertyTreeElement && !isDisplayableProperty(property, treeElement.property?.property))) {
+      treeElement.appendChild(childNode);
+    }
+  }
+  static *createNodes(value, skipProto, skipGettersAndSetters, linkifier, emptyPlaceholder, isNotDisplayablePropertyCallback) {
+    const properties = value.children;
+    if (!properties) {
+      return;
+    }
+    if (properties.arrayRanges) {
+      yield* ArrayGroupingTreeElement.createNodes(properties, linkifier, isNotDisplayablePropertyCallback);
+    } else {
+      yield* _ObjectPropertyTreeElement.createPropertyNodes(properties, skipProto, skipGettersAndSetters, linkifier, emptyPlaceholder, isNotDisplayablePropertyCallback);
+    }
+  }
+  static *createPropertyNodes({ properties, internalProperties, accessors, arrayRanges }, skipProto, skipGettersAndSetters, linkifier, emptyPlaceholder, isNotDisplayablePropertyCallback) {
+    let empty = true;
+    if (arrayRanges && arrayRanges.length > 0) {
+      empty = false;
+    }
+    const sortPropertiesAlphabetically = properties?.[0]?.parent?.sortPropertiesAlphabetically ?? true;
+    properties?.sort((a, b) => compareProperties(a, b, sortPropertiesAlphabetically));
+    const entriesProperty = internalProperties?.find(({ property }) => property.name === "[[Entries]]");
+    if (entriesProperty) {
+      const treeElement = new _ObjectPropertyTreeElement(entriesProperty, linkifier);
+      treeElement.setExpandable(true);
+      treeElement.expand();
+      empty = false;
+      yield treeElement;
+    }
+    for (const property of properties ?? []) {
+      if (isNotDisplayablePropertyCallback?.(property.property)) {
+        continue;
+      }
+      const canShowProperty = property.property.getter || !property.property.isAccessorProperty();
+      if (canShowProperty) {
+        const element = new _ObjectPropertyTreeElement(property, linkifier);
+        if (property.property.name === "memories" && property.object?.className === "Memories") {
+          element.updateExpandable();
+          if (element.isExpandable()) {
+            element.expand();
+          }
+        }
+        empty = false;
+        yield element;
+      }
+    }
+    for (const accessor of accessors ?? []) {
+      yield new _ObjectPropertyTreeElement(accessor, linkifier);
+    }
+    for (const property of internalProperties ?? []) {
+      const treeElement = new _ObjectPropertyTreeElement(property, linkifier);
+      if (property.property.name === "[[Entries]]") {
+        continue;
+      }
+      if (property.property.name === "[[Prototype]]" && skipProto) {
+        continue;
+      }
+      empty = false;
+      yield treeElement;
+    }
+    if (empty) {
+      const title = document.createElement("div");
+      title.classList.add("gray-info-message");
+      title.textContent = emptyPlaceholder || i18nString2(UIStrings2.noProperties);
+      const infoElement = new UI2.TreeOutline.TreeElement(title);
+      yield infoElement;
+    }
+  }
+  static populateWithProperties(treeNode, children, skipProto, skipGettersAndSetters, linkifier, emptyPlaceholder) {
+    for (const childNode of this.createPropertyNodes(children, skipProto, skipGettersAndSetters, linkifier, emptyPlaceholder, (property) => treeNode instanceof _ObjectPropertyTreeElement && !isDisplayableProperty(property, treeNode.property?.property))) {
+      treeNode.appendChild(childNode);
+    }
+  }
+  revertHighlightChanges() {
+    this.#widget.revertHighlightChanges();
+  }
+  setSearchRegex(regex, additionalCssClassName) {
+    return this.#widget.setSearchRegex(regex, additionalCssClassName);
+  }
+  // This is called by layout tests
+  startEditing() {
+    this.#widget.startEditing();
+  }
+  // This is called by layout tests
+  get editing() {
+    return this.#widget.editing;
+  }
+  get editable() {
+    return this.#widget.editable;
+  }
+  set editable(val) {
+    this.#widget.editable = val;
+  }
+  // This is called by layout tests
+  async applyExpression(expression) {
+    await this.property.setValue(expression);
+  }
+  showAllPropertiesElementSelected(element) {
+    this.removeChild(element);
+    this.children().forEach((x) => {
+      x.hidden = false;
+    });
+    return false;
+  }
+  createShowAllPropertiesButton() {
+    const element = document.createElement("div");
+    element.classList.add("object-value-calculate-value-button");
+    element.textContent = i18nString2(UIStrings2.dots);
+    UI2.Tooltip.Tooltip.install(element, i18nString2(UIStrings2.showAllD, { PH1: this.childCount() }));
+    const children = this.children();
+    for (let i = this.maxNumPropertiesToShow; i < this.childCount(); ++i) {
+      children[i].hidden = true;
+    }
+    const showAllPropertiesButton = new UI2.TreeOutline.TreeElement(element);
+    showAllPropertiesButton.onselect = this.showAllPropertiesElementSelected.bind(this, showAllPropertiesButton);
+    this.appendChild(showAllPropertiesButton);
+  }
+  async onpopulate() {
+    this.removeChildren();
+    if (this.property.object) {
+      await _ObjectPropertyTreeElement.populate(this, this.property, false, false, this.linkifier);
+      if (this.childCount() > this.maxNumPropertiesToShow) {
+        this.createShowAllPropertiesButton();
+      }
+    }
+  }
+  onattach() {
+    this.updateExpandable();
+    this.#widget.show(this.listItemElement);
+    this.#widget.property = this.property;
+    this.#widget.linkifier = this.linkifier;
+    this.#widget.editable = !this.property.readOnly;
+  }
+  onexpand() {
+    this.property.expanded = true;
+    this.#widget.expanded = true;
+  }
+  oncollapse() {
+    this.property.expanded = false;
+    this.#widget.expanded = false;
+  }
+  #updateValue() {
+    this.updateExpandable();
+  }
+  #updateChildren() {
+    this.removeChildren();
+    void this.onpopulate();
+  }
+  #updateFilter() {
+    this.hidden = this.property.isFiltered;
+  }
+  #onExpandedChanged(event) {
+    const expanded = event.data;
+    if (expanded) {
+      this.expand();
+    } else {
+      this.collapse();
+    }
+  }
+  getContextMenu(event) {
+    const contextMenu = new UI2.ContextMenu.ContextMenu(event);
+    contextMenu.appendApplicableItems(this);
+    if (this.property.property.symbol) {
+      contextMenu.appendApplicableItems(this.property.property.symbol);
+    }
+    if (this.property.object) {
+      contextMenu.appendApplicableItems(this.property.object);
+      if (this.property.parent?.object instanceof SDK3.RemoteObject.LocalJSONObject) {
+        const { object: { value } } = this.property;
+        const propertyValue = typeof value === "object" ? Platform2.StringUtilities.escapeUnicodeAsText(JSON.stringify(value, null, 2)) : value;
+        const copyValueHandler = () => {
+          Host.userMetrics.actionTaken(Host.UserMetrics.Action.NetworkPanelCopyValue);
+          Host.InspectorFrontendHost.InspectorFrontendHostInstance.copyText(propertyValue);
+        };
+        contextMenu.clipboardSection().appendItem(i18nString2(UIStrings2.copyValue), copyValueHandler, { jslogContext: "copy-value" });
+      }
+    }
+    if (!this.property.property.synthetic && this.property.path) {
+      const copyPathHandler = Host.InspectorFrontendHost.InspectorFrontendHostInstance.copyText.bind(Host.InspectorFrontendHost.InspectorFrontendHostInstance, this.property.path);
+      contextMenu.clipboardSection().appendItem(i18nString2(UIStrings2.copyPropertyPath), copyPathHandler, { jslogContext: "copy-property-path" });
+    }
+    if (this.property.parent?.object instanceof SDK3.RemoteObject.LocalJSONObject) {
+      contextMenu.viewSection().appendItem(i18nString2(UIStrings2.expandRecursively), this.expandRecursively.bind(this, EXPANDABLE_MAX_DEPTH), { jslogContext: "expand-recursively" });
+      contextMenu.viewSection().appendItem(i18nString2(UIStrings2.collapseChildren), this.collapseChildren.bind(this), { jslogContext: "collapse-children" });
+    }
+    let root = this.property;
+    while (root.parent) {
+      root = root.parent;
+    }
+    if (!root.isWasm) {
+      contextMenu.viewSection().appendCheckboxItem(i18nString2(UIStrings2.sortPropertiesAlphabetically), () => {
+        root.sortPropertiesAlphabetically = !root.sortPropertiesAlphabetically;
+      }, {
+        checked: root.sortPropertiesAlphabetically,
+        jslogContext: "sort-properties-alphabetically"
+      });
+    }
+    contextMenu.viewSection().appendCheckboxItem(i18nString2(UIStrings2.showAll), () => {
+      root.includeNullOrUndefinedValues = !root.includeNullOrUndefinedValues;
+    }, { checked: root.includeNullOrUndefinedValues, jslogContext: "show-all" });
+    return contextMenu;
+  }
+  contextMenuFired(event) {
+    const contextMenu = this.getContextMenu(event);
+    void contextMenu.show();
+  }
+  updateExpandable() {
+    if (this.property.object) {
+      this.setExpandable(!this.property.object.customPreview() && this.property.object.hasChildren && !this.property.property.wasThrown);
+    } else {
+      this.setExpandable(false);
+    }
+  }
+  path() {
+    return this.property.path;
+  }
+};
+async function arrayRangeGroups(object, fromIndex, toIndex) {
+  return await object.callFunctionJSON(packArrayRanges, [
+    { value: fromIndex },
+    { value: toIndex },
+    { value: ArrayGroupingTreeElement.bucketThreshold },
+    { value: ArrayGroupingTreeElement.sparseIterationThreshold }
+  ]);
+  function packArrayRanges(fromIndex2, toIndex2, bucketThreshold, sparseIterationThreshold) {
+    if (fromIndex2 === void 0 || toIndex2 === void 0 || sparseIterationThreshold === void 0 || bucketThreshold === void 0) {
+      return;
+    }
+    let ownPropertyNames = null;
+    const consecutiveRange = toIndex2 - fromIndex2 >= sparseIterationThreshold && ArrayBuffer.isView(this);
+    function* arrayIndexes(object2) {
+      if (fromIndex2 === void 0 || toIndex2 === void 0 || sparseIterationThreshold === void 0) {
+        return;
+      }
+      if (toIndex2 - fromIndex2 < sparseIterationThreshold) {
+        for (let i = fromIndex2; i <= toIndex2; ++i) {
+          if (i in object2) {
+            yield i;
+          }
+        }
+      } else {
+        ownPropertyNames = ownPropertyNames || Object.getOwnPropertyNames(object2);
+        for (let i = 0; i < ownPropertyNames.length; ++i) {
+          const name = ownPropertyNames[i];
+          const index = Number(name) >>> 0;
+          if (String(index) === name && fromIndex2 <= index && index <= toIndex2) {
+            yield index;
+          }
+        }
+      }
+    }
+    let count = 0;
+    if (consecutiveRange) {
+      count = toIndex2 - fromIndex2 + 1;
+    } else {
+      for (const ignored of arrayIndexes(this)) {
+        ++count;
+      }
+    }
+    let bucketSize = count;
+    if (count <= bucketThreshold) {
+      bucketSize = count;
+    } else {
+      bucketSize = Math.pow(bucketThreshold, Math.ceil(Math.log(count) / Math.log(bucketThreshold)) - 1);
+    }
+    const ranges = [];
+    if (consecutiveRange) {
+      for (let i = fromIndex2; i <= toIndex2; i += bucketSize) {
+        const groupStart = i;
+        let groupEnd = groupStart + bucketSize - 1;
+        if (groupEnd > toIndex2) {
+          groupEnd = toIndex2;
+        }
+        ranges.push([groupStart, groupEnd, groupEnd - groupStart + 1]);
+      }
+    } else {
+      count = 0;
+      let groupStart = -1;
+      let groupEnd = 0;
+      for (const i of arrayIndexes(this)) {
+        if (groupStart === -1) {
+          groupStart = i;
+        }
+        groupEnd = i;
+        if (++count === bucketSize) {
+          ranges.push([groupStart, groupEnd, count]);
+          count = 0;
+          groupStart = -1;
+        }
+      }
+      if (count > 0) {
+        ranges.push([groupStart, groupEnd, count]);
+      }
+    }
+    return { ranges };
+  }
+}
+function buildArrayFragment(fromIndex, toIndex, sparseIterationThreshold) {
+  const result = /* @__PURE__ */ Object.create(null);
+  if (fromIndex === void 0 || toIndex === void 0 || sparseIterationThreshold === void 0) {
+    return;
+  }
+  if (toIndex - fromIndex < sparseIterationThreshold) {
+    for (let i = fromIndex; i <= toIndex; ++i) {
+      if (i in this) {
+        result[i] = this[i];
+      }
+    }
+  } else {
+    const ownPropertyNames = Object.getOwnPropertyNames(this);
+    for (let i = 0; i < ownPropertyNames.length; ++i) {
+      const name = ownPropertyNames[i];
+      const index = Number(name) >>> 0;
+      if (String(index) === name && fromIndex <= index && index <= toIndex) {
+        result[index] = this[index];
+      }
+    }
+  }
+  return result;
+}
+var ArrayGroupingTreeElement = class _ArrayGroupingTreeElement extends UI2.TreeOutline.TreeElement {
+  toggleOnClick;
+  linkifier;
+  #child;
+  constructor(child, linkifier) {
+    super(Platform2.StringUtilities.sprintf("[%d \u2026 %d]", child.range.fromIndex, child.range.toIndex), true);
+    this.#child = child;
+    this.#child.addEventListener("children-changed", this.onpopulate, this);
+    this.#child.addEventListener("expanded-changed", this.#onExpandedChanged, this);
+    this.toggleOnClick = true;
+    this.linkifier = linkifier;
+    if (child.expanded) {
+      this.expand();
+    }
+  }
+  #onExpandedChanged(event) {
+    const expanded = event.data;
+    if (expanded) {
+      this.expand();
+    } else {
+      this.collapse();
+    }
+  }
+  static *createNodes(children, linkifier, isNotDisplayablePropertyCallback) {
+    if (!children.arrayRanges) {
+      return;
+    }
+    if (children.arrayRanges.length === 1) {
+      yield* ObjectPropertyTreeElement.createNodes(children.arrayRanges[0], false, false, linkifier, null, isNotDisplayablePropertyCallback);
+    } else {
+      for (const child of children.arrayRanges) {
+        if (child.singular) {
+          yield* ObjectPropertyTreeElement.createNodes(child, false, false, linkifier, null, isNotDisplayablePropertyCallback);
+        } else {
+          yield new _ArrayGroupingTreeElement(child, linkifier);
+        }
+      }
+    }
+    yield* ObjectPropertyTreeElement.createPropertyNodes(children, false, false, linkifier, null, isNotDisplayablePropertyCallback);
+  }
+  static async populateChildrenIfNeeded(children) {
+    if (!children.arrayRanges) {
+      return;
+    }
+    if (children.arrayRanges.length === 1) {
+      await ObjectPropertyTreeElement.populateChildrenIfNeeded(children.arrayRanges[0]);
+    } else {
+      await Promise.all(children.arrayRanges.filter((child) => child.singular).map((child) => ObjectPropertyTreeElement.populateChildrenIfNeeded(child)));
+    }
+  }
+  onexpand() {
+    this.#child.expanded = true;
+  }
+  oncollapse() {
+    this.#child.expanded = false;
+  }
+  async onpopulate() {
+    this.removeChildren();
+    await ObjectPropertyTreeElement.populate(this, this.#child, false, false, this.linkifier);
+  }
+  onattach() {
+    this.listItemElement.classList.add("object-properties-section-name");
+  }
+  // These should be module constants but they are modified by layout tests.
+  static bucketThreshold = 100;
+  static sparseIterationThreshold = 25e4;
+};
+var EXPANDABLE_TEXT_DEFAULT_VIEW = (input, output, target) => {
+  const totalBytesText = i18n3.ByteUtilities.bytesToString(input.byteCount);
+  const canExpand = input.text.length < ExpandableTextPropertyValue.MAX_DISPLAYABLE_TEXT_LENGTH;
+  const onContextMenu = (e) => {
+    const { target: target2 } = e;
+    if (!(target2 instanceof Element)) {
+      return;
+    }
+    const listItem = target2.closest("li");
+    const element = listItem && UI2.TreeOutline.TreeElement.getTreeElementBylistItemNode(listItem);
+    if (!(element instanceof ObjectPropertyTreeElement)) {
+      return;
+    }
+    const contextMenu = element.getContextMenu(e);
+    if (canExpand && !input.expanded) {
+      contextMenu.clipboardSection().appendItem(i18nString2(UIStrings2.showMoreS, { PH1: totalBytesText }), input.expandText, { jslogContext: "show-more" });
+    }
+    contextMenu.clipboardSection().appendItem(i18nString2(UIStrings2.copy), input.copyText, { jslogContext: "copy" });
+    void contextMenu.show();
+    e.consume(true);
+  };
+  const croppedText = input.text.slice(0, input.maxLength);
+  render2(
+    // clang-format off
+    html2`<span title=${croppedText + "\u2026"} @contextmenu=${onContextMenu}>
+               ${input.expanded ? input.text : croppedText}
+               <button
+                 ?hidden=${input.expanded}
+                 @click=${canExpand ? input.expandText : void 0}
+                 jslog=${ifDefined2(canExpand ? VisualLogging.action("expand").track({ click: true }) : void 0)}
+                 class=${canExpand ? "expandable-inline-button" : "undisplayable-text"}
+                 data-text=${canExpand ? i18nString2(UIStrings2.showMoreS, { PH1: totalBytesText }) : i18nString2(UIStrings2.longTextWasTruncatedS, { PH1: totalBytesText })}
+                 ></button>
+               <button
+                 class=expandable-inline-button
+                 @click=${input.copyText}
+                 data-text=${i18nString2(UIStrings2.copy)}
+                 jslog=${VisualLogging.action("copy").track({ click: true })}
+                 ></button>
+              </span>`,
+    // clang-format on
+    target
+  );
+};
+var ExpandableTextPropertyValue = class _ExpandableTextPropertyValue extends UI2.Widget.Widget {
+  static MAX_DISPLAYABLE_TEXT_LENGTH = 1e7;
+  static EXPANDABLE_MAX_LENGTH = 50;
+  #text = "";
+  #byteCount = 0;
+  #expanded = false;
+  #maxLength = _ExpandableTextPropertyValue.EXPANDABLE_MAX_LENGTH;
+  #view;
+  constructor(target, view = EXPANDABLE_TEXT_DEFAULT_VIEW) {
+    super(target);
+    this.#view = view;
+  }
+  set text(text) {
+    this.#text = text;
+    this.#byteCount = Platform2.StringUtilities.countWtf8Bytes(text);
+    this.requestUpdate();
+  }
+  set maxLength(maxLength) {
+    this.#maxLength = maxLength;
+    this.requestUpdate();
+  }
+  performUpdate() {
+    const input = {
+      copyText: () => Host.InspectorFrontendHost.InspectorFrontendHostInstance.copyText(this.#text),
+      expandText: () => {
+        if (!this.#expanded) {
+          this.#expanded = true;
+          this.requestUpdate();
+        }
+      },
+      expanded: this.#expanded,
+      byteCount: this.#byteCount,
+      maxLength: this.#maxLength,
+      text: this.#text
+    };
+    this.#view(input, {}, this.contentElement);
+  }
+};
+
+// gen/front_end/ui/legacy/components/object_ui/CustomPreviewComponent.js
+var UIStrings3 = {
+  /**
+   * @description Context menu item to show a custom formatted object as a standard JavaScript object.
+   */
+  showAsJavascriptObject: "Show as JavaScript object"
+};
+var str_3 = i18n5.i18n.registerUIStrings("ui/legacy/components/object_ui/CustomPreviewComponent.ts", UIStrings3);
+var i18nString3 = i18n5.i18n.getLocalizedString.bind(void 0, str_3);
+var CustomPreviewSection = class _CustomPreviewSection {
+  sectionElement;
+  object;
+  expanded;
+  cachedContent;
+  header;
+  expandIcon;
+  constructor(object) {
+    this.sectionElement = document.createElement("span");
+    this.sectionElement.classList.add("custom-expandable-section");
+    this.object = object;
+    this.expanded = false;
+    this.cachedContent = null;
+    const customPreview = object.customPreview();
+    if (!customPreview) {
+      return;
+    }
+    let headerJSON;
+    try {
+      headerJSON = JSON.parse(customPreview.header);
+    } catch (e) {
+      Common3.Console.Console.instance().error("Broken formatter: header is invalid json " + e);
+      return;
+    }
+    this.header = this.renderJSONMLTag(headerJSON);
+    if (this.header.nodeType === Node.TEXT_NODE) {
+      Common3.Console.Console.instance().error("Broken formatter: header should be an element node.");
+      return;
+    }
+    if (customPreview.bodyGetterId) {
+      if (this.header instanceof Element) {
+        this.header.classList.add("custom-expandable-section-header");
+      }
+      this.header.addEventListener("click", this.onClick.bind(this), false);
+      this.expandIcon = createIcon("triangle-right", "custom-expand-icon");
+      this.header.insertBefore(this.expandIcon, this.header.firstChild);
+    }
+    this.sectionElement.appendChild(this.header);
+  }
+  element() {
+    return this.sectionElement;
+  }
+  renderJSONMLTag(jsonML) {
+    if (!Array.isArray(jsonML)) {
+      return document.createTextNode(String(jsonML));
+    }
+    if (jsonML[0] !== "object") {
+      return this.renderElement(jsonML);
+    }
+    if (jsonML.length !== 2) {
+      Common3.Console.Console.instance().error("Broken formatter: object reference must contain exactly two elements");
+      return document.createElement("span");
+    }
+    return this.layoutObjectTag(jsonML);
+  }
+  // TODO(crbug.com/1172300) Ignored during the jsdoc to ts migration)
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  renderElement(object) {
+    const tagName = object.shift();
+    if (!ALLOWED_TAGS.includes(tagName)) {
+      Common3.Console.Console.instance().error("Broken formatter: element " + tagName + " is not allowed!");
+      return document.createElement("span");
+    }
+    const element = document.createElement(tagName);
+    if (typeof object[0] === "object" && !Array.isArray(object[0])) {
+      const attributes = object.shift();
+      for (const key in attributes) {
+        const value = attributes[key];
+        if (key !== "style" || typeof value !== "string") {
+          continue;
+        }
+        const sanitizedStyle = /* @__PURE__ */ new Map();
+        sanitizeStyle(sanitizedStyle, value);
+        for (const [property, { value: propertyValue, priority }] of sanitizedStyle) {
+          element.style.setProperty(property, propertyValue, priority);
+        }
+      }
+    }
+    this.appendJsonMLTags(element, object);
+    return element;
+  }
+  layoutObjectTag(objectTag) {
+    objectTag.shift();
+    const attributes = objectTag.shift();
+    const remoteObject = this.object.runtimeModel().createRemoteObject(attributes);
+    if (remoteObject.customPreview()) {
+      return new _CustomPreviewSection(remoteObject).element();
+    }
+    const sectionElement = defaultObjectPresentation2(remoteObject);
+    sectionElement.classList.toggle("custom-expandable-section-standard-section", remoteObject.hasChildren);
+    return sectionElement;
+  }
+  appendJsonMLTags(parentElement, jsonMLTags) {
+    for (let i = 0; i < jsonMLTags.length; ++i) {
+      parentElement.appendChild(this.renderJSONMLTag(jsonMLTags[i]));
+    }
+  }
+  onClick(event) {
+    event.consume(true);
+    if (this.cachedContent) {
+      this.toggleExpand();
+    } else {
+      void this.loadBody();
+    }
+  }
+  toggleExpand() {
+    this.expanded = !this.expanded;
+    if (this.header instanceof Element) {
+      this.header.classList.toggle("expanded", this.expanded);
+    }
+    if (this.cachedContent instanceof Element) {
+      this.cachedContent.classList.toggle("hidden", !this.expanded);
+    }
+    if (this.expandIcon) {
+      if (this.expanded) {
+        this.expandIcon.name = "triangle-down";
+      } else {
+        this.expandIcon.name = "triangle-right";
+      }
+    }
+  }
+  defaultBodyTreeOutline;
+  async loadBody() {
+    const customPreview = this.object.customPreview();
+    if (!customPreview) {
+      return;
+    }
+    if (customPreview.bodyGetterId) {
+      const bodyJsonML = await this.object.callFunctionJSON((bodyGetter) => bodyGetter(), [{ objectId: customPreview.bodyGetterId }]);
+      if (bodyJsonML === null) {
+        this.defaultBodyTreeOutline = new ObjectPropertiesSectionsTreeOutline();
+        this.defaultBodyTreeOutline.setShowSelectionOnKeyboardFocus(
+          /* show */
+          true,
+          /* preventTabOrder */
+          false
+        );
+        this.defaultBodyTreeOutline.element.classList.add("custom-expandable-section-default-body");
+        void ObjectPropertyTreeElement.populate(this.defaultBodyTreeOutline.rootElement(), new ObjectTree(this.object, {
+          readOnly: true,
+          propertiesMode: 1
+        }), false, false);
+        this.cachedContent = this.defaultBodyTreeOutline.element;
+      } else {
+        this.cachedContent = this.renderJSONMLTag(bodyJsonML);
+      }
+      this.sectionElement.appendChild(this.cachedContent);
+      this.toggleExpand();
+    }
+  }
+};
+var ALLOWED_TAGS = ["span", "div", "ol", "li", "table", "tr", "td"];
+var CustomPreviewComponent = class {
+  object;
+  customPreviewSection;
+  element;
+  constructor(object) {
+    this.object = object;
+    this.customPreviewSection = new CustomPreviewSection(object);
+    this.element = document.createElement("span");
+    this.element.classList.add("source-code");
+    const shadowRoot = UI3.UIUtils.createShadowRootWithCoreStyles(this.element, { cssFile: customPreviewComponent_css_default });
+    this.element.addEventListener("contextmenu", this.contextMenuEventFired.bind(this), false);
+    shadowRoot.appendChild(this.customPreviewSection.element());
+  }
+  expandIfPossible() {
+    const customPreview = this.object.customPreview();
+    if (customPreview && customPreview.bodyGetterId && this.customPreviewSection) {
+      void this.customPreviewSection.loadBody();
+    }
+  }
+  contextMenuEventFired(event) {
+    const contextMenu = new UI3.ContextMenu.ContextMenu(event);
+    if (this.customPreviewSection) {
+      contextMenu.revealSection().appendItem(i18nString3(UIStrings3.showAsJavascriptObject), this.disassemble.bind(this), { jslogContext: "show-as-javascript-object" });
+    }
+    contextMenu.appendApplicableItems(this.object);
+    void contextMenu.show();
+  }
+  disassemble() {
+    if (this.element.shadowRoot) {
+      this.element.shadowRoot.textContent = "";
+      this.customPreviewSection = null;
+      this.element.shadowRoot.appendChild(defaultObjectPresentation2(this.object));
+    }
+  }
+};
+function defaultObjectPresentation2(object) {
+  const element = document.createElement("span");
+  render3(defaultObjectPresentation(object), element);
+  return element;
+}
+
+// gen/front_end/ui/legacy/components/object_ui/ObjectPopoverHelper.js
+var ObjectPopoverHelper_exports = {};
+__export(ObjectPopoverHelper_exports, {
+  ObjectPopoverHelper: () => ObjectPopoverHelper
+});
+import * as i18n7 from "./..\\..\\..\\..\\core\\i18n\\i18n.js";
+import * as Platform3 from "./..\\..\\..\\..\\core\\platform\\platform.js";
+import * as SDK4 from "./..\\..\\..\\..\\core\\sdk\\sdk.js";
+import * as Geometry from "./..\\..\\..\\..\\models\\geometry\\geometry.js";
+import { Link } from "./..\\..\\..\\kit\\kit.js";
+import { render as render4 } from "./..\\..\\..\\lit\\lit.js";
+import * as UI4 from "./..\\..\\legacy.js";
+import * as Components from "./..\\utils\\utils.js";
+
+// gen/front_end/ui/legacy/components/object_ui/objectPopover.css.js
+var objectPopover_css_default = `/*
+ * Copyright 2017 The Chromium Authors
+ * Use of this source code is governed by a BSD-style license that can be
+ * found in the LICENSE file.
+ */
+
+.widget:has(.object-popover-tree) {
+  padding: 0;
+  border-radius: var(--sys-shape-corner-extra-small);
+}
+
+.object-popover-content {
+  display: flex;
+  position: relative;
+  overflow: hidden;
+  flex: 1 1 auto;
+  flex-direction: column;
+}
+
+.object-popover-title {
+  text-overflow: ellipsis;
+  overflow: hidden;
+  white-space: nowrap;
+  font-weight: bold;
+  padding-left: 18px;
+  padding-bottom: 2px;
+  padding-top: var(--sys-size-3);
+  flex-shrink: 0;
+}
+
+.object-popover-tree {
+  border-top: 1px solid var(--sys-color-divider);
+  overflow: auto;
+  width: 100%;
+  height: calc(100% - 13px);
+}
+
+.object-popover-container {
+  display: inline-block;
+}
+
+.object-popover-description-box {
+  padding: 6px;
+  max-width: 350px;
+  line-height: 1.4;
+}
+
+.object-popover-footer {
+  margin-top: 8px;
+}
+
+/*# sourceURL=${import.meta.resolve("./objectPopover.css")} */`;
+
+// gen/front_end/ui/legacy/components/object_ui/ObjectPopoverHelper.js
+var UIStrings4 = {
+  /**
+   * @description Link text for opening documentation in an object popover.
+   */
+  learnMore: "Learn more"
+};
+var str_4 = i18n7.i18n.registerUIStrings("ui/legacy/components/object_ui/ObjectPopoverHelper.ts", UIStrings4);
+var i18nString4 = i18n7.i18n.getLocalizedString.bind(void 0, str_4);
+var ObjectPopoverHelper = class _ObjectPopoverHelper {
+  linkifier;
+  resultHighlightedAsDOM;
+  constructor(linkifier, resultHighlightedAsDOM) {
+    this.linkifier = linkifier;
+    this.resultHighlightedAsDOM = resultHighlightedAsDOM;
+  }
+  dispose() {
+    if (this.resultHighlightedAsDOM) {
+      SDK4.OverlayModel.OverlayModel.hideDOMNodeHighlight(SDK4.TargetManager.TargetManager.instance());
+    }
+    if (this.linkifier) {
+      this.linkifier.dispose();
+    }
+  }
+  static async buildObjectPopover(result, popover) {
+    const description = Platform3.StringUtilities.trimEndWithMaxLength(result.description || "", MaxPopoverTextLength);
+    let popoverContentElement = null;
+    if (result.type === "function" || result.type === "object") {
+      let linkifier = null;
+      let resultHighlightedAsDOM = false;
+      if (result.subtype === "node") {
+        SDK4.OverlayModel.OverlayModel.highlightObjectAsDOMNode(result);
+        resultHighlightedAsDOM = true;
+      }
+      if (result.customPreview()) {
+        const customPreviewComponent = new CustomPreviewComponent(result);
+        customPreviewComponent.expandIfPossible();
+        popoverContentElement = customPreviewComponent.element;
+      } else {
+        popoverContentElement = document.createElement("div");
+        popoverContentElement.classList.add("object-popover-content");
+        popover.registerRequiredCSS(objectValue_css_default, objectPopover_css_default);
+        const titleElement = popoverContentElement.createChild("div", "object-popover-title");
+        if (result.type === "function") {
+          titleElement.classList.add("source-code");
+          render4(valueElementForFunctionDescription(result.description), titleElement);
+        } else {
+          titleElement.classList.add("monospace");
+          titleElement.createChild("span").textContent = description;
+        }
+        linkifier = new Components.Linkifier.Linkifier();
+        const section = new ObjectPropertiesSectionWidget();
+        section.element.classList.add("object-popover-tree");
+        section.root = result;
+        if (section.objectTree) {
+          section.objectTree.expanded = true;
+        }
+        section.linkifier = linkifier;
+        section.showOverflow = true;
+        section.show(popoverContentElement, null, true);
+      }
+      popoverContentElement.dataset.stableNameForTest = "object-popover-content";
+      popover.setMaxContentSize(new Geometry.Size(300, 250));
+      popover.setSizeBehavior(
+        "SetExactSize"
+        /* UI.GlassPane.SizeBehavior.SET_EXACT_SIZE */
+      );
+      popover.contentElement.appendChild(popoverContentElement);
+      return new _ObjectPopoverHelper(linkifier, resultHighlightedAsDOM);
+    }
+    popoverContentElement = document.createElement("span");
+    popoverContentElement.dataset.stableNameForTest = "object-popover-content";
+    popover.registerRequiredCSS(objectValue_css_default, objectPopover_css_default);
+    const valueElement = popoverContentElement.createChild("span", "monospace object-value-" + result.type);
+    valueElement.style.whiteSpace = "pre";
+    if (result.type === "string") {
+      UI4.UIUtils.createTextChildren(valueElement, `"${description}"`);
+    } else {
+      valueElement.textContent = description;
+    }
+    popover.contentElement.appendChild(popoverContentElement);
+    return new _ObjectPopoverHelper(null, false);
+  }
+  static buildDescriptionPopover(description, link, popover) {
+    const popoverContentElement = document.createElement("div");
+    popoverContentElement.classList.add("object-popover-description-box");
+    const descriptionDiv = document.createElement("div");
+    descriptionDiv.dataset.stableNameForTest = "object-popover-content";
+    popover.registerRequiredCSS(objectPopover_css_default);
+    descriptionDiv.textContent = description;
+    const learnMoreLink = Link.create(link, i18nString4(UIStrings4.learnMore), void 0, "learn-more");
+    const footerDiv = document.createElement("div");
+    footerDiv.classList.add("object-popover-footer");
+    footerDiv.appendChild(learnMoreLink);
+    popoverContentElement.appendChild(descriptionDiv);
+    popoverContentElement.appendChild(footerDiv);
+    popover.contentElement.appendChild(popoverContentElement);
+    return new _ObjectPopoverHelper(null, false);
+  }
+};
+var MaxPopoverTextLength = 1e4;
+export {
+  CSSStyleSanitizer_exports as CSSStyleSanitizer,
+  CustomPreviewComponent_exports as CustomPreviewComponent,
+  JavaScriptREPL_exports as JavaScriptREPL,
+  ObjectPopoverHelper_exports as ObjectPopoverHelper,
+  ObjectPropertiesSection_exports as ObjectPropertiesSection,
+  RemoteObjectPreviewFormatter_exports as RemoteObjectPreviewFormatter
+};
+//# sourceMappingURL=object_ui.js.map

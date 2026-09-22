@@ -28,6 +28,13 @@
         "kind": "build",
         "isDefault": true
       }
+    },
+    {
+      "type": "npm",
+      "script": "build:e2e",
+      "problemMatcher": [],
+      "label": "npm: build:e2e",
+      "group": "build"
     }
   ]
 }

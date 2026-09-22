@@ -1,0 +1,682 @@
+/* Control panel styles — VS Code theme variables only (CONTROL-PANEL.md §3). */
+
+:root {
+  --row-height: 22px;
+  --pane-header-height: var(--vscode-spacing-size280, 28px);
+  --pane-inset: var(--vscode-spacing-size40, 4px);
+  --pane-content-inset: var(--vscode-spacing-size80, 8px);
+}
+
+html,
+body {
+  margin: 0;
+  padding: 0;
+  color: var(--vscode-sideBar-foreground, var(--vscode-foreground));
+  background: var(--vscode-sideBar-background, var(--vscode-editor-background));
+  font-family: var(--vscode-font-family);
+  font-size: var(--vscode-font-size);
+  user-select: none;
+}
+
+.panel-root {
+  display: flex;
+  flex-direction: column;
+  height: 100vh;
+  position: relative;
+}
+
+.panel-content-wrapper {
+  flex: 1;
+  min-height: 0;
+  position: relative;
+}
+
+.panel-content {
+  height: 100%;
+  overflow-y: auto;
+}
+
+/* VS Code injects `html { scrollbar-color: ... }` into every webview; the inherited
+   non-auto value makes Chromium ignore all ::-webkit-scrollbar-* rules and render
+   native (arrowed) scrollbars. Reset it so the rules below actually apply. */
+.panel-content,
+.broker-overlay {
+  scrollbar-color: auto;
+}
+
+.panel-content::-webkit-scrollbar,
+.broker-overlay::-webkit-scrollbar {
+  /* workbench (style-override) uses 8px sliders */
+  width: 8px;
+  height: 8px;
+}
+
+.panel-content::-webkit-scrollbar-button,
+.broker-overlay::-webkit-scrollbar-button {
+  display: none;
+  width: 0;
+  height: 0;
+}
+
+.panel-content::-webkit-scrollbar-track,
+.broker-overlay::-webkit-scrollbar-track,
+.panel-content::-webkit-scrollbar-corner,
+.broker-overlay::-webkit-scrollbar-corner {
+  background: transparent;
+}
+
+.panel-content::-webkit-scrollbar-thumb,
+.broker-overlay::-webkit-scrollbar-thumb {
+  background: var(--vscode-scrollbarSlider-background);
+  border-radius: var(--vscode-cornerRadius-small, 4px);
+}
+
+.panel-content::-webkit-scrollbar-thumb:hover,
+.broker-overlay::-webkit-scrollbar-thumb:hover {
+  background: var(--vscode-scrollbarSlider-hoverBackground);
+}
+
+.panel-content::-webkit-scrollbar-thumb:active,
+.broker-overlay::-webkit-scrollbar-thumb:active {
+  background: var(--vscode-scrollbarSlider-activeBackground);
+}
+
+.loading {
+  padding: 12px;
+  opacity: 0.7;
+}
+
+.attribution-footer {
+  flex: none;
+  position: relative;
+  z-index: 11;
+  padding: 4px var(--pane-content-inset);
+  background: var(--vscode-sideBar-background, var(--vscode-editor-background));
+  color: var(--vscode-descriptionForeground, var(--vscode-foreground));
+  font-size: 0.85em;
+  text-align: center;
+}
+
+.attribution-footer::before {
+  content: "";
+  position: absolute;
+  top: 0;
+  left: var(--pane-content-inset);
+  right: var(--pane-content-inset);
+  border-top: 1px dashed var(--vscode-panel-border, transparent);
+  pointer-events: none;
+}
+
+.attribution-footer a {
+  color: var(--vscode-textLink-foreground);
+}
+
+.attribution-footer a:hover {
+  color: var(--vscode-textLink-activeForeground, var(--vscode-textLink-foreground));
+}
+
+/* --------------------------------------------------------- blocked overlay */
+
+/*
+ * Covers the whole panel for states where no row/button underneath can
+ * meaningfully do anything (`ownedElsewhere`, `stoppedByUser`) — physically
+ * blocking interaction instead of leaving every row individually enabled to
+ * implicitly trigger a takeover/start as a side effect.
+ */
+.broker-overlay {
+  position: absolute;
+  inset: 0;
+  z-index: 10;
+  box-sizing: border-box;
+  max-width: 100%;
+  max-height: 100%;
+  overflow-y: auto;
+  opacity: 0.9;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: safe center;
+  gap: 8px;
+  text-align: center;
+  padding: 24px;
+  background: var(--vscode-editor-background);
+  color: var(--vscode-foreground);
+}
+
+.broker-overlay-icon {
+  font-size: 2em;
+}
+
+.broker-overlay p {
+  margin: 0;
+  max-width: 32em;
+}
+
+/* ---------------------------------------------------------------- banner */
+
+.banner {
+  display: flex;
+  align-items: flex-start;
+  gap: 6px;
+  padding: 6px 10px;
+  background: var(--vscode-inputValidation-warningBackground);
+  border: 1px solid var(--vscode-inputValidation-warningBorder);
+  color: var(--vscode-foreground);
+  font-size: 0.95em;
+}
+
+.banner .codicon {
+  margin-top: 1px;
+}
+
+.banner span:nth-child(2) {
+  flex: 1;
+}
+
+.banner-info {
+  background: var(--vscode-editorWidget-background, transparent);
+  border-color: var(--vscode-widget-border, var(--vscode-panel-border));
+}
+
+.banner-error {
+  background: var(--vscode-inputValidation-errorBackground);
+  border-color: var(--vscode-inputValidation-errorBorder);
+}
+
+.banner-action {
+  background: var(--vscode-button-background);
+  color: var(--vscode-button-foreground);
+  border: none;
+  border-radius: 2px;
+  padding: 2px 10px;
+  font-size: 0.9em;
+  cursor: pointer;
+  flex: none;
+}
+
+.banner-action:hover {
+  background: var(--vscode-button-hoverBackground);
+}
+
+/* -------------------------------------------------------- section header */
+
+.section-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 6px;
+  position: relative;
+  box-sizing: border-box;
+  height: var(--pane-header-height);
+  margin: 0 var(--pane-inset);
+  padding: 0 0 0 var(--pane-inset);
+  border-radius: var(--vscode-cornerRadius-small, 4px);
+  background: var(--vscode-sideBar-background, var(--vscode-editor-background));
+  color: var(--vscode-sideBarSectionHeader-foreground, var(--vscode-foreground));
+}
+
+.section-header::before {
+  content: "";
+  position: absolute;
+  top: 0;
+  left: var(--pane-inset);
+  right: var(--pane-inset);
+  height: var(--vscode-strokeThickness, 1px);
+  background: var(--vscode-sideBarSectionHeader-border, transparent);
+  pointer-events: none;
+}
+
+.panel-content > .section-header:first-child::before {
+  display: none;
+}
+
+.section-header:hover {
+  background: var(--vscode-list-hoverBackground);
+}
+
+.section-toggle {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  flex: 1;
+  height: 100%;
+  background: none;
+  border: none;
+  padding: 0;
+  color: inherit;
+  font-family: inherit;
+  cursor: pointer;
+  text-align: left;
+}
+
+.section-title {
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+}
+
+.section-controls {
+  display: flex;
+  align-items: center;
+  gap: var(--vscode-spacing-size80, 8px);
+  padding-right: var(--pane-inset);
+}
+
+.checkbox-label {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 0.9em;
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.checkbox-label input {
+  appearance: none;
+  -webkit-appearance: none;
+  width: 14px;
+  height: 14px;
+  margin: 0;
+  flex: none;
+  position: relative;
+  border-radius: 3px;
+  border: 1px solid var(--vscode-checkbox-border, var(--vscode-contrastBorder, currentColor));
+  background: var(--vscode-checkbox-background, transparent);
+  cursor: pointer;
+}
+
+.checkbox-label input:checked {
+  background: var(--vscode-checkbox-selectBackground, var(--vscode-checkbox-background));
+  border-color: var(--vscode-checkbox-selectBorder, var(--vscode-checkbox-border));
+}
+
+.checkbox-label input:checked::after {
+  content: "";
+  position: absolute;
+  left: 3px;
+  top: 0;
+  width: 4px;
+  height: 8px;
+  border: solid var(--vscode-checkbox-foreground, currentColor);
+  border-width: 0 2px 2px 0;
+  transform: rotate(45deg);
+}
+
+.checkbox-label input:focus-visible {
+  outline: 1px solid var(--vscode-focusBorder);
+  outline-offset: 1px;
+}
+
+.target-select {
+  max-width: 130px;
+  background: var(--vscode-dropdown-background);
+  color: var(--vscode-dropdown-foreground);
+  border: 1px solid var(--vscode-dropdown-border, transparent);
+  border-radius: 2px;
+  font-family: inherit;
+  font-size: 0.9em;
+  padding: 1px 2px;
+}
+
+/* ------------------------------------------------------------------ rows */
+
+.section-body {
+  padding: 2px 0 8px;
+}
+
+.row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin: 0 var(--pane-inset);
+  padding: 2px 8px;
+  min-height: var(--row-height);
+  border-radius: var(--vscode-cornerRadius-small, 4px);
+}
+
+/*.row:hover,*/
+.row:focus-within {
+  background: var(--vscode-list-hoverBackground);
+}
+
+.row.active-item {
+  background: var(--vscode-list-inactiveSelectionBackground, rgba(128, 128, 128, 0.1));
+}
+.row.active-item:hover,
+.row.active-item:focus-within {
+  background: var(--vscode-list-activeSelectionBackground);
+  color: var(--vscode-list-activeSelectionForeground);
+}
+.row.active-item:hover .row-sub,
+.row.active-item:focus-within .row-sub {
+  opacity: 0.9;
+}
+.row.active-item:hover .status-icon,
+.row.active-item:focus-within .status-icon,
+.row.active-item:hover .path-match,
+.row.active-item:focus-within .path-match {
+  color: inherit;
+}
+
+.row-icon {
+  flex: none;
+  opacity: 0.85;
+}
+
+.path-label {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  direction: rtl; /* ellipsis on the left, keeps the folder name visible */
+  text-align: left;
+}
+
+.path-parent {
+  opacity: 0.6;
+}
+
+.path-name {
+  /*font-weight: 600;*/
+  opacity: 0.6;
+}
+
+.path-match {
+  /*color: var(--vscode-testing-iconPassed, var(--vscode-charts-green));*/
+  font-weight: 600;
+}
+
+
+.hint-row {
+  opacity: 0.6;
+  font-style: italic;
+}
+
+.row-text {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.row-line {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+}
+
+.row-title {
+  font-weight: 600;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.row-sub {
+  font-size: 0.87em;
+  opacity: 0.7;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  display: flex;
+  min-width: 0;
+}
+
+.row-sub .path-label {
+  flex: 0 1 auto;
+  min-width: 0;
+}
+
+/* Compact view (view/title toggle): hide the secondary detail line(s) on
+   every row — apps' status line, plugins' path+id lines, scripts' path line. */
+.panel-root.compact .row-sub {
+  display: none;
+}
+
+.state-suffix {
+  flex: none;
+}
+
+/* -------------------------------------------------------------- statuses */
+
+.status-icon {
+  flex: none;
+}
+
+.status-icon.loaded {
+  color: var(--vscode-testing-iconPassed, var(--vscode-charts-green));
+}
+
+.status-icon.debugging {
+  color: var(--vscode-debugIcon-startForeground, var(--vscode-charts-orange));
+}
+
+.status-icon.pending {
+  color: var(--vscode-charts-yellow);
+}
+
+.status-icon.error {
+  color: var(--vscode-errorForeground);
+}
+
+.status-icon.not-installed {
+  opacity: 0.4;
+}
+
+/* --------------------------------------------------------------- actions */
+
+.row-actions {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  flex: none;
+  /* visibility: hidden; */
+  visibility: visible;
+}
+
+.row:hover .row-actions,
+.row:focus-within .row-actions,
+.row-actions:has([aria-expanded="true"]) {
+  visibility: visible;
+}
+
+.icon-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 20px;
+  height: 20px;
+  padding: 0;
+  background: none;
+  border: none;
+  border-radius: 3px;
+  color: var(--vscode-icon-foreground);
+  cursor: pointer;
+}
+
+.icon-button:hover:not(:disabled) {
+  background: var(--vscode-toolbar-hoverBackground);
+}
+
+.icon-button:disabled {
+  opacity: 0.35;
+  cursor: default;
+}
+
+.icon-button.emphasized {
+  color: var(--vscode-debugIcon-startForeground, var(--vscode-charts-orange));
+  animation: pulse 1.2s ease-in-out infinite;
+}
+
+/* action-specific icon colors, matching the debug toolbar palette */
+.icon-button .codicon-play {
+  color: var(--vscode-debugIcon-startForeground);
+}
+
+.icon-button .codicon-debug {
+  color: var(--vscode-debugIcon-continueForeground);
+}
+
+.icon-button .codicon-debug-stop,
+.icon-button .codicon-debug-disconnect {
+  color: var(--vscode-debugIcon-disconnectForeground);
+}
+
+.icon-button .codicon-eye-closed {
+  color: var(--vscode-debugIcon-stepOverForeground);
+}
+
+@keyframes pulse {
+  50% {
+    opacity: 0.45;
+  }
+}
+
+button:focus-visible,
+select:focus-visible,
+input:focus-visible {
+  outline: 1px solid var(--vscode-focusBorder);
+  outline-offset: -1px;
+}
+
+/* ----------------------------------------------------------- host badges */
+
+.host-badge {
+  flex: none;
+  font-size: 0.78em;
+  font-weight: 600;
+  line-height: 1.5;
+  padding: 0 5px;
+  border-radius: 8px;  
+  background: transparent;
+  border:1px solid var(--vscode-sideBar-foreground, var(--vscode-foreground));
+  color: var(--vscode-sideBar-foreground, var(--vscode-foreground));
+  cursor: pointer;
+  font-family: inherit;
+}
+
+.host-badge.static {
+  cursor: default;
+}
+
+.open-in-vscode-icon {
+  flex: none;
+  font-size: 12px;
+  color: var(--vscode-charts-green, var(--vscode-terminal-ansiGreen));
+}
+
+/* ------------------------------------------------------------ split button */
+
+.split-button {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 0;
+}
+
+.split-button-caret {
+  width: 14px;
+}
+
+.split-button-popup {
+  min-width: 170px;
+}
+
+/* ---------------------------------------------------------- overflow menu */
+
+.overflow-menu {
+  position: relative;
+}
+
+.menu-popup {
+  position: absolute;
+  right: 0;
+  top: calc(100% + 2px);
+  z-index: 10;
+  min-width: 190px;
+  padding: 4px;
+  background: var(--vscode-menu-background, var(--vscode-dropdown-background));
+  color: var(--vscode-menu-foreground, var(--vscode-dropdown-foreground));
+  border: 1px solid var(--vscode-menu-border, var(--vscode-dropdown-border, transparent));
+  border-radius: 5px;
+  box-shadow: 0 2px 8px var(--vscode-widget-shadow);
+}
+
+.menu-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  padding: 4px 8px;
+  background: none;
+  border: none;
+  border-radius: 3px;
+  color: inherit;
+  font-family: inherit;
+  font-size: inherit;
+  cursor: pointer;
+  text-align: left;
+  white-space: nowrap;
+}
+
+.menu-item:hover:not(:disabled) {
+  background: var(--vscode-menu-selectionBackground, var(--vscode-list-hoverBackground));
+  color: var(--vscode-menu-selectionForeground, inherit);
+}
+
+.menu-item:disabled {
+  opacity: 0.4;
+  cursor: default;
+}
+
+/* ------------------------------------------------------------- add links */
+
+.add-links {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 2px 14px;
+  padding: 4px 10px;
+}
+
+.add-links.nested {
+  padding-left: 8px;
+}
+
+.link-button {
+  background: none;
+  border: none;
+  padding: 0;
+  color: var(--vscode-textLink-foreground);
+  font-family: inherit;
+  font-size: 0.95em;
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.link-button:hover:not(:disabled) {
+  color: var(--vscode-textLink-activeForeground);
+  text-decoration: underline;
+}
+
+.link-button:disabled {
+  opacity: 0.45;
+  cursor: default;
+}
+
+/* ------------------------------------------------------------ empty state */
+
+.empty-state {
+  padding: 8px 12px;
+  opacity: 0.85;
+}
+
+.empty-state p {
+  margin: 0 0 6px;
+}
+
+.empty-state code {
+  font-family: var(--vscode-editor-font-family, monospace);
+  font-size: 0.9em;
+}
+
+
