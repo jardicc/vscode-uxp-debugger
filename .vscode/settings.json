@@ -1,0 +1,12 @@
+{
+    "uxp.manifests": [
+        "e2e/fixtures/plugin/manifest.json",
+        "e2e/fixtures/plugin-sourcemap-inline/manifest.json"
+    ],
+    "chat.tools.terminal.autoApprove": {
+        "/^npx tsc --noEmit -p tsconfig\\.json$/": {
+            "approve": true,
+            "matchCommandLine": true
+        }
+    }
+}

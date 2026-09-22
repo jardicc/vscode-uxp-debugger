@@ -1,14 +1,14 @@
 {
   "name": "uxpdebugger",
   "displayName": "UXP Debugger",
-  "description": "Attach to Adobe UXP plugins for debugging in VSCode. Supports inlined sourcemaps",
-  "version": "0.2.0",
+  "description": "Load, reload and debug Adobe UXP plugins and scripts (Photoshop, InDesign, …) directly from VS Code — no Adobe UXP Developer Tools required.",
+  "version": "2.0.1",
   "author": "Jaroslav Bereza",
   "publisher": "JaroslavBereza",
   "pricing": "Free",
   "license": "MIT",
   "engines": {
-    "vscode": "^1.85.0"
+    "vscode": "^1.99.0"
   },
   "repository": {
     "type": "git",
@@ -26,31 +26,718 @@
     "plugin",
     "cdp",
     "chrome devtools protocol",
-    "UXP Developer Tools",
-    "UDT"
+    "psjs",
+    "idjs"
   ],
   "activationEvents": [
     "onDebugResolve:uxp",
-    "onCommand:uxp.attach",
-    "onCommand:uxp.patchAsar"
+    "onDebugResolve:uxp-script"
   ],
   "main": "./dist/extension.js",
   "icon": "./resources/icon.png",
+  "extensionKind": [
+    "workspace"
+  ],
   "contributes": {
+    "viewsContainers": {
+      "activitybar": [
+        {
+          "id": "uxp-debugger",
+          "title": "UXP Devtools",
+          "icon": "resources/activity-icon.svg"
+        }
+      ]
+    },
+    "views": {
+      "uxp-debugger": [
+        {
+          "type": "webview",
+          "id": "uxp.controlPanel",
+          "name": "UXP Devtools",
+          "icon": "resources/activity-icon.svg",
+          "visibility": "visible"
+        }
+      ]
+    },
     "commands": [
       {
-        "command": "uxp.attach",
-        "title": "UXP: Attach to Adobe UXP Plugin"
+        "command": "uxp.loadPlugin",
+        "title": "UXP: Load Plugin"
       },
       {
-        "command": "uxp.patchAsar",
-        "title": "UXP: Patch app.asar (Persist .uxprc)"
+        "command": "uxp.loadPluginBreakOnStart",
+        "title": "UXP: Load Plugin (Break on Start)"
+      },
+      {
+        "command": "uxp.unloadPlugin",
+        "title": "UXP: Unload Plugin"
+      },
+      {
+        "command": "uxp.reloadPlugin",
+        "title": "UXP: Reload Plugin"
+      },
+      {
+        "command": "uxp.debugScript",
+        "title": "UXP: Debug Current Script"
+      },
+      {
+        "command": "uxp.openHtmlInspector",
+        "title": "UXP: Inspect Plugin UI (HTML/CSS)"
+      },
+      {
+        "command": "uxp.packPlugin",
+        "title": "UXP: Pack Plugin…"
+      },
+      {
+        "command": "uxp.enableDevMode",
+        "title": "UXP: Enable Developer Mode"
+      },
+      {
+        "command": "uxp.configureLaunchJson",
+        "title": "UXP: Configure launch.json",
+        "icon": "$(json)"
+      },
+      {
+        "command": "uxp.startDebugger",
+        "title": "UXP: Start UXP Devtools",
+        "icon": "$(radio-tower)"
+      },
+      {
+        "command": "uxp.stopDebugger",
+        "title": "UXP: Stop UXP Devtools",
+        "icon": "$(circle-slash)"
+      },
+      {
+        "command": "uxp.enableCompactView",
+        "title": "UXP: Enable Compact View",
+        "icon": "$(list-flat)"
+      },
+      {
+        "command": "uxp.disableCompactView",
+        "title": "UXP: Disable Compact View",
+        "icon": "$(list-tree)"
       }
     ],
+    "languageModelTools": [
+      {
+        "name": "uxp_get_debug_state",
+        "displayName": "UXP: Get Debug State",
+        "toolReferenceName": "uxpDebugState",
+        "canBeReferencedInPrompt": true,
+        "icon": "$(debug-alt)",
+        "modelDescription": "Lists every registered UXP plugin/script, whether it has a live host-app session, and whether a debugger is actually attached (or waiting for one, break-on-start). Use this first to discover current session ids, before calling any other UXP debugging tool.",
+        "inputSchema": {
+          "type": "object",
+          "properties": {}
+        }
+      },
+      {
+        "name": "uxp_validate_manifest",
+        "displayName": "UXP: Validate Manifest",
+        "toolReferenceName": "uxpValidateManifest",
+        "canBeReferencedInPrompt": true,
+        "icon": "$(check)",
+        "modelDescription": "Parses and validates a UXP plugin's manifest.json (required fields: id, name, main, version, host) and returns human-readable errors, if any.",
+        "inputSchema": {
+          "type": "object",
+          "properties": {
+            "manifestPath": {
+              "type": "string",
+              "description": "Absolute path to the manifest.json file to validate."
+            }
+          },
+          "required": [
+            "manifestPath"
+          ]
+        }
+      },
+      {
+        "name": "uxp_list_installed_apps",
+        "displayName": "UXP: List Installed Apps",
+        "toolReferenceName": "uxpListInstalledApps",
+        "canBeReferencedInPrompt": true,
+        "icon": "$(list-unordered)",
+        "modelDescription": "Lists which cataloged Adobe host applications (Photoshop, InDesign, Premiere Pro) are installed on this machine and their versions, which are currently running as an OS process (even if not yet connected to the broker), and which are currently connected to the UXP broker. Use uxp_launch_host_app to start one that isn't running.",
+        "inputSchema": {
+          "type": "object",
+          "properties": {}
+        }
+      },
+      {
+        "name": "uxp_pack_plugin",
+        "displayName": "UXP: Pack Plugin",
+        "toolReferenceName": "uxpPackPlugin",
+        "canBeReferencedInPrompt": true,
+        "icon": "$(package)",
+        "modelDescription": "Packages a UXP plugin folder into a distributable .ccx archive after validating manifest.json. Writes a file to disk — always confirm the output path with the user first. If the manifest lists multiple (dev-only) host apps, pass \"host\" to pick which one the packed manifest.json should target.",
+        "inputSchema": {
+          "type": "object",
+          "properties": {
+            "manifestPath": {
+              "type": "string",
+              "description": "Absolute path to the plugin's manifest.json."
+            },
+            "outputPath": {
+              "type": "string",
+              "description": "Absolute path (including .ccx extension) to write the archive to."
+            },
+            "host": {
+              "type": "string",
+              "description": "Host app id (e.g. \"PS\") to target in the packed manifest, when manifest.json's \"host\" field lists more than one."
+            }
+          },
+          "required": [
+            "manifestPath",
+            "outputPath"
+          ]
+        }
+      },
+      {
+        "name": "uxp_get_console_output",
+        "displayName": "UXP: Get Console Output",
+        "toolReferenceName": "uxpGetConsoleOutput",
+        "canBeReferencedInPrompt": true,
+        "icon": "$(output)",
+        "modelDescription": "Returns the most recent console.log/warn/error messages captured from an attached UXP debug session. Does not require the target to be paused. Call uxp_get_debug_state first to find the sessionId when more than one session is attached.",
+        "inputSchema": {
+          "type": "object",
+          "properties": {
+            "limit": {
+              "type": "number",
+              "description": "Maximum number of entries to return (most recent first). Defaults to 50."
+            },
+            "sessionId": {
+              "type": "string",
+              "description": "clientSessionId to read from (see uxp_get_debug_state). Only needed when several sessions are attached at once."
+            }
+          }
+        }
+      },
+      {
+        "name": "uxp_get_recent_exceptions",
+        "displayName": "UXP: Get Recent Exceptions",
+        "toolReferenceName": "uxpGetRecentExceptions",
+        "canBeReferencedInPrompt": true,
+        "icon": "$(warning)",
+        "modelDescription": "Returns the most recent uncaught exceptions/rejections captured from an attached UXP debug session, with stack traces. Does not require the target to be paused. Call uxp_get_debug_state first to find the sessionId when more than one session is attached.",
+        "inputSchema": {
+          "type": "object",
+          "properties": {
+            "limit": {
+              "type": "number",
+              "description": "Maximum number of entries to return (most recent first). Defaults to 20."
+            },
+            "sessionId": {
+              "type": "string",
+              "description": "clientSessionId to read from (see uxp_get_debug_state). Only needed when several sessions are attached at once."
+            }
+          }
+        }
+      },
+      {
+        "name": "uxp_wait_for_pause",
+        "displayName": "UXP: Wait For Pause",
+        "toolReferenceName": "uxpWaitForPause",
+        "canBeReferencedInPrompt": true,
+        "icon": "$(debug-pause)",
+        "modelDescription": "Waits for an attached UXP debug session to pause (breakpoint or exception hit), then returns the thread id and call stack frames (id/name/sourcePath/line). Resolves immediately if already paused. Only use this when you actually need to step through code or inspect local frame variables — if you just need to read global/module state or call an exported function, use uxp_evaluate_global instead (no pause needed). Ask the user to trigger the plugin action that reproduces the bug before calling this, unless you can reproduce it yourself via uxp_evaluate_global.",
+        "inputSchema": {
+          "type": "object",
+          "properties": {
+            "timeoutMs": {
+              "type": "number",
+              "description": "How long to wait for a pause, in milliseconds. Defaults to 30000."
+            },
+            "sessionId": {
+              "type": "string",
+              "description": "clientSessionId to wait on (see uxp_get_debug_state). Only needed when several sessions are attached at once."
+            }
+          }
+        }
+      },
+      {
+        "name": "uxp_set_breakpoint",
+        "displayName": "UXP: Set Breakpoint",
+        "toolReferenceName": "uxpSetBreakpoint",
+        "canBeReferencedInPrompt": true,
+        "icon": "$(debug-breakpoint)",
+        "modelDescription": "Sets a line breakpoint at the given file/line using VS Code's standard breakpoint mechanism — it shows up in the editor gutter/Breakpoints view exactly like a manually-set one, and survives detach/reattach. No condition/logpoint support. Call uxp_list_breakpoints first to see what's already set (including breakpoints the user set manually). Use uxp_wait_for_pause afterward to wait for it to be hit, and uxp_remove_breakpoint to clean up once you're done investigating.",
+        "inputSchema": {
+          "type": "object",
+          "properties": {
+            "filePath": {
+              "type": "string",
+              "description": "Absolute path to the source file."
+            },
+            "line": {
+              "type": "number",
+              "description": "1-indexed line number, matching what's shown in the editor."
+            }
+          },
+          "required": [
+            "filePath",
+            "line"
+          ]
+        }
+      },
+      {
+        "name": "uxp_remove_breakpoint",
+        "displayName": "UXP: Remove Breakpoint",
+        "toolReferenceName": "uxpRemoveBreakpoint",
+        "canBeReferencedInPrompt": true,
+        "icon": "$(debug-breakpoint-unsupported)",
+        "modelDescription": "Removes a line breakpoint previously set at the given file/line (via uxp_set_breakpoint or the editor). Call uxp_list_breakpoints first if you're not sure of the exact file/line.",
+        "inputSchema": {
+          "type": "object",
+          "properties": {
+            "filePath": {
+              "type": "string",
+              "description": "Absolute path to the source file."
+            },
+            "line": {
+              "type": "number",
+              "description": "1-indexed line number, matching what's shown in the editor."
+            }
+          },
+          "required": [
+            "filePath",
+            "line"
+          ]
+        }
+      },
+      {
+        "name": "uxp_list_breakpoints",
+        "displayName": "UXP: List Breakpoints",
+        "toolReferenceName": "uxpListBreakpoints",
+        "canBeReferencedInPrompt": true,
+        "icon": "$(debug-breakpoint-log)",
+        "modelDescription": "Lists every currently-set source breakpoint (file, line, enabled, condition/hitCondition/logMessage if any) — whether it was set via uxp_set_breakpoint or manually by the user in the editor. Call this before setting/removing breakpoints so you don't duplicate or miss existing ones.",
+        "inputSchema": {
+          "type": "object",
+          "properties": {
+            "filePath": {
+              "type": "string",
+              "description": "Restrict the listing to breakpoints in this file. Omit to list every breakpoint in the workspace."
+            }
+          }
+        }
+      },
+      {
+        "name": "uxp_resume",
+        "displayName": "UXP: Resume",
+        "toolReferenceName": "uxpResume",
+        "canBeReferencedInPrompt": true,
+        "icon": "$(debug-continue)",
+        "modelDescription": "Resumes (continues) an attached UXP debug session that is currently paused, using the thread from the last uxp_wait_for_pause snapshot. Only plain resume/continue is exposed here — no step-over/into/out. For finer-grained tracing than a plain resume gives you, set/remove breakpoints (uxp_set_breakpoint/uxp_remove_breakpoint) at the specific points you need to stop at instead of single-stepping. Call uxp_wait_for_pause again afterward if you expect it to hit another breakpoint.",
+        "inputSchema": {
+          "type": "object",
+          "properties": {
+            "sessionId": {
+              "type": "string",
+              "description": "clientSessionId to resume (see uxp_get_debug_state). Only needed when several sessions are attached at once."
+            }
+          }
+        }
+      },
+      {
+        "name": "uxp_evaluate_in_frame",
+        "displayName": "UXP: Evaluate In Frame",
+        "toolReferenceName": "uxpEvaluateInFrame",
+        "canBeReferencedInPrompt": true,
+        "icon": "$(beaker)",
+        "modelDescription": "Evaluates a JavaScript expression against a paused call frame (from uxp_wait_for_pause's frames), using the debugger's source-map-aware, authored variable names. Requires the target to be paused. Can have side effects (e.g. calling a function) — always requires user confirmation. If the target has resumed since the last pause, call uxp_wait_for_pause again instead of retrying blindly. If you don't actually need local frame variables, use uxp_evaluate_global instead — it works without pausing.",
+        "inputSchema": {
+          "type": "object",
+          "properties": {
+            "expression": {
+              "type": "string",
+              "description": "JavaScript expression to evaluate."
+            },
+            "frameId": {
+              "type": "number",
+              "description": "Call frame id from a uxp_wait_for_pause snapshot."
+            },
+            "sessionId": {
+              "type": "string",
+              "description": "clientSessionId the frameId belongs to (see uxp_get_debug_state). Only needed when several sessions are attached at once."
+            }
+          },
+          "required": [
+            "expression",
+            "frameId"
+          ]
+        }
+      },
+      {
+        "name": "uxp_get_frame_variables",
+        "displayName": "UXP: Get Frame Variables",
+        "toolReferenceName": "uxpGetFrameVariables",
+        "canBeReferencedInPrompt": true,
+        "icon": "$(symbol-variable)",
+        "modelDescription": "Reads scopes and top-level variables from a paused call frame without evaluating code or causing side effects. Call uxp_wait_for_pause first, normally choose its top frame, and pass that frame's id as frameId. The tool discovers and clearly labels available locals, arguments, closures, globals, and other scopes itself; no scope name is required. Expensive scopes are omitted unless includeExpensive is true. sessionId is only needed when several sessions are attached. Expand any returned variablesReference greater than zero with uxp_get_variable_children. All frame ids and variable references expire when execution resumes.",
+        "inputSchema": {
+          "type": "object",
+          "properties": {
+            "frameId": {
+              "type": "number",
+              "description": "Call frame id returned by uxp_wait_for_pause. Normally use the top frame unless another returned frame contains the relevant code."
+            },
+            "sessionId": {
+              "type": "string",
+              "description": "clientSessionId returned by uxp_wait_for_pause or uxp_get_debug_state. Only needed when several sessions are attached at once."
+            },
+            "includeExpensive": {
+              "type": "boolean",
+              "description": "Also read scopes the debug adapter marks expensive. Defaults to false."
+            },
+            "maxVariablesPerScope": {
+              "type": "number",
+              "description": "Maximum top-level variables to return per scope. Defaults to 200."
+            }
+          },
+          "required": [
+            "frameId"
+          ]
+        }
+      },
+      {
+        "name": "uxp_get_variable_children",
+        "displayName": "UXP: Get Variable Children",
+        "toolReferenceName": "uxpGetVariableChildren",
+        "canBeReferencedInPrompt": true,
+        "icon": "$(list-tree)",
+        "modelDescription": "Reads properties or array entries for a structured variable without evaluating code or causing side effects. Pass a variablesReference returned by uxp_get_frame_variables or by an earlier uxp_get_variable_children result. Use filter 'named' for object properties or 'indexed' for array items, and use start/count to page large results. sessionId is only needed when several sessions are attached. The target must still be paused; references expire on resume, so after execution continues call uxp_wait_for_pause and uxp_get_frame_variables again.",
+        "inputSchema": {
+          "type": "object",
+          "properties": {
+            "variablesReference": {
+              "type": "number",
+              "description": "Positive handle returned in a scope or variable by uxp_get_frame_variables or uxp_get_variable_children."
+            },
+            "sessionId": {
+              "type": "string",
+              "description": "clientSessionId associated with the handle. Only needed when several sessions are attached at once."
+            },
+            "filter": {
+              "type": "string",
+              "enum": [
+                "named",
+                "indexed"
+              ],
+              "description": "Read named object properties or indexed array entries. Omit to let the adapter return both."
+            },
+            "start": {
+              "type": "number",
+              "description": "Zero-based first child to return. Defaults to 0."
+            },
+            "count": {
+              "type": "number",
+              "description": "Maximum children to return. Defaults to 100."
+            }
+          },
+          "required": [
+            "variablesReference"
+          ]
+        }
+      },
+      {
+        "name": "uxp_evaluate_global",
+        "displayName": "UXP: Evaluate Global",
+        "toolReferenceName": "uxpEvaluateGlobal",
+        "canBeReferencedInPrompt": true,
+        "icon": "$(symbol-method)",
+        "modelDescription": "Evaluates a JavaScript expression against the UXP target's global/module execution context — does NOT require the target to be paused (works like typing into the Debug Console while the program runs freely). Prefer this over uxp_wait_for_pause + uxp_evaluate_in_frame whenever you just need to read a global/module value, or can reproduce the reported bug yourself by calling an exported function directly instead of asking the user to trigger it through the plugin's UI. Can have side effects — always requires user confirmation.",
+        "inputSchema": {
+          "type": "object",
+          "properties": {
+            "expression": {
+              "type": "string",
+              "description": "JavaScript expression to evaluate."
+            },
+            "sessionId": {
+              "type": "string",
+              "description": "clientSessionId to evaluate against (see uxp_get_debug_state). Only needed when several sessions are attached at once."
+            }
+          },
+          "required": [
+            "expression"
+          ]
+        }
+      },
+      {
+        "name": "uxp_debug_script",
+        "displayName": "UXP: Debug Script",
+        "toolReferenceName": "uxpDebugScript",
+        "canBeReferencedInPrompt": true,
+        "icon": "$(debug-start)",
+        "modelDescription": "Runs a standalone UXP script and attaches the debugger to the new script session. Use this for .js, .ts, .ccjs, .psjs, or .idjs files; do not use uxp_attach_debugger, which requires a plugin manifest. To inspect local variables, first call uxp_set_breakpoint on a line where they are in scope, then call this tool, uxp_wait_for_pause with the returned sessionId, and uxp_get_frame_variables or uxp_evaluate_in_frame on a returned frame. Executes user code and can modify application state — always confirm with the user first.",
+        "inputSchema": {
+          "type": "object",
+          "properties": {
+            "scriptPath": {
+              "type": "string",
+              "description": "Absolute path to the standalone UXP script."
+            },
+            "appId": {
+              "type": "string",
+              "description": "Host app id (e.g. \"PS\") to run the script in. Recommended when more than one compatible host is connected."
+            },
+            "userArgs": {
+              "description": "Optional JSON value or array of values passed to the script. Defaults to no arguments."
+            }
+          },
+          "required": [
+            "scriptPath"
+          ]
+        }
+      },
+      {
+        "name": "uxp_load_plugin",
+        "displayName": "UXP: Load Plugin",
+        "toolReferenceName": "uxpLoadPlugin",
+        "canBeReferencedInPrompt": true,
+        "icon": "$(cloud-upload)",
+        "modelDescription": "Loads a UXP plugin into a connected host application. Spawns a real, visible session in the app — always confirm with the user first. If the manifest matches more than one connected app, pass \"appId\" to pick which one.",
+        "inputSchema": {
+          "type": "object",
+          "properties": {
+            "manifestPath": {
+              "type": "string",
+              "description": "Absolute path to the plugin's manifest.json."
+            },
+            "appId": {
+              "type": "string",
+              "description": "Host app id (e.g. \"PS\") to load into, only needed when several connected apps match."
+            },
+            "breakOnStart": {
+              "type": "boolean",
+              "description": "Pause the plugin right after load, waiting for a debugger (attach with uxp_attach_debugger afterwards)."
+            }
+          },
+          "required": [
+            "manifestPath"
+          ]
+        }
+      },
+      {
+        "name": "uxp_unload_plugin",
+        "displayName": "UXP: Unload Plugin",
+        "toolReferenceName": "uxpUnloadPlugin",
+        "canBeReferencedInPrompt": true,
+        "icon": "$(cloud-download)",
+        "modelDescription": "Unloads a UXP plugin's live session(s) from the host application it's loaded into. Always confirm with the user first.",
+        "inputSchema": {
+          "type": "object",
+          "properties": {
+            "manifestPath": {
+              "type": "string",
+              "description": "Absolute path to the plugin's manifest.json."
+            },
+            "sessionId": {
+              "type": "string",
+              "description": "clientSessionId to unload (see uxp_get_debug_state). Only needed when the plugin is loaded into several apps at once; omit to unload all of them."
+            }
+          },
+          "required": [
+            "manifestPath"
+          ]
+        }
+      },
+      {
+        "name": "uxp_refresh_plugin",
+        "displayName": "UXP: Refresh Plugin",
+        "toolReferenceName": "uxpRefreshPlugin",
+        "canBeReferencedInPrompt": true,
+        "icon": "$(refresh)",
+        "modelDescription": "Fast in-place reload of a UXP plugin's live session(s) (Plugin/reload) — the debugger and inspector stay attached. Not the same as unload+load: won't necessarily pick up manifest.json changes.",
+        "inputSchema": {
+          "type": "object",
+          "properties": {
+            "manifestPath": {
+              "type": "string",
+              "description": "Absolute path to the plugin's manifest.json."
+            },
+            "sessionId": {
+              "type": "string",
+              "description": "clientSessionId to refresh (see uxp_get_debug_state). Only needed when the plugin is loaded into several apps at once; omit to refresh all of them."
+            }
+          },
+          "required": [
+            "manifestPath"
+          ]
+        }
+      },
+      {
+        "name": "uxp_attach_debugger",
+        "displayName": "UXP: Attach Debugger",
+        "toolReferenceName": "uxpAttachDebugger",
+        "canBeReferencedInPrompt": true,
+        "icon": "$(debug-start)",
+        "modelDescription": "Attaches the JS debugger to a live UXP plugin/script session. If the plugin isn't loaded yet, loads it first (confirm with the user in that case) — pass \"appId\" to pick which connected app when more than one matches.",
+        "inputSchema": {
+          "type": "object",
+          "properties": {
+            "manifestPath": {
+              "type": "string",
+              "description": "Absolute path to the plugin's manifest.json."
+            },
+            "sessionId": {
+              "type": "string",
+              "description": "clientSessionId to attach to (see uxp_get_debug_state). Only needed when the plugin has several live sessions at once."
+            },
+            "appId": {
+              "type": "string",
+              "description": "Host app id (e.g. \"PS\") to load into first, only used when the plugin isn't loaded yet and several apps match."
+            }
+          },
+          "required": [
+            "manifestPath"
+          ]
+        }
+      },
+      {
+        "name": "uxp_detach_debugger",
+        "displayName": "UXP: Detach Debugger",
+        "toolReferenceName": "uxpDetachDebugger",
+        "canBeReferencedInPrompt": true,
+        "icon": "$(debug-disconnect)",
+        "modelDescription": "Detaches the JS debugger from a UXP plugin/script's attached session(s), without unloading the plugin itself.",
+        "inputSchema": {
+          "type": "object",
+          "properties": {
+            "manifestPath": {
+              "type": "string",
+              "description": "Absolute path to the plugin's manifest.json."
+            },
+            "sessionId": {
+              "type": "string",
+              "description": "clientSessionId to detach (see uxp_get_debug_state). Only needed when the plugin has several attached sessions at once; omit to detach all of them."
+            }
+          },
+          "required": [
+            "manifestPath"
+          ]
+        }
+      },
+      {
+        "name": "uxp_launch_host_app",
+        "displayName": "UXP: Launch Host App",
+        "toolReferenceName": "uxpLaunchHostApp",
+        "canBeReferencedInPrompt": true,
+        "icon": "$(play)",
+        "modelDescription": "Starts a cataloged Adobe host application (e.g. Photoshop) — the newest installed, version-compatible copy. Does not wait for it to finish starting/connecting; call uxp_list_installed_apps or uxp_get_debug_state afterwards to check, or just retry uxp_load_plugin/uxp_attach_debugger once it's ready. Starts a real application — always confirm with the user first.",
+        "inputSchema": {
+          "type": "object",
+          "properties": {
+            "appId": {
+              "type": "string",
+              "description": "Host app id from the uxp_list_installed_apps catalog, e.g. \"PS\"."
+            }
+          },
+          "required": [
+            "appId"
+          ]
+        }
+      }
+    ],
+    "menus": {
+      "commandPalette": [
+        {
+          "command": "uxp.startDebugger",
+          "when": "!uxp.debuggerRunning"
+        },
+        {
+          "command": "uxp.stopDebugger",
+          "when": "uxp.debuggerRunning"
+        },
+        {
+          "command": "uxp.loadPlugin",
+          "when": "uxp.debuggerRunning && uxp.hasPlugins"
+        },
+        {
+          "command": "uxp.loadPluginBreakOnStart",
+          "when": "uxp.debuggerRunning && uxp.hasPlugins"
+        },
+        {
+          "command": "uxp.unloadPlugin",
+          "when": "uxp.debuggerRunning"
+        },
+        {
+          "command": "uxp.reloadPlugin",
+          "when": "uxp.debuggerRunning"
+        },
+        {
+          "command": "uxp.packPlugin",
+          "when": "uxp.debuggerRunning && uxp.hasPlugins"
+        },
+        {
+          "command": "uxp.openHtmlInspector",
+          "when": "uxp.debuggerRunning && uxp.hasInspectableSessions"
+        },
+        {
+          "command": "uxp.debugScript",
+          "when": "uxp.debuggerRunning && resourceExtname =~ /^\\.(ccjs|psjs|idjs|js|ts)$/"
+        },
+        {
+          "command": "uxp.enableDevMode",
+          "when": "!uxp.devModeEnabled"
+        },
+        {
+          "command": "uxp.configureLaunchJson",
+          "when": "uxp.debuggerRunning && workspaceFolderCount > 0"
+        },
+        {
+          "command": "uxp.enableCompactView",
+          "when": "uxp.debuggerRunning && !uxp.compactView"
+        },
+        {
+          "command": "uxp.disableCompactView",
+          "when": "uxp.debuggerRunning && uxp.compactView"
+        }
+      ],
+      "editor/context": [
+        {
+          "command": "uxp.debugScript",
+          "when": "uxp.debuggerRunning && resourceExtname =~ /^\\.(ccjs|psjs|idjs|js|ts)$/",
+          "group": "uxp"
+        }
+      ],
+      "view/title": [
+        {
+          "command": "uxp.configureLaunchJson",
+          "when": "view == uxp.controlPanel",
+          "group": "navigation@1"
+        },
+        {
+          "command": "uxp.enableCompactView",
+          "when": "view == uxp.controlPanel && !uxp.compactView",
+          "group": "navigation@2"
+        },
+        {
+          "command": "uxp.disableCompactView",
+          "when": "view == uxp.controlPanel && uxp.compactView",
+          "group": "navigation@2"
+        },
+        {
+          "command": "uxp.startDebugger",
+          "when": "view == uxp.controlPanel && !uxp.debuggerRunning",
+          "group": "navigation@3"
+        },
+        {
+          "command": "uxp.stopDebugger",
+          "when": "view == uxp.controlPanel && uxp.debuggerRunning",
+          "group": "navigation@3"
+        }
+      ]
+    },
     "debuggers": [
       {
         "type": "uxp",
-        "label": "UXP Debug",
+        "label": "UXP Plugin",
+        "languages": [
+          "javascript",
+          "typescript"
+        ],
         "configurationAttributes": {
           "attach": {
             "required": [],
@@ -66,7 +753,7 @@
         "configurationSnippets": [
           {
             "label": "UXP: Attach to Plugin",
-            "description": "Attach to a running Adobe UXP plugin. Place a .debug.json or .uxprc file next to manifest.json for endpoint discovery.",
+            "description": "Attach the debugger to a UXP plugin (loads it on demand).",
             "body": {
               "type": "uxp",
               "request": "attach",
@@ -75,30 +762,111 @@
             }
           }
         ]
+      },
+      {
+        "type": "uxp-script",
+        "label": "UXP Script",
+        "languages": [
+          "javascript"
+        ],
+        "configurationAttributes": {
+          "launch": {
+            "required": [
+              "script"
+            ],
+            "properties": {
+              "script": {
+                "type": "string",
+                "description": "Absolute path to the .ccjs/.psjs/.idjs/.js/.ts script. Supports VS Code variables like ${file}.",
+                "default": "${file}"
+              },
+              "app": {
+                "type": "string",
+                "description": "Restrict execution to one host app id (e.g. \"PS\", \"ID\")."
+              },
+              "userArgs": {
+                "type": "array",
+                "description": "JSON values passed to the script as arguments.",
+                "default": []
+              }
+            }
+          }
+        },
+        "configurationSnippets": [
+          {
+            "label": "UXP: Debug Script",
+            "description": "Run and debug the current UXP script (.ccjs/.psjs/.idjs/.js/.ts).",
+            "body": {
+              "type": "uxp-script",
+              "request": "launch",
+              "name": "Debug UXP Script",
+              "script": "^\"\\${file}\"",
+              "userArgs": []
+            }
+          }
+        ]
       }
     ],
     "configuration": {
       "title": "UXP Debugger",
       "properties": {
+        "uxp.manifests": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "default": [],
+          "scope": "resource",
+          "description": "Workspace-relative paths to UXP plugin manifest.json files. Kept in sync with the plugin list in the UXP Devtools panel."
+        }
       }
     }
   },
   "scripts": {
-    "vscode:prepublish": "npm run compile",
-    "compile": "esbuild src/extension.ts --bundle --outfile=dist/extension.js --external:vscode --format=cjs --platform=node --sourcemap",
-    "watch": "esbuild src/extension.ts --bundle --outfile=dist/extension.js --external:vscode --format=cjs --platform=node --sourcemap --watch",
-    "lint": "eslint src --ext ts",
-    "build": "vsce package",
-    "test": "node --experimental-vm-modules node_modules/.bin/jest"
+    "vscode:prepublish": "npm run prepare-native && npm run compile",
+    "clean": "node -e \"require('node:fs').rmSync('dist',{recursive:true,force:true})\"",
+    "precompile": "npm run clean",
+    "compile": "esbuild src/vscode/extension.ts --bundle --outfile=dist/extension.js --external:vscode --format=cjs --platform=node --minify && npm run compile:inspector && npm run compile:panel && npm run compile:devtools",
+    "compile:inspector": "esbuild src/vscode/inspector/host/mainHost.ts --bundle --outfile=dist/inspectorHost.js --format=iife --platform=browser",
+    "compile:panel": "esbuild src/vscode/panel/webview/index.tsx --bundle --outfile=dist/panel.js --format=iife --platform=browser --minify --loader:.ttf=file --define:process.env.NODE_ENV=\\\"production\\\"",
+    "compile:devtools": "node scripts/bundle-devtools.mjs",
+    "watch": "esbuild src/vscode/extension.ts --bundle --outfile=dist/extension.js --external:vscode --format=cjs --platform=node --sourcemap --watch",
+    "typecheck": "tsc --noEmit",
+    "lint": "eslint src test e2e --format ./scripts/eslint-formatter.mjs",
+    "lint:fix": "eslint src test e2e --fix --format ./scripts/eslint-formatter.mjs",
+    "prepare-native": "node scripts/prepare-native.mjs",
+    "build": "node scripts/package-platforms.mjs",
+    "test": "vitest run",
+    "build:e2e": "npm run compile && node e2e/build.mjs",
+    "test:e2e": "npm run build:e2e && node out/e2e/runTest.js",
+    "test:e2e:live": "npm run test:e2e -- --live"
   },
   "devDependencies": {
+    "@stylistic/eslint-plugin": "^5.10.0",
+    "@types/adm-zip": "^0.5.8",
+    "@types/mocha": "10.0.10",
     "@types/node": "^20.11.0",
-    "@types/vscode": "^1.85.0",
+    "@types/react": "18.3.31",
+    "@types/react-dom": "18.3.7",
+    "@types/vscode": "^1.99.0",
     "@types/ws": "^8.5.10",
-    "esbuild": "^0.20.0",
-    "typescript": "^5.3.0"
+    "@vscode/test-electron": "3.1.0",
+    "@vscode/vsce": "^3.9.2",
+    "devtools-protocol": "^0.0.1684464",
+    "esbuild": "^0.28.2",
+    "eslint": "^10.9.0",
+    "mocha": "11.7.6",
+    "typescript": "^6.0.3",
+    "typescript-eslint": "^8.67.0",
+    "vitest": "^2.1.0"
   },
   "dependencies": {
-    "ws": "^8.16.0"
+    "@vscode/codicons": "^0.0.46-36",
+    "adm-zip": "^0.6.0",
+    "clsx": "2.1.1",
+    "react": "18.3.1",
+    "react-dom": "18.3.1",
+    "ts-blank-space": "0.9.0",
+    "ws": "^8.21.3"
   }
 }

@@ -5,9 +5,64 @@
       "name": "Run Extension",
       "type": "extensionHost",
       "request": "launch",
-      "args": ["--extensionDevelopmentPath=${workspaceFolder}", "--disable-extensions"],
+      "args": [
+        "${workspaceFolder}/e2e/fixtures/plugin",
+        "--extensionDevelopmentPath=${workspaceFolder}",
+        "--disable-extensions"
+      ],
       "outFiles": ["${workspaceFolder}/dist/**/*.js"],
       "preLaunchTask": "npm: watch"
+    },
+    {
+      "name": "Run Extension (Plugin 2)",
+      "type": "extensionHost",
+      "request": "launch",
+      "args": [
+        "${workspaceFolder}/e2e/fixtures/plugin2",
+        // Trailing "/." is intentional: VS Code refuses a second dev host window whose
+        // extensionDevelopmentPath string-matches an existing one, so this differs textually
+        // while resolving to the same folder.
+        "--extensionDevelopmentPath=${workspaceFolder}/.",
+        "--disable-extensions"
+      ],
+      "outFiles": ["${workspaceFolder}/dist/**/*.js"],
+      "preLaunchTask": "npm: watch"
+    },
+    {
+      "name": "E2E Tests",
+      "type": "extensionHost",
+      "request": "launch",
+      "args": [
+        "${workspaceFolder}/e2e/fixtures/plugin",
+        "--extensionDevelopmentPath=${workspaceFolder}",
+        "--extensionTestsPath=${workspaceFolder}/out/e2e/suite/index",
+        "--disable-extensions"
+      ],
+      "outFiles": ["${workspaceFolder}/out/e2e/**/*.js", "${workspaceFolder}/dist/**/*.js"],
+      "preLaunchTask": "npm: build:e2e"
+    },
+    {
+      "name": "E2E Tests (Live Photoshop)",
+      "type": "extensionHost",
+      "request": "launch",
+      "args": [
+        "${workspaceFolder}/e2e/fixtures/plugin",
+        "--extensionDevelopmentPath=${workspaceFolder}",
+        "--extensionTestsPath=${workspaceFolder}/out/e2e/suite/index",
+        "--disable-extensions"
+      ],
+      "env": {
+        "UXP_E2E_PHOTOSHOP": "1"
+      },
+      "outFiles": ["${workspaceFolder}/out/e2e/**/*.js", "${workspaceFolder}/dist/**/*.js"],
+      "preLaunchTask": "npm: build:e2e"
+    }
+  ],
+  "compounds": [
+    {
+      "name": "Run Extension (both windows)",
+      "configurations": ["Run Extension", "Run Extension (Plugin 2)"],
+      "stopAll": true
     }
   ]
 }

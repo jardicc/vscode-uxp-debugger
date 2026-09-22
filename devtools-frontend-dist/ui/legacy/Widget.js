@@ -1,0 +1,1167 @@
+// Copyright 2021 The Chromium Authors
+// Use of this source code is governed by a BSD-style license that can be
+// found in the LICENSE file.
+/* eslint-disable @devtools/no-imperative-dom-api */
+/*
+ * Copyright (C) 2008 Apple Inc. All Rights Reserved.
+ * Copyright (C) 2011 Google Inc. All Rights Reserved.
+ *
+ * Redistribution and use in source and binary forms, with or without
+ * modification, are permitted provided that the following conditions
+ * are met:
+ * 1. Redistributions of source code must retain the above copyright
+ *    notice, this list of conditions and the following disclaimer.
+ * 2. Redistributions in binary form must reproduce the above copyright
+ *    notice, this list of conditions and the following disclaimer in the
+ *    documentation and/or other materials provided with the distribution.
+ *
+ * THIS SOFTWARE IS PROVIDED BY APPLE INC. ``AS IS'' AND ANY
+ * EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
+ * IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR
+ * PURPOSE ARE DISCLAIMED.  IN NO EVENT SHALL APPLE INC. OR
+ * CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL,
+ * EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO,
+ * PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR
+ * PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY
+ * OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
+ * (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
+ * OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+ */
+import '../dom_extension/dom_extension.js';
+import * as Platform from '../../core/platform/platform.js';
+import * as Geometry from '../../models/geometry/geometry.js';
+import * as Lit from '../../ui/lit/lit.js';
+import { appendStyle, deepActiveElement } from './DOMUtilities.js';
+import { cloneCustomElement, createShadowRootWithCoreStyles } from './UIUtils.js';
+import { UniverseRequestEvent } from './UniverseRequestEvent.js';
+const { html } = Lit;
+export function lookupUniverseForElement(element) {
+    const event = new UniverseRequestEvent();
+    element.dispatchEvent(event);
+    return event.universe;
+}
+// Remember the original DOM mutation methods here, since we
+// will override them below to sanity check the Widget system.
+const originalAppendChild = Node.prototype.appendChild;
+const originalInsertBefore = Node.prototype.insertBefore;
+const originalRemoveChild = Node.prototype.removeChild;
+const originalRemoveChildren = Node.prototype.removeChildren;
+function assert(condition, message) {
+    if (!condition) {
+        throw new Error(message);
+    }
+}
+export class WidgetConfig {
+    widgetClass;
+    widgetParams;
+    constructor(widgetClass, widgetParams) {
+        this.widgetClass = widgetClass;
+        this.widgetParams = widgetParams;
+    }
+}
+export function widgetConfig(widgetClass, widgetParams) {
+    return new WidgetConfig(widgetClass, widgetParams);
+}
+let currentUpdateQueue = null;
+const currentlyProcessed = new Set();
+let nextUpdateQueue = new Map();
+const pendingAnimationFrames = new WeakMap();
+let overallUpdatePromise = null;
+function enqueueIntoNextUpdateQueue(widget) {
+    const scheduledUpdate = nextUpdateQueue.get(widget) ?? Promise.withResolvers();
+    nextUpdateQueue.delete(widget);
+    nextUpdateQueue.set(widget, scheduledUpdate);
+    const widgetWindow = widget.contentElement.window() || window;
+    if (!pendingAnimationFrames.has(widgetWindow)) {
+        const frameId = widgetWindow.requestAnimationFrame(() => {
+            pendingAnimationFrames.delete(widgetWindow);
+            runNextUpdate();
+        });
+        pendingAnimationFrames.set(widgetWindow, frameId);
+    }
+    return scheduledUpdate.promise;
+}
+function enqueueWidgetUpdate(widget) {
+    if (currentUpdateQueue) {
+        if (currentlyProcessed.has(widget)) {
+            return enqueueIntoNextUpdateQueue(widget);
+        }
+        const scheduledUpdate = currentUpdateQueue.get(widget) ?? Promise.withResolvers();
+        currentUpdateQueue.delete(widget);
+        currentUpdateQueue.set(widget, scheduledUpdate);
+        return scheduledUpdate.promise;
+    }
+    return enqueueIntoNextUpdateQueue(widget);
+}
+function cancelUpdate(widget) {
+    widget.cancelUpdateController();
+    if (currentUpdateQueue) {
+        const scheduledUpdate = currentUpdateQueue.get(widget);
+        if (scheduledUpdate) {
+            scheduledUpdate.resolve();
+            currentUpdateQueue.delete(widget);
+        }
+    }
+    const scheduledUpdate = nextUpdateQueue.get(widget);
+    if (scheduledUpdate) {
+        scheduledUpdate.resolve();
+        nextUpdateQueue.delete(widget);
+    }
+}
+function resolveOverallUpdatePromise() {
+    if (currentlyProcessed.size === 0 && (!currentUpdateQueue || currentUpdateQueue.size === 0) &&
+        nextUpdateQueue.size === 0 && overallUpdatePromise) {
+        overallUpdatePromise.resolve();
+        overallUpdatePromise = null;
+    }
+}
+function runNextUpdate() {
+    if (!currentUpdateQueue) {
+        currentUpdateQueue = nextUpdateQueue;
+        nextUpdateQueue = new Map();
+    }
+    for (const [widget, update] of currentUpdateQueue) {
+        if (currentlyProcessed.has(widget)) {
+            const scheduledUpdate = nextUpdateQueue.get(widget);
+            if (!scheduledUpdate) {
+                nextUpdateQueue.set(widget, update);
+            }
+            else {
+                void scheduledUpdate.promise.then(update.resolve);
+            }
+            continue;
+        }
+        const { resolve } = update;
+        currentlyProcessed.add(widget);
+        void (async () => {
+            try {
+                const controller = new AbortController();
+                widget.addUpdateController(controller);
+                await widget.performUpdate(controller.signal);
+            }
+            finally {
+                currentlyProcessed.delete(widget);
+                const nextUpdate = nextUpdateQueue.get(widget);
+                if (nextUpdate) {
+                    void nextUpdate.promise.then(resolve);
+                    const widgetWindow = widget.contentElement.window() || window;
+                    if (!pendingAnimationFrames.has(widgetWindow)) {
+                        const frameId = widgetWindow.requestAnimationFrame(() => {
+                            pendingAnimationFrames.delete(widgetWindow);
+                            runNextUpdate();
+                        });
+                        pendingAnimationFrames.set(widgetWindow, frameId);
+                    }
+                }
+                else {
+                    resolve();
+                }
+                resolveOverallUpdatePromise();
+            }
+        })().catch(e => {
+            if (e.name !== 'AbortError') {
+                console.error(`${widget.constructor.name}.performUpdate failed: `, e);
+            }
+        });
+    }
+    currentUpdateQueue.clear();
+    queueMicrotask(() => {
+        if (currentUpdateQueue && currentUpdateQueue.size > 0) {
+            runNextUpdate();
+        }
+        else {
+            currentUpdateQueue = null;
+            resolveOverallUpdatePromise();
+        }
+    });
+}
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+export const widgetConfigs = new WeakMap();
+export function registerWidgetConfig(element, config) {
+    if (!widgetConfigs.has(element)) {
+        setUpLifecycleTracking(element);
+    }
+    widgetConfigs.set(element, config);
+}
+export function instantiateWidget(element, widgetConfig) {
+    if (!widgetConfig.widgetClass) {
+        throw new Error('No widgetClass defined');
+    }
+    let newWidget;
+    if (Widget.isPrototypeOf(widgetConfig.widgetClass)) {
+        const ctor = widgetConfig.widgetClass;
+        const depsCtors = ctor.INJECT;
+        if (depsCtors && depsCtors.length > 0) {
+            const universe = lookupUniverseForElement(element);
+            if (!universe) {
+                throw new Error(`No Universe found for widget ${ctor.name} requesting dependencies via INJECT.`);
+            }
+            const deps = depsCtors.map(depCtor => universe.get(depCtor));
+            newWidget = new ctor(element, deps);
+        }
+        else {
+            newWidget = new ctor(element);
+        }
+    }
+    else {
+        const factory = widgetConfig.widgetClass;
+        const universe = lookupUniverseForElement(element);
+        newWidget = factory(element, universe);
+    }
+    if (widgetConfig.widgetParams) {
+        Object.assign(newWidget, widgetConfig.widgetParams);
+    }
+    newWidget.requestUpdate();
+    return newWidget;
+}
+function setUpLifecycleTracking(element) {
+    let tracker;
+    if (element instanceof WidgetElement) {
+        tracker = element;
+    }
+    else {
+        tracker = document.createElement('devtools-widget');
+        tracker.style.display = 'none';
+        element.appendChild(tracker);
+    }
+    tracker.onDisconnect = () => {
+        const widget = Widget.get(element);
+        if (widget) {
+            widget.setHideOnDetach();
+            widget.detach();
+        }
+    };
+    tracker.onConnect = () => {
+        let widget = Widget.get(element);
+        if (!widget) {
+            const config = widgetConfigs.get(element);
+            if (!config) {
+                throw new Error('No widgetConfig defined');
+            }
+            widget = instantiateWidget(element, config);
+        }
+        const parent = (element.parentNode instanceof DocumentFragment) ? element.parentNode : element.parentElementOrShadowHost();
+        if (!parent) {
+            widget.markAsRoot();
+        }
+        else {
+            widget.show(parent, undefined, /* suppressOrphanWidgetError= */ true);
+        }
+    };
+}
+export class WidgetElement extends HTMLElement {
+    onDisconnect;
+    onConnect;
+    #disconnectTimeout;
+    getWidget() {
+        return Widget.get(this);
+    }
+    connectedCallback() {
+        if (this.#disconnectTimeout) {
+            clearTimeout(this.#disconnectTimeout);
+            this.#disconnectTimeout = undefined;
+        }
+        if (this.onConnect) {
+            this.onConnect();
+            return;
+        }
+    }
+    disconnectedCallback() {
+        if (this.onDisconnect) {
+            this.#disconnectTimeout = setTimeout(() => {
+                this.onDisconnect?.();
+            }, 0);
+            return;
+        }
+    }
+    appendChild(child) {
+        const widget = child instanceof HTMLElement ? Widget.get(child) : null;
+        if (widget) {
+            widget.show(this, undefined, /* suppressOrphanWidgetError= */ true);
+            return child;
+        }
+        return super.appendChild(child);
+    }
+    insertBefore(child, referenceChild) {
+        const widget = child instanceof HTMLElement ? Widget.get(child) : null;
+        if (widget) {
+            widget.show(this, referenceChild, /* suppressOrphanWidgetError= */ true);
+            return child;
+        }
+        return super.insertBefore(child, referenceChild);
+    }
+    removeChild(child) {
+        const childWidget = Widget.get(child);
+        if (childWidget) {
+            childWidget.detach(/* overrideHideOnDetach= */ true);
+            return child;
+        }
+        return super.removeChild(child);
+    }
+    removeChildren() {
+        for (const child of this.children) {
+            const childWidget = Widget.get(child);
+            if (childWidget) {
+                childWidget.detach(/* overrideHideOnDetach= */ true);
+            }
+        }
+        super.removeChildren();
+    }
+    cloneNode(deep) {
+        const clone = cloneCustomElement(this, deep);
+        const config = widgetConfigs.get(this);
+        if (config) {
+            registerWidgetConfig(clone, config);
+        }
+        return clone;
+    }
+    focus() {
+        const widget = Widget.get(this);
+        if (widget) {
+            widget.focus();
+        }
+    }
+}
+customElements.define('devtools-widget', WidgetElement);
+export class WidgetDirective extends Lit.Directive.Directive {
+    #partType;
+    #lastWidgetClass;
+    #lastKey;
+    constructor(partInfo) {
+        super(partInfo);
+        this.#partType = partInfo.type;
+        if (this.#partType !== Lit.Directive.PartType.CHILD && this.#partType !== Lit.Directive.PartType.ELEMENT) {
+            throw new Error('Widget directive must be used as a child or element directive.');
+        }
+    }
+    update(part, [widgetClass, widgetParams]) {
+        if (this.#partType === Lit.Directive.PartType.ELEMENT) {
+            const element = part.element;
+            const config = widgetConfig(widgetClass, widgetParams);
+            const oldConfig = widgetConfigs.get(element);
+            const widget = Widget.get(element);
+            if (widget && config.widgetParams) {
+                let needsUpdate = false;
+                for (const key in config.widgetParams) {
+                    if (Object.prototype.hasOwnProperty.call(config.widgetParams, key) &&
+                        config.widgetParams[key] !== oldConfig?.widgetParams?.[key]) {
+                        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+                        widget[key] = config.widgetParams[key];
+                        needsUpdate = true;
+                    }
+                }
+                if (needsUpdate) {
+                    widget.requestUpdate();
+                }
+            }
+            registerWidgetConfig(element, config);
+            return Lit.nothing;
+        }
+        return this.render(widgetClass, widgetParams);
+    }
+    render(widgetClass, widgetParams) {
+        if (this.#partType === Lit.Directive.PartType.ELEMENT) {
+            return Lit.nothing;
+        }
+        if (this.#lastWidgetClass !== widgetClass) {
+            this.#lastWidgetClass = widgetClass;
+            this.#lastKey = Widget.isPrototypeOf(widgetClass) ? widgetClass : widgetClass.toString();
+        }
+        // We use `repeat` to force Lit to recreate the `<devtools-widget>` DOM node when the `widgetClass` changes.
+        // If we didn't use `repeat` and used `html` directly, Lit would reuse the same `<devtools-widget>` instance
+        // even if `widgetClass` changed (for example, in a ternary operator `condition ? widget(A) : widget(B)`).
+        // This is because the template string is the same, so Lit reuses the DOM node and only updates `.widgetConfig`,
+        // which does not properly recreate the widget instance.
+        // We use `#lastKey` (and stringify factory functions) instead of just using `widgetClass` as the key
+        // so that we intentionally ignore reference changes for identical inline factories. This prevents accidental
+        // recreation of the DOM node on every render when an anonymous inline arrow function is passed.
+        return Lit.Directives.repeat([widgetClass], () => this.#lastKey, () => html `<devtools-widget ${widget(widgetClass, widgetParams)}></devtools-widget>`);
+    }
+}
+export const widget = Lit.Directive.directive(WidgetDirective);
+export function widgetRef(type, callback) {
+    return Lit.Directives.ref((e) => {
+        if (!(e instanceof HTMLElement)) {
+            return;
+        }
+        const widget = Widget.getOrCreateWidget(e);
+        if (!(widget instanceof type)) {
+            throw new Error(`Expected an element with a widget of type ${type.name} but got ${e?.constructor?.name}`);
+        }
+        callback(widget);
+    });
+}
+const widgetCounterMap = new WeakMap();
+const widgetMap = new WeakMap();
+function incrementWidgetCounter(parentElement, childElement) {
+    const count = (widgetCounterMap.get(childElement) || 0) + (Widget.get(childElement) ? 1 : 0);
+    for (let el = parentElement; el; el = el.parentElementOrShadowHost()) {
+        widgetCounterMap.set(el, (widgetCounterMap.get(el) || 0) + count);
+    }
+}
+function decrementWidgetCounter(parentElement, childElement) {
+    const count = (widgetCounterMap.get(childElement) || 0) + (Widget.get(childElement) ? 1 : 0);
+    for (let el = parentElement; el; el = el.parentElementOrShadowHost()) {
+        const elCounter = widgetCounterMap.get(el);
+        if (elCounter) {
+            widgetCounterMap.set(el, elCounter - count);
+        }
+    }
+}
+// The resolved `updateComplete` promise, which is used as a marker for the
+// Widget's `#updateComplete` private property to indicate that there's no
+// pending update.
+const UPDATE_COMPLETE = Promise.resolve();
+export class Widget {
+    element;
+    #contentElement;
+    #shadowRoot;
+    #visible = false;
+    #isRoot = false;
+    #isShowing = false;
+    #children = [];
+    #hideOnDetach = false;
+    #notificationDepth = 0;
+    #invalidationsSuspended = 0;
+    #parentWidget = null;
+    #cachedConstraints;
+    #constraints;
+    #invalidationsRequested;
+    #externallyManaged;
+    #updateComplete = UPDATE_COMPLETE;
+    #updateController;
+    #updateState = "NORMAL" /* UpdateState.NORMAL */;
+    constructor(elementOrOptions, options) {
+        if (elementOrOptions instanceof HTMLElement) {
+            this.element = elementOrOptions;
+        }
+        else {
+            this.element = document.createElement('div');
+            if (elementOrOptions !== undefined) {
+                options = elementOrOptions;
+            }
+        }
+        this.#shadowRoot = this.element.shadowRoot;
+        if (options?.useShadowDom && !this.#shadowRoot) {
+            this.element.classList.add('vbox');
+            this.element.classList.add('flex-auto');
+            this.#shadowRoot = createShadowRootWithCoreStyles(this.element, {
+                delegatesFocus: options?.delegatesFocus,
+            });
+            if (options.useShadowDom === 'pure') {
+                this.#contentElement = this.#shadowRoot;
+            }
+            else {
+                const div = document.createElement('div');
+                this.#shadowRoot.appendChild(div);
+                this.#contentElement = div;
+            }
+        }
+        else {
+            this.#contentElement = this.element;
+        }
+        const legacyOptions = options;
+        if (legacyOptions?.classes) {
+            this.element.classList.add(...legacyOptions.classes);
+        }
+        if (legacyOptions?.jslog) {
+            this.element.setAttribute('jslog', legacyOptions.jslog);
+        }
+        if (this.contentElement instanceof HTMLElement) {
+            this.contentElement.classList.add('widget');
+        }
+        else if (options?.useShadowDom === 'pure') {
+            this.element.classList.add('widget');
+        }
+        widgetMap.set(this.element, this);
+    }
+    /**
+     * An array of dependency constructors that this widget class expects to receive as an array
+     * in the second positional argument to its constructor during `instantiateWidget`:
+     * `constructor(element: HTMLElement, deps: WidgetDependencies<typeof MyWidget>)`
+     *
+     * Override this static field in sub-classes to specify dependency constructors to be retrieved from `Universe`.
+     */
+    static INJECT = [];
+    /**
+     * Returns the {@link Widget} whose element is the given `node`, or `undefined`
+     * if the `node` is not an element for a widget.
+     *
+     * @param node a DOM node.
+     * @returns the {@link Widget} that is attached to the `node` or `undefined`.
+     */
+    static get(node) {
+        return widgetMap.get(node);
+    }
+    static get allUpdatesComplete() {
+        if (nextUpdateQueue.size === 0 && !currentUpdateQueue && currentlyProcessed.size === 0) {
+            return Promise.resolve();
+        }
+        if (!overallUpdatePromise) {
+            overallUpdatePromise = Promise.withResolvers();
+        }
+        return overallUpdatePromise.promise;
+    }
+    static getOrCreateWidget(element) {
+        const widget = Widget.get(element);
+        if (widget) {
+            return widget;
+        }
+        let config = widgetConfigs.get(element);
+        if (!config) {
+            config = widgetConfig(element => new Widget(element));
+        }
+        return instantiateWidget(element, config);
+    }
+    get contentElement() {
+        return this.#contentElement;
+    }
+    set contentElement(contentElement) {
+        this.#contentElement = contentElement;
+    }
+    dispatchDOMEvent(event) {
+        this.element.dispatchEvent(event);
+    }
+    markAsRoot() {
+        assert(!this.element.parentElement, 'Attempt to mark as root attached node');
+        this.#isRoot = true;
+    }
+    parentWidget() {
+        return this.#parentWidget;
+    }
+    children() {
+        return this.#children;
+    }
+    childWasDetached(_widget) {
+    }
+    isShowing() {
+        return this.#isShowing;
+    }
+    shouldHideOnDetach() {
+        if (!this.element.parentElement) {
+            return false;
+        }
+        if (this.#hideOnDetach) {
+            return true;
+        }
+        for (const child of this.#children) {
+            if (child.shouldHideOnDetach()) {
+                return true;
+            }
+        }
+        return false;
+    }
+    setHideOnDetach() {
+        this.#hideOnDetach = true;
+    }
+    inNotification() {
+        return Boolean(this.#notificationDepth) || Boolean(this.#parentWidget?.inNotification());
+    }
+    parentIsShowing() {
+        if (this.#isRoot) {
+            return true;
+        }
+        return this.#parentWidget?.isShowing() ?? false;
+    }
+    callOnVisibleChildren(method) {
+        const copy = this.#children.slice();
+        for (let i = 0; i < copy.length; ++i) {
+            if (copy[i].#parentWidget === this && copy[i].#visible) {
+                method.call(copy[i]);
+            }
+        }
+    }
+    processWillShow() {
+        this.callOnVisibleChildren(this.processWillShow);
+        this.#isShowing = true;
+    }
+    processWasShown() {
+        if (this.inNotification()) {
+            return;
+        }
+        this.restoreScrollPositions();
+        this.notify(this.wasShown);
+        this.callOnVisibleChildren(this.processWasShown);
+    }
+    processWillHide() {
+        if (this.inNotification()) {
+            return;
+        }
+        this.storeScrollPositions();
+        this.callOnVisibleChildren(this.processWillHide);
+        this.notify(this.willHide);
+        this.#isShowing = false;
+    }
+    processWasHidden() {
+        this.callOnVisibleChildren(this.processWasHidden);
+        this.notify(this.wasHidden);
+    }
+    processOnResize() {
+        if (this.inNotification()) {
+            return;
+        }
+        if (!this.isShowing()) {
+            return;
+        }
+        this.notify(this.onResize);
+        this.callOnVisibleChildren(this.processOnResize);
+    }
+    notify(notification) {
+        ++this.#notificationDepth;
+        try {
+            notification.call(this);
+        }
+        finally {
+            --this.#notificationDepth;
+        }
+    }
+    wasShown() {
+    }
+    willHide() {
+    }
+    wasHidden() {
+    }
+    onResize() {
+    }
+    onLayout() {
+    }
+    onDetach() {
+    }
+    async ownerViewDisposed() {
+    }
+    show(parentElement, insertBefore, suppressOrphanWidgetError = false) {
+        assert(parentElement, 'Attempt to attach widget with no parent element');
+        if (!this.#isRoot) {
+            // Update widget hierarchy.
+            let currentParent = parentElement;
+            let currentWidget = undefined;
+            while (!currentWidget) {
+                if (!currentParent) {
+                    if (suppressOrphanWidgetError) {
+                        this.#isRoot = true;
+                        this.show(parentElement, insertBefore);
+                        return;
+                    }
+                    throw new Error('Attempt to attach widget to orphan node');
+                }
+                currentWidget = widgetMap.get(currentParent);
+                currentParent = currentParent.parentElementOrShadowHost();
+            }
+            this.attach(currentWidget);
+        }
+        this.#showWidget(parentElement, insertBefore);
+    }
+    attach(parentWidget) {
+        if (parentWidget === this.#parentWidget) {
+            return;
+        }
+        if (this.#parentWidget) {
+            this.detach();
+        }
+        this.#parentWidget = parentWidget;
+        this.#parentWidget.#children.push(this);
+        this.#isRoot = false;
+    }
+    showWidget() {
+        if (this.#visible) {
+            return;
+        }
+        if (!this.element.parentElement) {
+            throw new Error('Attempt to show widget that is not hidden using hideWidget().');
+        }
+        this.#showWidget(this.element.parentElement, this.element.nextSibling);
+    }
+    #showWidget(parentElement, insertBefore) {
+        let currentParent = parentElement;
+        while (currentParent && !Widget.get(currentParent)) {
+            currentParent = currentParent.parentElementOrShadowHost();
+        }
+        if (this.#isRoot) {
+            assert(!currentParent, 'Attempt to show root widget under another widget');
+        }
+        else {
+            assert(currentParent && widgetMap.get(currentParent) === this.#parentWidget, 'Attempt to show under node belonging to alien widget');
+        }
+        const wasVisible = this.#visible;
+        if (wasVisible && this.element.parentNode === parentElement) {
+            return;
+        }
+        this.#visible = true;
+        if (!wasVisible && this.parentIsShowing()) {
+            this.processWillShow();
+        }
+        this.element.classList.remove('hidden');
+        // Reparent
+        if (this.element.parentNode !== parentElement) {
+            if (!this.#externallyManaged) {
+                incrementWidgetCounter(parentElement, this.element);
+            }
+            if (insertBefore) {
+                originalInsertBefore.call(parentElement, this.element, insertBefore);
+            }
+            else {
+                originalAppendChild.call(parentElement, this.element);
+            }
+        }
+        const focusedElementsCount = this.#parentWidget?.getDefaultFocusedElements?.()?.length ?? 0;
+        if (this.element.hasAttribute('autofocus') && focusedElementsCount > 1) {
+            this.element.removeAttribute('autofocus');
+        }
+        if (!wasVisible && this.parentIsShowing()) {
+            this.processWasShown();
+        }
+        if (this.#parentWidget && this.hasNonZeroConstraints()) {
+            this.#parentWidget.invalidateConstraints();
+        }
+        else {
+            this.processOnResize();
+        }
+    }
+    hideWidget() {
+        if (!this.#visible) {
+            return;
+        }
+        this.#hideWidget(false);
+    }
+    #hideWidget(removeFromDOM) {
+        this.#visible = false;
+        const { parentElement } = this.element;
+        if (this.parentIsShowing()) {
+            this.processWillHide();
+        }
+        if (removeFromDOM) {
+            if (parentElement) {
+                // Force legal removal
+                decrementWidgetCounter(parentElement, this.element);
+                originalRemoveChild.call(parentElement, this.element);
+            }
+            this.onDetach();
+        }
+        else {
+            this.element.classList.add('hidden');
+        }
+        if (this.parentIsShowing()) {
+            this.processWasHidden();
+        }
+        if (this.#parentWidget && this.hasNonZeroConstraints()) {
+            this.#parentWidget.invalidateConstraints();
+        }
+    }
+    detach(overrideHideOnDetach) {
+        if (!this.#parentWidget && !this.#isRoot) {
+            return;
+        }
+        cancelUpdate(this);
+        // hideOnDetach means that we should never remove element from dom - content
+        // has iframes and detaching it will hurt.
+        //
+        // overrideHideOnDetach will override hideOnDetach and the client takes
+        // responsibility for the consequences.
+        const removeFromDOM = overrideHideOnDetach || !this.shouldHideOnDetach();
+        if (this.#visible) {
+            this.#hideWidget(removeFromDOM);
+        }
+        else if (removeFromDOM) {
+            const { parentElement } = this.element;
+            if (parentElement) {
+                // Force kick out from DOM.
+                decrementWidgetCounter(parentElement, this.element);
+                originalRemoveChild.call(parentElement, this.element);
+            }
+        }
+        // Update widget hierarchy.
+        if (this.#parentWidget) {
+            const childIndex = this.#parentWidget.#children.indexOf(this);
+            assert(childIndex >= 0, 'Attempt to remove non-child widget');
+            this.#parentWidget.#children.splice(childIndex, 1);
+            this.#parentWidget.childWasDetached(this);
+            this.#parentWidget = null;
+        }
+        else {
+            assert(this.#isRoot, 'Removing non-root widget from DOM');
+        }
+    }
+    detachChildWidgets() {
+        const children = this.#children.slice();
+        for (let i = 0; i < children.length; ++i) {
+            children[i].detach();
+        }
+    }
+    elementsToRestoreScrollPositionsFor() {
+        return [this.element];
+    }
+    storeScrollPositions() {
+        const elements = this.elementsToRestoreScrollPositionsFor();
+        for (const container of elements) {
+            storedScrollPositions.set(container, { scrollLeft: container.scrollLeft, scrollTop: container.scrollTop });
+        }
+    }
+    restoreScrollPositions() {
+        const elements = this.elementsToRestoreScrollPositionsFor();
+        for (const container of elements) {
+            const storedPositions = storedScrollPositions.get(container);
+            if (storedPositions) {
+                container.scrollLeft = storedPositions.scrollLeft;
+                container.scrollTop = storedPositions.scrollTop;
+            }
+        }
+    }
+    doResize() {
+        if (!this.isShowing()) {
+            return;
+        }
+        // No matter what notification we are in, dispatching onResize is not needed.
+        if (!this.inNotification()) {
+            this.callOnVisibleChildren(this.processOnResize);
+        }
+    }
+    doLayout() {
+        if (!this.isShowing()) {
+            return;
+        }
+        this.notify(this.onLayout);
+        this.doResize();
+    }
+    registerRequiredCSS(...cssFiles) {
+        for (const cssFile of cssFiles) {
+            appendStyle(this.#shadowRoot ?? this.element, cssFile);
+        }
+    }
+    // Unused, but useful for debugging.
+    printWidgetHierarchy() {
+        const lines = [];
+        this.collectWidgetHierarchy('', lines);
+        console.log(lines.join('\n')); // eslint-disable-line no-console
+    }
+    collectWidgetHierarchy(prefix, lines) {
+        lines.push(prefix + '[' + this.element.className + ']' + (this.#children.length ? ' {' : ''));
+        for (let i = 0; i < this.#children.length; ++i) {
+            this.#children[i].collectWidgetHierarchy(prefix + '    ', lines);
+        }
+        if (this.#children.length) {
+            lines.push(prefix + '}');
+        }
+    }
+    setDefaultFocusedElement(element) {
+        const defaultFocusedElement = this.getDefaultFocusedElement();
+        if (defaultFocusedElement) {
+            defaultFocusedElement.removeAttribute('autofocus');
+        }
+        if (element) {
+            element.setAttribute('autofocus', '');
+        }
+    }
+    setDefaultFocusedChild(child) {
+        assert(child.#parentWidget === this, 'Attempt to set non-child widget as default focused.');
+        const defaultFocusedElement = this.getDefaultFocusedElement();
+        if (defaultFocusedElement) {
+            defaultFocusedElement.removeAttribute('autofocus');
+        }
+        child.element.setAttribute('autofocus', '');
+    }
+    getDefaultFocusedElements() {
+        const autofocusElements = [...this.contentElement.querySelectorAll('[autofocus]')];
+        const contentElement = this.contentElement;
+        if (contentElement !== this.element) {
+            if (contentElement instanceof HTMLElement && contentElement.hasAttribute('autofocus')) {
+                autofocusElements.push(contentElement);
+            }
+            if (autofocusElements.length === 0) {
+                autofocusElements.push(...this.element.querySelectorAll('[autofocus]'));
+            }
+        }
+        return autofocusElements.filter(autofocusElement => {
+            let widgetElement = autofocusElement;
+            while (widgetElement) {
+                const widget = Widget.get(widgetElement);
+                if (widget) {
+                    if (widgetElement === autofocusElement && widget.#parentWidget === this && widget.#visible) {
+                        return true;
+                    }
+                    return widget === this;
+                }
+                widgetElement = widgetElement.parentElementOrShadowHost();
+            }
+            return false;
+        });
+    }
+    getDefaultFocusedElement() {
+        const elements = this.getDefaultFocusedElements();
+        if (elements.length > 1) {
+            console.error('Multiple autofocus elements found', this.constructor.name, ...elements.map(e => Platform.StringUtilities.trimMiddle(e.outerHTML, 250)));
+        }
+        return elements[0] || null;
+    }
+    focus() {
+        if (!this.isShowing()) {
+            return;
+        }
+        const autofocusElement = this.getDefaultFocusedElement();
+        if (autofocusElement) {
+            const widget = Widget.get(autofocusElement);
+            if (widget && widget !== this) {
+                widget.focus();
+            }
+            else if (autofocusElement === this.element && autofocusElement instanceof WidgetElement) {
+                // If the autofocus element is the widget itself, we need to call the native focus method
+                // to avoid infinite recursion if the element is a WidgetElement.
+                HTMLElement.prototype.focus.call(autofocusElement);
+            }
+            else {
+                autofocusElement.focus();
+            }
+            return;
+        }
+        for (const child of this.#children) {
+            if (child.#visible) {
+                child.focus();
+                return;
+            }
+        }
+        if (this.element === this.contentElement && this.element.hasAttribute('autofocus')) {
+            if (this.element instanceof WidgetElement) {
+                // If the autofocus element is the widget itself, we need to call the native focus method
+                // to avoid infinite recursion if the element is a WidgetElement.
+                HTMLElement.prototype.focus.call(this.element);
+            }
+            else {
+                this.element.focus();
+            }
+        }
+    }
+    hasFocus() {
+        return this.element.hasFocus();
+    }
+    calculateConstraints() {
+        return new Geometry.Constraints();
+    }
+    constraints() {
+        if (typeof this.#constraints !== 'undefined') {
+            return this.#constraints;
+        }
+        if (typeof this.#cachedConstraints === 'undefined') {
+            this.#cachedConstraints = this.calculateConstraints();
+        }
+        return this.#cachedConstraints;
+    }
+    setMinimumAndPreferredSizes(width, height, preferredWidth, preferredHeight) {
+        const newConstraints = new Geometry.Constraints(new Geometry.Size(width, height), new Geometry.Size(preferredWidth, preferredHeight));
+        if (this.#constraints?.isEqual(newConstraints)) {
+            return;
+        }
+        this.#constraints = newConstraints;
+        this.invalidateConstraints();
+    }
+    setMinimumSize(width, height) {
+        this.minimumSize = new Geometry.Size(width, height);
+    }
+    set minimumSize(size) {
+        const newConstraints = new Geometry.Constraints(size);
+        if (this.#constraints?.isEqual(newConstraints)) {
+            return;
+        }
+        this.#constraints = newConstraints;
+        this.invalidateConstraints();
+    }
+    hasNonZeroConstraints() {
+        const constraints = this.constraints();
+        return Boolean(constraints.minimum.width || constraints.minimum.height || constraints.preferred.width ||
+            constraints.preferred.height);
+    }
+    suspendInvalidations() {
+        ++this.#invalidationsSuspended;
+    }
+    resumeInvalidations() {
+        --this.#invalidationsSuspended;
+        if (!this.#invalidationsSuspended && this.#invalidationsRequested) {
+            this.invalidateConstraints();
+        }
+    }
+    invalidateConstraints() {
+        if (this.#invalidationsSuspended) {
+            this.#invalidationsRequested = true;
+            return;
+        }
+        this.#invalidationsRequested = false;
+        const cached = this.#cachedConstraints;
+        this.#cachedConstraints = undefined;
+        const actual = this.constraints();
+        if (!actual.isEqual(cached || null) && this.#parentWidget) {
+            this.#parentWidget.invalidateConstraints();
+        }
+        else {
+            this.doLayout();
+        }
+    }
+    // Excludes the widget from being tracked by its parents/ancestors via
+    // widgetCounter because the widget is being handled by external code.
+    // Widgets marked as being externally managed are responsible for
+    // finishing out their own lifecycle (i.e. calling detach() before being
+    // removed from the DOM). This is e.g. used for CodeMirror.
+    //
+    // Also note that this must be called before the widget is shown so that
+    // so that its ancestor's widgetCounter is not incremented.
+    markAsExternallyManaged() {
+        assert(!this.#parentWidget, 'Attempt to mark widget as externally managed after insertion to the DOM');
+        this.#externallyManaged = true;
+    }
+    performUpdate(_signal) {
+    }
+    addUpdateController(controller) {
+        const wasInterrupted = this.#updateState === "INTERRUPTED" /* UpdateState.INTERRUPTED */;
+        this.#updateController?.abort();
+        this.#updateController = controller;
+        // Transition to SHIELDED if we are replacing a starved update, otherwise reset to NORMAL.
+        this.#updateState = wasInterrupted ? "SHIELDED" /* UpdateState.SHIELDED */ : "NORMAL" /* UpdateState.NORMAL */;
+    }
+    cancelUpdateController() {
+        this.#updateController?.abort();
+        this.#updateController = undefined;
+        this.#updateState = "NORMAL" /* UpdateState.NORMAL */;
+    }
+    /**
+     * Schedules an asynchronous update for this widget.
+     *
+     * The update will be deduplicated and executed with the next animation
+     * frame.
+     */
+    requestUpdate() {
+        // If the state is SHIELDED, we skip the abort call entirely to break the starvation loop.
+        if (this.#updateState !== "SHIELDED" /* UpdateState.SHIELDED */) {
+            if (currentlyProcessed.has(this)) {
+                this.#updateState = "INTERRUPTED" /* UpdateState.INTERRUPTED */;
+            }
+            this.#updateController?.abort();
+        }
+        this.#updateComplete = enqueueWidgetUpdate(this);
+    }
+    /**
+     * The `updateComplete` promise resolves when the widget has finished updating.
+     *
+     * Use `updateComplete` to wait for an update:
+     * ```js
+     * await widget.updateComplete;
+     * // do stuff
+     * ```
+     *
+     * This method is primarily useful for unit tests, to wait for widgets to build
+     * their DOM. For example:
+     * ```js
+     * // Set up the test widget, and wait for the initial update cycle to complete.
+     * const widget = new SomeWidget(someData);
+     * widget.requestUpdate();
+     * await widget.updateComplete;
+     *
+     * // Assert state of the widget.
+     * assert.isTrue(widget.someDataLoaded);
+     * ```
+     *
+     * @returns a promise that resolves when the widget has finished updating.
+     */
+    get updateComplete() {
+        return this.#updateComplete;
+    }
+}
+const storedScrollPositions = new WeakMap();
+export class VBox extends Widget {
+    constructor(elementOrOptions, options) {
+        // @ts-expect-error
+        super(elementOrOptions, options);
+        if (this.contentElement instanceof HTMLElement) {
+            this.contentElement.classList.add('vbox');
+        }
+        else {
+            this.element.classList.add('vbox');
+        }
+    }
+    calculateConstraints() {
+        let constraints = new Geometry.Constraints();
+        function updateForChild() {
+            const child = this.constraints();
+            constraints = constraints.widthToMax(child);
+            constraints = constraints.addHeight(child);
+        }
+        this.callOnVisibleChildren(updateForChild);
+        return constraints;
+    }
+}
+export class HBox extends Widget {
+    constructor(elementOrOptions, options) {
+        // @ts-expect-error
+        super(elementOrOptions, options);
+        if (this.contentElement instanceof HTMLElement) {
+            this.contentElement.classList.add('hbox');
+        }
+        else {
+            this.element.classList.remove('vbox');
+            this.element.classList.add('hbox');
+        }
+    }
+    calculateConstraints() {
+        let constraints = new Geometry.Constraints();
+        function updateForChild() {
+            const child = this.constraints();
+            constraints = constraints.addWidth(child);
+            constraints = constraints.heightToMax(child);
+        }
+        this.callOnVisibleChildren(updateForChild);
+        return constraints;
+    }
+}
+export class VBoxWithResizeCallback extends VBox {
+    resizeCallback;
+    constructor(resizeCallback) {
+        super();
+        this.resizeCallback = resizeCallback;
+    }
+    onResize() {
+        this.resizeCallback();
+    }
+}
+export class WidgetFocusRestorer {
+    widget;
+    previous;
+    constructor(widget) {
+        this.widget = widget;
+        this.previous = deepActiveElement(widget.element.ownerDocument);
+        widget.focus();
+    }
+    restore() {
+        if (!this.widget) {
+            return;
+        }
+        if (this.widget.hasFocus() && this.previous) {
+            this.previous.focus();
+        }
+        this.previous = null;
+        this.widget = null;
+    }
+}
+function domOperationError(funcName) {
+    return new Error(`Attempt to modify widget with native DOM method \`${funcName}\``);
+}
+Node.prototype.appendChild = function (node) {
+    if (widgetMap.get(node) && node.parentNode !== this) {
+        throw domOperationError('appendChild');
+    }
+    return originalAppendChild.call(this, node);
+};
+Node.prototype.insertBefore = function (node, child) {
+    if (widgetMap.get(node) && node.parentNode !== this) {
+        throw domOperationError('insertBefore');
+    }
+    return originalInsertBefore.call(this, node, child);
+};
+Node.prototype.removeChild = function (child) {
+    if (widgetCounterMap.get(child) || widgetMap.get(child)) {
+        throw domOperationError('removeChild');
+    }
+    return originalRemoveChild.call(this, child);
+};
+Node.prototype.removeChildren = function () {
+    if (widgetCounterMap.get(this)) {
+        throw domOperationError('removeChildren');
+    }
+    return originalRemoveChildren.call(this);
+};
+//# sourceMappingURL=Widget.js.map

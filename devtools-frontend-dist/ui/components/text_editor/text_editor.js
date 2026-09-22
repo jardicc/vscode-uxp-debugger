@@ -1,0 +1,4468 @@
+var __defProp = Object.defineProperty;
+var __export = (target, all) => {
+  for (var name in all)
+    __defProp(target, name, { get: all[name], enumerable: true });
+};
+
+// gen/front_end/ui/components/text_editor/AccessiblePlaceholder.js
+var AccessiblePlaceholder_exports = {};
+__export(AccessiblePlaceholder_exports, {
+  AccessiblePlaceholder: () => AccessiblePlaceholder,
+  flattenRect: () => flattenRect
+});
+import * as CM from "./..\\..\\..\\third_party\\codemirror.next\\codemirror.next.js";
+function flattenRect(rect, left) {
+  const x = left ? rect.left : rect.right;
+  return { left: x, right: x, top: rect.top, bottom: rect.bottom };
+}
+var AccessiblePlaceholder = class extends CM.WidgetType {
+  teaser;
+  constructor(teaser) {
+    super();
+    this.teaser = teaser;
+  }
+  toDOM() {
+    const wrap = document.createElement("span");
+    wrap.classList.add("cm-placeholder");
+    wrap.style.pointerEvents = "none";
+    wrap.tabIndex = 0;
+    this.teaser.show(wrap, void 0, true);
+    return wrap;
+  }
+  /**
+   * Controls the cursor's height by reporting this widget's bounds as a
+   * single line. This prevents the cursor from expanding vertically when the
+   * placeholder content wraps across multiple lines.
+   */
+  coordsAt(dom) {
+    const boundingClientRect = dom.firstElementChild?.getBoundingClientRect();
+    if (!boundingClientRect) {
+      return null;
+    }
+    const style = window.getComputedStyle(dom.parentNode);
+    const rect = flattenRect(boundingClientRect, style.direction !== "rtl");
+    const lineHeight = parseInt(style.lineHeight, 10);
+    if (rect.bottom - rect.top > lineHeight * 1.5) {
+      return { left: rect.left, right: rect.right, top: rect.top, bottom: rect.top + lineHeight };
+    }
+    return rect;
+  }
+  ignoreEvent(_) {
+    return false;
+  }
+  destroy(dom) {
+    super.destroy(dom);
+    this.teaser?.hideWidget();
+  }
+  eq(other) {
+    return this.teaser === other.teaser;
+  }
+};
+
+// gen/front_end/ui/components/text_editor/AiCodeCompletionDisclaimer.js
+var AiCodeCompletionDisclaimer_exports = {};
+__export(AiCodeCompletionDisclaimer_exports, {
+  AiCodeCompletionDisclaimer: () => AiCodeCompletionDisclaimer,
+  DEFAULT_SUMMARY_TOOLBAR_VIEW: () => DEFAULT_SUMMARY_TOOLBAR_VIEW
+});
+import "./..\\spinners\\spinners.js";
+import "./..\\tooltips\\tooltips.js";
+import * as Host from "./..\\..\\..\\core\\host\\host.js";
+import * as i18n from "./..\\..\\..\\core\\i18n\\i18n.js";
+import * as Root from "./..\\..\\..\\core\\root\\root.js";
+import * as UI from "./..\\..\\legacy\\legacy.js";
+import { Directives, html, nothing, render } from "./..\\..\\lit\\lit.js";
+import * as VisualLogging from "./..\\..\\visual_logging\\visual_logging.js";
+
+// gen/front_end/ui/components/text_editor/aiCodeCompletionDisclaimer.css.js
+var aiCodeCompletionDisclaimer_css_default = `/*
+ * Copyright 2025 The Chromium Authors
+ * Use of this source code is governed by a BSD-style license that can be
+ * found in the LICENSE file.
+ */
+
+@scope to (devtools-widget > *) {
+    display: flex;
+
+    .ai-code-completion-disclaimer {
+        gap: 5px;
+        display: flex;
+        flex-shrink: 0;
+
+        span.link {
+            color: var(--sys-color-on-surface-subtle);
+
+            &:focus-visible {
+                outline: var(--sys-size-2) solid var(--sys-color-state-focus-ring);
+                outline-offset: 0;
+                border-radius: var(--sys-shape-corner-extra-small);
+            }
+        }
+
+        devtools-spinner {
+            margin-top: var(--sys-size-2);
+            padding: var(--sys-size-1);
+            height: var(--sys-size-6);
+            width: var(--sys-size-6);
+        }
+
+        devtools-tooltip:popover-open {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+
+            .disclaimer-tooltip-container {
+                padding: var(--sys-size-4) 0;
+                max-width: var(--sys-size-30);
+                white-space: normal;
+
+                .tooltip-text {
+                    color: var(--sys-color-on-surface-subtle);
+                    padding: 0 var(--sys-size-5);
+                    align-items: flex-start;
+                    gap: 10px;
+                }
+
+                .link {
+                    margin: var(--sys-size-5) var(--sys-size-8) 0 var(--sys-size-5);
+                    display: inline-block;
+                }
+            }
+        }
+    }
+}
+
+/*# sourceURL=${import.meta.resolve("./aiCodeCompletionDisclaimer.css")} */`;
+
+// gen/front_end/ui/components/text_editor/AiCodeCompletionDisclaimer.js
+var UIStringsNotTranslate = {
+  /**
+   * @description Disclaimer text for AI code completion
+   */
+  relevantData: "Relevant data",
+  /**
+   * @description Disclaimer text for AI code completion
+   */
+  isSentToGoogle: "is sent to Google",
+  /**
+   * @description Text for tooltip shown on hovering over "Relevant Data" in the disclaimer text for AI code completion.
+   */
+  tooltipDisclaimerTextForAiCodeCompletionInConsole: "To generate code suggestions, your console input and the history of your current console session are shared with Google. This data may be seen by human reviewers to improve this feature.",
+  /**
+   * @description Text for tooltip shown on hovering over "Relevant Data" in the disclaimer text for AI code completion.
+   */
+  tooltipDisclaimerTextForAiCodeCompletionNoLoggingInConsole: "To generate code suggestions, your console input and the history of your current console session are shared with Google. This data will not be used to improve Google\u2019s AI models. Your organization may change these settings at any time.",
+  /**
+   * @description Text for tooltip shown on hovering over "Relevant Data" in the disclaimer text for AI code generation in Sources panel.
+   */
+  tooltipDisclaimerTextForAiCodeCompletionInSources: "To generate code suggestions, the contents of the currently open file are shared with Google. This data may be seen by human reviewers to improve this feature.",
+  /**
+   * @description Text for tooltip shown on hovering over "Relevant Data" in the disclaimer text for AI code generation in Sources panel.
+   */
+  tooltipDisclaimerTextForAiCodeCompletionNoLoggingInSources: "To generate code suggestions, the contents of the currently open file are shared with Google. This data will not be used to improve Google\u2019s AI models. Your organization may change these settings at any time.",
+  /**
+   * @description Text for tooltip shown on hovering over "Relevant Data" in the disclaimer text for AI code completion in Styles pane.
+   */
+  tooltipDisclaimerTextForAiCodeCompletionInStyles: "To generate code suggestions, the CSS properties of the selected element and the relevant CSS files are shared with Google. This data may be seen by human reviewers to improve this feature.",
+  /**
+   * @description Text for tooltip shown on hovering over "Relevant Data" in the disclaimer text for AI code completion in Styles pane.
+   */
+  tooltipDisclaimerTextForAiCodeCompletionNoLoggingInStyles: "To generate code suggestions, the CSS properties of the selected element and the relevant CSS files are shared with Google. This data will not be used to improve Google\u2019s AI models. Your organization may change these settings at any time.",
+  /**
+   * Text for tooltip shown on hovering over spinner.
+   */
+  tooltipTextForSpinner: "Shows when data is being sent to Google to generate code suggestions",
+  /**
+   * @description Text for tooltip button which redirects to AI settings
+   */
+  manageInSettings: "Manage in settings",
+  /**
+   *@description Text announced when request is sent to AIDA and the spinner is loading
+   */
+  dataIsBeingSentToGoogle: "Data is being sent to Google"
+};
+var lockedString = i18n.i18n.lockedString;
+function getTooltipDisclaimerText(noLogging, disclaimerTextVariant) {
+  switch (disclaimerTextVariant) {
+    case "console":
+      return noLogging ? lockedString(UIStringsNotTranslate.tooltipDisclaimerTextForAiCodeCompletionNoLoggingInConsole) : lockedString(UIStringsNotTranslate.tooltipDisclaimerTextForAiCodeCompletionInConsole);
+    case "sources":
+      return noLogging ? lockedString(UIStringsNotTranslate.tooltipDisclaimerTextForAiCodeCompletionNoLoggingInSources) : lockedString(UIStringsNotTranslate.tooltipDisclaimerTextForAiCodeCompletionInSources);
+    case "styles":
+      return noLogging ? lockedString(UIStringsNotTranslate.tooltipDisclaimerTextForAiCodeCompletionNoLoggingInStyles) : lockedString(UIStringsNotTranslate.tooltipDisclaimerTextForAiCodeCompletionInStyles);
+  }
+}
+var DEFAULT_SUMMARY_TOOLBAR_VIEW = (input, output, target) => {
+  if (input.aidaAvailability !== "available" || !input.disclaimerTooltipId || !input.spinnerTooltipId || !input.disclaimerTextVariant) {
+    render(nothing, target);
+    return;
+  }
+  const tooltipDisclaimerText = getTooltipDisclaimerText(input.noLogging, input.disclaimerTextVariant);
+  render(html`
+    <style>${aiCodeCompletionDisclaimer_css_default}</style>
+    <div class="ai-code-completion-disclaimer">
+      <devtools-spinner
+        .active=${false}
+        ${Directives.ref((el) => {
+    if (el instanceof HTMLElement) {
+      output.setLoading = (isLoading) => {
+        el.toggleAttribute("active", isLoading);
+      };
+    }
+  })}
+        aria-details=${input.spinnerTooltipId}
+        aria-describedby=${input.spinnerTooltipId}>
+      </devtools-spinner>
+      <devtools-tooltip
+        id=${input.spinnerTooltipId}
+        variant="rich"
+        jslogContext="ai-code-completion-spinner-tooltip"
+      >
+        <div class="disclaimer-tooltip-container">
+          <div class="tooltip-text">
+            ${lockedString(UIStringsNotTranslate.tooltipTextForSpinner)}
+          </div>
+        </div>
+      </devtools-tooltip>
+      <span
+        tabIndex="0"
+        class="link"
+        role="link"
+        jslog=${VisualLogging.link("open-ai-settings").track({
+    click: true
+  })}
+        aria-details=${input.disclaimerTooltipId}
+        aria-describedby=${input.disclaimerTooltipId}
+        @click=${() => {
+    void UI.ViewManager.ViewManager.instance().showView("chrome-ai");
+  }}
+      >
+        ${lockedString(UIStringsNotTranslate.relevantData)}
+      </span>
+      ${lockedString(UIStringsNotTranslate.isSentToGoogle)}
+      <devtools-tooltip
+        id=${input.disclaimerTooltipId}
+        variant="rich"
+        jslogContext="ai-code-completion-disclaimer"
+        ${Directives.ref((el) => {
+    if (el instanceof HTMLElement) {
+      output.hideTooltip = () => {
+        el.hidePopover();
+      };
+    }
+  })}
+      >
+        <div class="disclaimer-tooltip-container">
+          <div class="tooltip-text">
+            ${tooltipDisclaimerText}
+          </div>
+          <span
+            tabIndex="0"
+            class="link"
+            role="link"
+            jslog=${VisualLogging.link("open-ai-settings").track({
+    click: true,
+    keydown: "Enter"
+  })}
+            @click=${input.onManageInSettingsTooltipClick}
+            @keydown=${(e) => {
+    if (e.key === "Enter") {
+      e.consume(true);
+      input.onManageInSettingsTooltipClick();
+    }
+  }}
+          >
+            ${lockedString(UIStringsNotTranslate.manageInSettings)}
+          </span>
+        </div>
+      </devtools-tooltip>
+    </div>`, target);
+};
+var MINIMUM_LOADING_STATE_TIMEOUT = 1e3;
+var AiCodeCompletionDisclaimer = class extends UI.Widget.Widget {
+  #view;
+  #viewOutput = {};
+  #spinnerTooltipId;
+  #disclaimerTooltipId;
+  #noLogging;
+  // Whether the enterprise setting is `ALLOW_WITHOUT_LOGGING` or not.
+  #loading = false;
+  #loadingStartTime = 0;
+  #spinnerLoadingTimeout;
+  #disclaimerTextVariant;
+  #aidaAvailability;
+  #boundOnAidaAvailabilityChange;
+  constructor(element, view = DEFAULT_SUMMARY_TOOLBAR_VIEW) {
+    super(element);
+    this.markAsExternallyManaged();
+    this.#noLogging = Root.Runtime.hostConfig.aidaAvailability?.enterprisePolicyValue === Root.Runtime.GenAiEnterprisePolicyValue.ALLOW_WITHOUT_LOGGING;
+    this.#boundOnAidaAvailabilityChange = this.#onAidaAvailabilityChange.bind(this);
+    this.#view = view;
+  }
+  set disclaimerTooltipId(disclaimerTooltipId) {
+    this.#disclaimerTooltipId = disclaimerTooltipId;
+    this.requestUpdate();
+  }
+  set spinnerTooltipId(spinnerTooltipId) {
+    this.#spinnerTooltipId = spinnerTooltipId;
+    this.requestUpdate();
+  }
+  set loading(loading) {
+    if (!loading && !this.#loading) {
+      return;
+    }
+    if (loading) {
+      if (!this.#loading) {
+        this.#viewOutput.setLoading?.(true);
+        UI.ARIAUtils.LiveAnnouncer.status(lockedString(UIStringsNotTranslate.dataIsBeingSentToGoogle));
+      }
+      if (this.#spinnerLoadingTimeout) {
+        clearTimeout(this.#spinnerLoadingTimeout);
+        this.#spinnerLoadingTimeout = void 0;
+      }
+      this.#loadingStartTime = performance.now();
+      this.#loading = true;
+    } else {
+      this.#loading = false;
+      const duration = performance.now() - this.#loadingStartTime;
+      const remainingTime = Math.max(MINIMUM_LOADING_STATE_TIMEOUT - duration, 0);
+      this.#spinnerLoadingTimeout = window.setTimeout(() => {
+        this.#viewOutput.setLoading?.(false);
+        this.#spinnerLoadingTimeout = void 0;
+      }, remainingTime);
+    }
+  }
+  set disclaimerTextVariant(disclaimerTextVariant) {
+    this.#disclaimerTextVariant = disclaimerTextVariant;
+    this.requestUpdate();
+  }
+  #updateAidaAvailability(aidaAvailability) {
+    if (aidaAvailability !== this.#aidaAvailability) {
+      this.#aidaAvailability = aidaAvailability;
+      this.requestUpdate();
+    }
+  }
+  #onAidaAvailabilityChange(ev) {
+    this.#updateAidaAvailability(ev.data);
+  }
+  #onManageInSettingsTooltipClick() {
+    this.#viewOutput.hideTooltip?.();
+    void UI.ViewManager.ViewManager.instance().showView("chrome-ai");
+  }
+  performUpdate() {
+    this.#view({
+      disclaimerTooltipId: this.#disclaimerTooltipId,
+      spinnerTooltipId: this.#spinnerTooltipId,
+      noLogging: this.#noLogging,
+      aidaAvailability: this.#aidaAvailability,
+      onManageInSettingsTooltipClick: this.#onManageInSettingsTooltipClick.bind(this),
+      disclaimerTextVariant: this.#disclaimerTextVariant
+    }, this.#viewOutput, this.contentElement);
+  }
+  wasShown() {
+    super.wasShown();
+    Host.AidaClient.HostConfigTracker.instance().addEventListener("aidaAvailabilityChanged", this.#boundOnAidaAvailabilityChange);
+    const initialAvailability = Host.AidaClient.HostConfigTracker.instance().aidaAvailability;
+    if (initialAvailability !== void 0) {
+      this.#updateAidaAvailability(initialAvailability);
+    }
+  }
+  willHide() {
+    super.willHide();
+    Host.AidaClient.HostConfigTracker.instance().removeEventListener("aidaAvailabilityChanged", this.#boundOnAidaAvailabilityChange);
+  }
+};
+
+// gen/front_end/ui/components/text_editor/AiCodeCompletionProvider.js
+var AiCodeCompletionProvider_exports = {};
+__export(AiCodeCompletionProvider_exports, {
+  AIDA_REQUEST_DEBOUNCE_TIMEOUT_MS: () => AIDA_REQUEST_DEBOUNCE_TIMEOUT_MS,
+  AiCodeCompletionProvider: () => AiCodeCompletionProvider,
+  AiCodeCompletionTeaserMode: () => AiCodeCompletionTeaserMode,
+  DELAY_BEFORE_SHOWING_RESPONSE_MS: () => DELAY_BEFORE_SHOWING_RESPONSE_MS,
+  MAX_PREFIX_SUFFIX_LENGTH: () => MAX_PREFIX_SUFFIX_LENGTH,
+  aiCodeCompletionTeaserModeState: () => aiCodeCompletionTeaserModeState,
+  setAiCodeCompletionTeaserMode: () => setAiCodeCompletionTeaserMode
+});
+import * as Common5 from "./..\\..\\..\\core\\common\\common.js";
+import * as Host6 from "./..\\..\\..\\core\\host\\host.js";
+import * as i18n12 from "./..\\..\\..\\core\\i18n\\i18n.js";
+import * as Root5 from "./..\\..\\..\\core\\root\\root.js";
+import * as AiCodeCompletion from "./..\\..\\..\\models\\ai_code_completion\\ai_code_completion.js";
+import * as AiCodeGeneration5 from "./..\\..\\..\\models\\ai_code_generation\\ai_code_generation.js";
+import * as CodeMirror3 from "./..\\..\\..\\third_party\\codemirror.next\\codemirror.next.js";
+import * as UI7 from "./..\\..\\legacy\\legacy.js";
+import * as VisualLogging6 from "./..\\..\\visual_logging\\visual_logging.js";
+
+// gen/front_end/ui/components/text_editor/AiCodeCompletionTeaser.js
+var AiCodeCompletionTeaser_exports = {};
+__export(AiCodeCompletionTeaser_exports, {
+  AiCodeCompletionTeaser: () => AiCodeCompletionTeaser,
+  DEFAULT_VIEW: () => DEFAULT_VIEW
+});
+import "./..\\..\\kit\\kit.js";
+import * as Common from "./..\\..\\..\\core\\common\\common.js";
+import * as Host2 from "./..\\..\\..\\core\\host\\host.js";
+import * as i18n3 from "./..\\..\\..\\core\\i18n\\i18n.js";
+import * as Root2 from "./..\\..\\..\\core\\root\\root.js";
+import * as AIAssistance from "./..\\..\\..\\models\\ai_assistance\\ai_assistance.js";
+import * as AiCodeGeneration from "./..\\..\\..\\models\\ai_code_generation\\ai_code_generation.js";
+import * as UI2 from "./..\\..\\legacy\\legacy.js";
+import { html as html2, nothing as nothing2, render as render2 } from "./..\\..\\lit\\lit.js";
+import * as VisualLogging2 from "./..\\..\\visual_logging\\visual_logging.js";
+import * as Dialogs from "./..\\dialogs\\dialogs.js";
+import * as Snackbars from "./..\\snackbars\\snackbars.js";
+
+// gen/front_end/ui/components/text_editor/aiCodeCompletionTeaser.css.js
+var aiCodeCompletionTeaser_css_default = `/*
+ * Copyright 2025 The Chromium Authors
+ * Use of this source code is governed by a BSD-style license that can be
+ * found in the LICENSE file.
+ */
+
+@scope to (devtools-widget > *) {
+    .ai-code-completion-teaser-screen-reader-only {
+        position: absolute;
+        overflow: hidden;
+        clip-path: rect(0 0 0 0);
+        height: var(--sys-size-1);
+        width: var(--sys-size-1);
+        margin: -1 * var(--sys-size-1);;
+        padding: 0;
+        border: 0;
+    }
+
+    .ai-code-completion-teaser {
+        padding-left: var(--sys-size-3);
+        line-height: var(--sys-size-7);
+        pointer-events: all;
+        align-items: center;
+        font-style: italic;
+
+        .ai-code-completion-teaser-dismiss {
+            text-decoration: underline;
+            cursor: pointer;
+
+            &:focus-visible {
+                border-radius: var(--sys-shape-corner-extra-small);
+                outline: var(--sys-size-2) solid var(--sys-color-state-focus-ring);
+                outline-offset: 0;
+            }
+        }
+
+        .ai-code-completion-teaser-action {
+            display: inline-flex;
+            gap: var(--sys-size-2);
+
+            span {
+                border: var(--sys-size-1) solid var(--sys-color-neutral-outline);
+                border-radius: var(--sys-shape-corner-extra-small);
+                padding: 0 var(--sys-size-3);
+            }
+        }
+
+        .new-badge {
+            font-style: normal;
+            display: inline-block;
+        }
+    }
+}
+
+/*# sourceURL=${import.meta.resolve("./aiCodeCompletionTeaser.css")} */`;
+
+// gen/front_end/ui/components/text_editor/AiCodeCompletionTeaser.js
+var UIStringsNotTranslate2 = {
+  /**
+   * @description Text for `ctrl` key.
+   */
+  ctrl: "ctrl",
+  /**
+   * @description Text for `cmd` key.
+   */
+  cmd: "cmd",
+  /**
+   * @description Text for `i` key.
+   */
+  i: "i",
+  /**
+   * @description Text for `x` key.
+   */
+  x: "x",
+  /**
+   * @description Text for dismissing teaser.
+   */
+  dontShowAgain: "Don\u2019t show again",
+  /**
+   * @description Text for teaser to turn on code suggestions.
+   */
+  toTurnOnCodeSuggestions: "to turn on code suggestions.",
+  /**
+   * @description Text for snackbar notification on dismissing the teaser.
+   */
+  turnOnCodeSuggestionsAtAnyTimeInSettings: "Turn on code suggestions at any time in Settings",
+  /**
+   * @description Text for snackbar action button to manage settings.
+   */
+  manage: "Manage",
+  /**
+   * @description The footer disclaimer that links to more information
+   * about the AI feature.
+   */
+  learnMore: "Learn more about AI code completion",
+  /**
+   * @description Header text for the AI-powered suggestions disclaimer dialog.
+   */
+  freDisclaimerHeader: "Code faster with AI-powered suggestions",
+  /**
+   * @description First disclaimer item text for the fre dialog.
+   */
+  freDisclaimerTextAiWontAlwaysGetItRight: "This feature uses AI and won\u2019t always get it right",
+  /**
+   * @description Code completion disclaimer item text for the fre dialog.
+   */
+  freDisclaimerTextAsYouType: "As you type, relevant data is being send to Google to generate code suggestions. Press Tab to accept.",
+  /**
+   * @description Code generation disclaimer item text for the fre dialog.
+   */
+  freDisclaimerDescribeCodeInComment: "In Console or Sources, describe the code you need in a comment, then press ctrl+i to generate it.",
+  /**
+   * @description Code generation disclaimer item text for the fre dialog.
+   */
+  freDisclaimerDescribeCodeInCommentForMacOs: "In Console or Sources, describe the code you need in a comment, then press cmd+i to generate it.",
+  /**
+   * @description Privacy disclaimer item text for the fre dialog.
+   */
+  freDisclaimerTextPrivacy: "To generate code suggestions, your console input, the history of your current console session, the currently inspected CSS, and the contents of the currently open file are shared with Google. This data may be seen by human reviewers to improve this feature.",
+  /**
+   * @description Privacy disclaimer item text for the fre dialog when enterprise logging is off.
+   */
+  freDisclaimerTextPrivacyNoLogging: "To generate code suggestions, your console input, the history of your current console session, the currently inspected CSS, and the contents of the currently open file are shared with Google. This data will not be used to improve Google\u2019s AI models. Your organization may change these settings at any time.",
+  /**
+   * @description Last disclaimer item text for the fre dialog.
+   */
+  freDisclaimerTextUseWithCaution: "Use generated code snippets with caution",
+  /**
+   *@description Text for ARIA label for the teaser.
+   */
+  press: "Press",
+  /**
+   *@description Text for ARIA label for the teaser.
+   */
+  toDisableCodeSuggestions: "to disable code suggestions."
+};
+var lockedString2 = i18n3.i18n.lockedString;
+var CODE_SNIPPET_WARNING_URL = "https://support.google.com/legal/answer/13505487";
+var PROMOTION_ID = "ai-code-completion";
+var DEFAULT_VIEW = (input, _output, target) => {
+  if (input.aidaAvailability !== "available") {
+    render2(nothing2, target);
+    return;
+  }
+  const cmdOrCtrl = Host2.Platform.isMac() ? lockedString2(UIStringsNotTranslate2.cmd) : lockedString2(UIStringsNotTranslate2.ctrl);
+  const teaserAriaLabel = lockedString2(UIStringsNotTranslate2.press) + " " + cmdOrCtrl + " " + lockedString2(UIStringsNotTranslate2.i) + " " + lockedString2(UIStringsNotTranslate2.toTurnOnCodeSuggestions) + " " + lockedString2(UIStringsNotTranslate2.press) + " " + cmdOrCtrl + " " + lockedString2(UIStringsNotTranslate2.x) + " " + lockedString2(UIStringsNotTranslate2.toDisableCodeSuggestions);
+  const newBadge = UI2.UIUtils.maybeCreateNewBadge(PROMOTION_ID);
+  const newBadgeTemplate = newBadge ? html2`&nbsp;${newBadge}` : nothing2;
+  render2(html2`
+          <style>${aiCodeCompletionTeaser_css_default}</style>
+          <style>@scope to (devtools-widget > *) { ${UI2.inspectorCommonStyles} }</style>
+          <div class="ai-code-completion-teaser-screen-reader-only">${teaserAriaLabel}</div>
+          <div class="ai-code-completion-teaser" aria-hidden="true">
+            <span class="ai-code-completion-teaser-action">
+              <span>${cmdOrCtrl}</span>
+              <span>${lockedString2(UIStringsNotTranslate2.i)}</span>
+            </span>
+            </span>&nbsp;${lockedString2(UIStringsNotTranslate2.toTurnOnCodeSuggestions)}&nbsp;
+            <span role="button" class="ai-code-completion-teaser-dismiss"
+              tabindex="0"
+              @click=${input.onDismiss}
+              @keydown=${(e) => {
+    if (e.key === "Enter" || e.key === " ") {
+      input.onDismiss(e);
+      e.stopPropagation();
+      e.preventDefault();
+    }
+  }}
+              jslog=${VisualLogging2.action("ai-code-completion-teaser.dismiss").track({ click: true })}>
+                ${lockedString2(UIStringsNotTranslate2.dontShowAgain)}
+            </span>
+            ${newBadgeTemplate}
+          </div>
+        `, target);
+};
+var AiCodeCompletionTeaser = class extends UI2.Widget.Widget {
+  #view;
+  #aidaAvailability;
+  #boundOnAidaAvailabilityChange;
+  #boundOnAiCodeCompletionSettingChanged;
+  #onDetach;
+  #disclaimerTextVariant;
+  // Whether the user completed first run experience dialog or not.
+  #aiCodeCompletionFreCompletedSetting = Common.Settings.Settings.instance().createSetting("ai-code-completion-enabled", false);
+  // Whether the user dismissed the teaser or not.
+  #aiCodeCompletionTeaserDismissedSetting = Common.Settings.Settings.instance().createSetting("ai-code-completion-teaser-dismissed", false);
+  #noLogging;
+  // Whether the enterprise setting is `ALLOW_WITHOUT_LOGGING` or not.
+  constructor(config, view) {
+    super();
+    this.markAsExternallyManaged();
+    this.#onDetach = config.onDetach;
+    this.#disclaimerTextVariant = config.disclaimerTextVariant;
+    this.#view = view ?? DEFAULT_VIEW;
+    this.#boundOnAidaAvailabilityChange = this.#onAidaAvailabilityChange.bind(this);
+    this.#boundOnAiCodeCompletionSettingChanged = this.#onAiCodeCompletionSettingChanged.bind(this);
+    this.#noLogging = Root2.Runtime.hostConfig.aidaAvailability?.enterprisePolicyValue === Root2.Runtime.GenAiEnterprisePolicyValue.ALLOW_WITHOUT_LOGGING;
+    this.requestUpdate();
+  }
+  #showReminderSnackbar() {
+    Snackbars.Snackbar.Snackbar.show({
+      message: lockedString2(UIStringsNotTranslate2.turnOnCodeSuggestionsAtAnyTimeInSettings),
+      actionProperties: {
+        label: lockedString2(UIStringsNotTranslate2.manage),
+        onClick: () => {
+          void UI2.ViewManager.ViewManager.instance().showView("chrome-ai");
+        }
+      },
+      closable: true
+    });
+  }
+  #updateAidaAvailability(aidaAvailability) {
+    if (aidaAvailability !== this.#aidaAvailability) {
+      this.#aidaAvailability = aidaAvailability;
+      this.requestUpdate();
+    }
+  }
+  #onAidaAvailabilityChange(ev) {
+    this.#updateAidaAvailability(ev.data);
+  }
+  #onAiCodeCompletionSettingChanged() {
+    if (this.#aiCodeCompletionFreCompletedSetting.get() || this.#aiCodeCompletionTeaserDismissedSetting.get()) {
+      this.detach();
+    }
+  }
+  #createReminderItems() {
+    const reminderItems = [{
+      iconName: "psychiatry",
+      content: lockedString2(UIStringsNotTranslate2.freDisclaimerTextAiWontAlwaysGetItRight)
+    }];
+    const devtoolsLocale = i18n3.DevToolsLocale.DevToolsLocale.instance();
+    if (AiCodeGeneration.AiCodeGeneration.AiCodeGeneration.isAiCodeGenerationEnabled(devtoolsLocale.locale)) {
+      reminderItems.push({
+        iconName: "code",
+        content: lockedString2(UIStringsNotTranslate2.freDisclaimerTextAsYouType)
+      }, {
+        iconName: "text-analysis",
+        content: Host2.Platform.isMac() ? lockedString2(UIStringsNotTranslate2.freDisclaimerDescribeCodeInCommentForMacOs) : lockedString2(UIStringsNotTranslate2.freDisclaimerDescribeCodeInComment)
+      });
+    }
+    reminderItems.push({
+      iconName: "google",
+      content: this.#noLogging ? lockedString2(UIStringsNotTranslate2.freDisclaimerTextPrivacyNoLogging) : lockedString2(UIStringsNotTranslate2.freDisclaimerTextPrivacy)
+    }, {
+      iconName: "warning",
+      // clang-format off
+      content: html2`<devtools-link
+            href=${CODE_SNIPPET_WARNING_URL}
+            class="link devtools-link"
+            jslogcontext="code-snippets-explainer.ai-code-completion-teaser"
+          >${lockedString2(UIStringsNotTranslate2.freDisclaimerTextUseWithCaution)}</devtools-link>`
+      // clang-format on
+    });
+    return reminderItems;
+  }
+  onAction = async (event) => {
+    event.preventDefault();
+    const iconName = AIAssistance.AiUtils.getIconName();
+    const result = await Dialogs.FreDialog.FreDialog.show({
+      header: { iconName, text: lockedString2(UIStringsNotTranslate2.freDisclaimerHeader) },
+      reminderItems: this.#createReminderItems(),
+      onLearnMoreClick: () => {
+        void UI2.ViewManager.ViewManager.instance().showView("chrome-ai");
+      },
+      ariaLabel: lockedString2(UIStringsNotTranslate2.freDisclaimerHeader),
+      learnMoreButtonAriaLabel: lockedString2(UIStringsNotTranslate2.learnMore)
+    });
+    if (result) {
+      this.#aiCodeCompletionFreCompletedSetting.set(true);
+      if (this.#disclaimerTextVariant === "console") {
+        Host2.userMetrics.actionTaken(Host2.UserMetrics.Action.AiCodeCompletionFreCompletedFromConsole);
+      } else if (this.#disclaimerTextVariant === "sources") {
+        Host2.userMetrics.actionTaken(Host2.UserMetrics.Action.AiCodeCompletionFreCompletedFromSources);
+      }
+      this.detach();
+    } else {
+      this.requestUpdate();
+    }
+  };
+  onDismiss = (event) => {
+    event.preventDefault();
+    this.#aiCodeCompletionTeaserDismissedSetting.set(true);
+    this.#showReminderSnackbar();
+    this.detach();
+  };
+  performUpdate() {
+    const output = {};
+    this.#view({
+      aidaAvailability: this.#aidaAvailability,
+      onAction: this.onAction,
+      onDismiss: this.onDismiss
+    }, output, this.contentElement);
+  }
+  wasShown() {
+    super.wasShown();
+    Host2.AidaClient.HostConfigTracker.instance().addEventListener("aidaAvailabilityChanged", this.#boundOnAidaAvailabilityChange);
+    this.#aiCodeCompletionFreCompletedSetting.addChangeListener(this.#boundOnAiCodeCompletionSettingChanged);
+    this.#aiCodeCompletionTeaserDismissedSetting.addChangeListener(this.#boundOnAiCodeCompletionSettingChanged);
+    const initialAvailability = Host2.AidaClient.HostConfigTracker.instance().aidaAvailability;
+    if (initialAvailability !== void 0) {
+      this.#updateAidaAvailability(initialAvailability);
+    }
+  }
+  willHide() {
+    super.willHide();
+    Host2.AidaClient.HostConfigTracker.instance().removeEventListener("aidaAvailabilityChanged", this.#boundOnAidaAvailabilityChange);
+    this.#aiCodeCompletionFreCompletedSetting.removeChangeListener(this.#boundOnAiCodeCompletionSettingChanged);
+    this.#aiCodeCompletionTeaserDismissedSetting.removeChangeListener(this.#boundOnAiCodeCompletionSettingChanged);
+  }
+  onDetach() {
+    this.#onDetach();
+  }
+};
+
+// gen/front_end/ui/components/text_editor/AiCodeGenerationProvider.js
+var AiCodeGenerationProvider_exports = {};
+__export(AiCodeGenerationProvider_exports, {
+  AiCodeGenerationProvider: () => AiCodeGenerationProvider,
+  AiCodeGenerationTeaserMode: () => AiCodeGenerationTeaserMode,
+  setAiCodeGenerationTeaserMode: () => setAiCodeGenerationTeaserMode
+});
+import * as Common4 from "./..\\..\\..\\core\\common\\common.js";
+import * as Host5 from "./..\\..\\..\\core\\host\\host.js";
+import * as i18n11 from "./..\\..\\..\\core\\i18n\\i18n.js";
+import * as Root4 from "./..\\..\\..\\core\\root\\root.js";
+import * as AiCodeGeneration3 from "./..\\..\\..\\models\\ai_code_generation\\ai_code_generation.js";
+import * as CodeMirror2 from "./..\\..\\..\\third_party\\codemirror.next\\codemirror.next.js";
+import * as UI6 from "./..\\..\\legacy\\legacy.js";
+import * as VisualLogging5 from "./..\\..\\visual_logging\\visual_logging.js";
+
+// gen/front_end/ui/components/text_editor/AiCodeGenerationParser.js
+var AiCodeGenerationParser_exports = {};
+__export(AiCodeGenerationParser_exports, {
+  AiCodeGenerationParser: () => AiCodeGenerationParser
+});
+import * as CodeMirror from "./..\\..\\..\\third_party\\codemirror.next\\codemirror.next.js";
+var LINE_COMMENT_PATTERN = /^(?:\/\/|#)\s*/gm;
+var BLOCK_COMMENT_START_PATTERN = /^\/\*+\s*/;
+var BLOCK_COMMENT_END_PATTERN = /\s*\*+\/$/;
+var BLOCK_COMMENT_LINE_PREFIX_PATTERN = /^\s*\*\s?/;
+function findLastNonWhitespacePos(state, cursorPosition) {
+  const line = state.doc.lineAt(cursorPosition);
+  const textBefore = line.text.substring(0, cursorPosition - line.from);
+  const effectiveEnd = line.from + textBefore.trimEnd().length;
+  return effectiveEnd;
+}
+function resolveCommentNode(state, cursorPosition) {
+  const tree = CodeMirror.syntaxTree(state);
+  const lookupPos = findLastNonWhitespacePos(state, cursorPosition);
+  const node = tree.resolveInner(lookupPos, -1);
+  const nodeType = node.type.name;
+  if (nodeType.includes("Comment")) {
+    if (!nodeType.includes("BlockComment")) {
+      return node;
+    }
+    let hasInternalError = false;
+    tree.iterate({
+      from: node.from,
+      to: node.to,
+      enter: (n) => {
+        if (n.type.isError) {
+          hasInternalError = true;
+          return false;
+        }
+        return true;
+      }
+    });
+    return hasInternalError ? void 0 : node;
+  }
+  return;
+}
+function extractBlockCommentText(rawText) {
+  if (!rawText.match(BLOCK_COMMENT_START_PATTERN)) {
+    return;
+  }
+  let cleaned = rawText.replace(BLOCK_COMMENT_START_PATTERN, "");
+  if (!cleaned.match(BLOCK_COMMENT_END_PATTERN)) {
+    return;
+  }
+  cleaned = cleaned.replace(BLOCK_COMMENT_END_PATTERN, "");
+  cleaned = cleaned.split("\n").map((line) => line.replace(BLOCK_COMMENT_LINE_PREFIX_PATTERN, "")).join("\n").trim();
+  return cleaned;
+}
+function extractLineComment(node, state) {
+  let firstNode = node;
+  let lastNode = node;
+  let prev = node.prevSibling;
+  while (prev?.type.name.includes("LineComment")) {
+    firstNode = prev;
+    prev = prev.prevSibling;
+  }
+  let next = node.nextSibling;
+  while (next?.type.name.includes("LineComment")) {
+    lastNode = next;
+    next = next.nextSibling;
+  }
+  const fullRawText = state.doc.sliceString(firstNode.from, lastNode.to);
+  const concatenatedText = fullRawText.replaceAll(LINE_COMMENT_PATTERN, "").replace(/\n\s*\n/g, "\n").trim();
+  return concatenatedText ? { text: concatenatedText, to: lastNode.to } : void 0;
+}
+var AiCodeGenerationParser = class {
+  static extractCommentNodeInfo(state, cursorPosition) {
+    const node = resolveCommentNode(state, cursorPosition);
+    if (!node) {
+      return;
+    }
+    const nodeType = node.type.name;
+    const rawText = state.doc.sliceString(node.from, node.to);
+    let text = "";
+    if (nodeType.includes("LineComment")) {
+      return extractLineComment(node, state);
+    }
+    if (nodeType.includes("BlockComment")) {
+      text = extractBlockCommentText(rawText) ?? "";
+    } else {
+      text = rawText;
+    }
+    if (!Boolean(text)) {
+      return;
+    }
+    return { text, to: node.to };
+  }
+};
+
+// gen/front_end/ui/components/text_editor/AiCodeGenerationTeaser.js
+var AiCodeGenerationTeaser_exports = {};
+__export(AiCodeGenerationTeaser_exports, {
+  AiCodeGenerationTeaser: () => AiCodeGenerationTeaser,
+  AiCodeGenerationTeaserDisplayState: () => AiCodeGenerationTeaserDisplayState,
+  DEFAULT_VIEW: () => DEFAULT_VIEW2,
+  PROMOTION_ID: () => PROMOTION_ID2
+});
+import "./..\\tooltips\\tooltips.js";
+import * as Common2 from "./..\\..\\..\\core\\common\\common.js";
+import * as Host3 from "./..\\..\\..\\core\\host\\host.js";
+import * as i18n5 from "./..\\..\\..\\core\\i18n\\i18n.js";
+import * as Root3 from "./..\\..\\..\\core\\root\\root.js";
+import * as UI3 from "./..\\..\\legacy\\legacy.js";
+import { Directives as Directives2, html as html3, nothing as nothing3, render as render3 } from "./..\\..\\lit\\lit.js";
+import * as VisualLogging3 from "./..\\..\\visual_logging\\visual_logging.js";
+import * as Buttons from "./..\\buttons\\buttons.js";
+
+// gen/front_end/ui/components/text_editor/aiCodeGenerationTeaser.css.js
+var aiCodeGenerationTeaser_css_default = `/*
+ * Copyright 2025 The Chromium Authors
+ * Use of this source code is governed by a BSD-style license that can be
+ * found in the LICENSE file.
+ */
+
+@scope to (devtools-widget > *) {
+    .ai-code-generation-teaser-screen-reader-only {
+        position: absolute;
+        overflow: hidden;
+        clip-path: rect(0 0 0 0);
+        height: var(--sys-size-1);
+        width: var(--sys-size-1);
+        margin: -1 * var(--sys-size-1);;
+        padding: 0;
+        border: 0;
+    }
+
+    .ai-code-generation-teaser {
+        pointer-events: all;
+        font-style: italic;
+        line-height: var(--sys-size-7);
+
+        .ai-code-generation-teaser-trigger {
+            display: inline-flex;
+            align-items: center;
+
+            devtools-button {
+                --override-button-icon-color: var(--sys-color-token-subtle);
+            }
+        }
+
+        .ai-code-generation-keyboard-action {
+            display: inline-flex;
+            gap: var(--sys-size-2);
+
+            span {
+                border: var(--sys-size-1) solid var(--sys-color-neutral-outline);
+                border-radius: var(--sys-shape-corner-extra-small);
+                padding: 0 var(--sys-size-3);
+            }
+        }
+
+        .ai-code-generation-teaser-generated {
+            display: inline-flex;
+            gap: var(--sys-size-2);
+            color: var(--sys-color-primary);
+
+            span {
+                border: var(--sys-size-1) solid var(--sys-color-primary);
+                border-radius: var(--sys-shape-corner-extra-small);
+                padding: 0 var(--sys-size-3);
+            }
+        }
+
+        .new-badge {
+            font-style: normal;
+            display: inline-block;
+        }
+
+        devtools-tooltip:popover-open {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+
+            .disclaimer-tooltip-container {
+                padding: var(--sys-size-4) 0;
+                max-width: var(--sys-size-30);
+                white-space: normal;
+
+                .tooltip-text {
+                    color: var(--sys-color-on-surface-subtle);
+                    padding: 0 var(--sys-size-5);
+                    align-items: flex-start;
+                    gap: 10px;
+                }
+
+                .link {
+                    margin: var(--sys-size-5) var(--sys-size-8) 0 var(--sys-size-5);
+                    display: inline-block;
+                    color: var(--sys-color-on-surface-subtle);
+                }
+            }
+        }
+
+        .ai-code-generation-spinner::before {
+            content: "\u280B";
+            animation: teaser-spinner-animation 1s linear infinite;
+        }
+    }
+
+    @keyframes teaser-spinner-animation {
+        0% { content: "\u280B"; }
+        10% { content: "\u2819"; }
+        20% { content: "\u2839"; }
+        30% { content: "\u2838"; }
+        40% { content: "\u283C"; }
+        50% { content: "\u2834"; }
+        60% { content: "\u2826"; }
+        70% { content: "\u2827"; }
+        80% { content: "\u2807"; }
+        90% { content: "\u280F"; }
+    }
+}
+
+/*# sourceURL=${import.meta.resolve("./aiCodeGenerationTeaser.css")} */`;
+
+// gen/front_end/ui/components/text_editor/AiCodeGenerationTeaser.js
+var UIStringsNotTranslate3 = {
+  /**
+   * @description Text for teaser to generate code.
+   */
+  toGenerateCode: "to generate code",
+  /**
+   * @description Text for teaser to generate code.
+   */
+  ctrlItoGenerateCode: "ctrl+i to generate code",
+  /**
+   * @description Text for teaser to generate code in Mac.
+   */
+  cmdItoGenerateCode: "cmd+i to generate code",
+  /**
+   * @description Text for teaser to learn how data is being used.
+   */
+  toLearnHowYourDataIsBeingUsed: "to learn how your data is being used.",
+  /**
+   * @description Aria label for teaser to generate code.
+   */
+  pressCtrlPeriodToLearnHowYourDataIsBeingUsed: "Press ctrl . (period) to learn how your data is being used.",
+  /**
+   * @description Aria label for teaser to generate code in Mac.
+   */
+  pressCmdPeriodToLearnHowYourDataIsBeingUsed: "Press cmd . (period) to learn how your data is being used.",
+  /**
+   * @description Text for teaser when generating suggestion.
+   */
+  generating: "Generating... (",
+  /**
+   * @description Text for teaser when generating suggestion.
+   */
+  toCancel: " to cancel)",
+  /**
+   * @description Text for teaser when generating suggestion.
+   */
+  generatingAriaLabel: "Generating. Press escape to cancel.",
+  /**
+   * @description Text for teaser for discoverability.
+   */
+  writeACommentToGenerateCode: "Write a comment to generate code",
+  /**
+   * @description Text for teaser for discoverability.
+   */
+  writeACommentToGenerateCodeInConsole: "Write a comment to generate code. Try typing: '// add red borders to all the divs'.",
+  /**
+   * @description Text for teaser when suggestion has been generated.
+   */
+  tab: "tab",
+  /**
+   * @description Text for teaser when suggestion has been generated.
+   */
+  or: "or",
+  /**
+   * @description Text for teaser when suggestion has been generated.
+   */
+  enter: "enter",
+  /**
+   * @description Text for teaser when suggestion has been generated.
+   */
+  toAccept: "to accept",
+  /**
+   * @description Text for teaser keys.
+   */
+  ctrl: "ctrl",
+  /**
+   * @description Text for teaser keys.
+   */
+  cmd: "cmd",
+  /**
+   * @description Text for teaser keys.
+   */
+  i: "i",
+  /**
+   * @description Text for teaser keys.
+   */
+  period: ".",
+  /**
+   * @description Text for teaser keys.
+   */
+  esc: "esc",
+  /**
+   * @description Text for tooltip shown on hovering over "Relevant Data" in the disclaimer text for AI code generation in Console panel.
+   */
+  tooltipDisclaimerTextForAiCodeGenerationInConsole: "To generate code suggestions, your console input and the history of your current console session are shared with Google. This data may be seen by human reviewers to improve this feature.",
+  /**
+   * @description Text for tooltip shown on hovering over "Relevant Data" in the disclaimer text for AI code generation in Console panel.
+   */
+  tooltipDisclaimerTextForAiCodeGenerationNoLoggingInConsole: "To generate code suggestions, your console input and the history of your current console session are shared with Google. This data will not be used to improve Google\u2019s AI models. Your organization may change these settings at any time.",
+  /**
+   * @description Text for tooltip shown on hovering over "Relevant Data" in the disclaimer text for AI code generation in Sources panel.
+   */
+  tooltipDisclaimerTextForAiCodeGenerationInSources: "To generate code suggestions, the contents of the currently open file are shared with Google. This data may be seen by human reviewers to improve this feature.",
+  /**
+   * @description Text for tooltip shown on hovering over "Relevant Data" in the disclaimer text for AI code generation in Sources panel.
+   */
+  tooltipDisclaimerTextForAiCodeGenerationNoLoggingInSources: "To generate code suggestions, the contents of the currently open file are shared with Google. This data will not be used to improve Google\u2019s AI models. Your organization may change these settings at any time.",
+  /**
+   * @description Text for tooltip button which redirects to AI settings
+   */
+  manageInSettings: "Manage in settings",
+  /**
+   * @description Title for disclaimer info button in the teaser to generate code.
+   */
+  learnMoreAboutHowYourDataIsBeingUsed: "Learn more about how your data is being used"
+};
+var lockedString3 = i18n5.i18n.lockedString;
+var PROMOTION_ID2 = "ai-code-generation";
+var AiCodeGenerationTeaserDisplayState;
+(function(AiCodeGenerationTeaserDisplayState2) {
+  AiCodeGenerationTeaserDisplayState2["TRIGGER"] = "trigger";
+  AiCodeGenerationTeaserDisplayState2["DISCOVERY"] = "discovery";
+  AiCodeGenerationTeaserDisplayState2["LOADING"] = "loading";
+  AiCodeGenerationTeaserDisplayState2["GENERATED"] = "generated";
+})(AiCodeGenerationTeaserDisplayState || (AiCodeGenerationTeaserDisplayState = {}));
+function getTooltipDisclaimerText2(noLogging, disclaimerTextVariant) {
+  switch (disclaimerTextVariant) {
+    case "console":
+      return noLogging ? lockedString3(UIStringsNotTranslate3.tooltipDisclaimerTextForAiCodeGenerationNoLoggingInConsole) : lockedString3(UIStringsNotTranslate3.tooltipDisclaimerTextForAiCodeGenerationInConsole);
+    case "sources":
+      return noLogging ? lockedString3(UIStringsNotTranslate3.tooltipDisclaimerTextForAiCodeGenerationNoLoggingInSources) : lockedString3(UIStringsNotTranslate3.tooltipDisclaimerTextForAiCodeGenerationInSources);
+    case "styles":
+      return "";
+  }
+}
+var DEFAULT_VIEW2 = (input, output, target) => {
+  if (!input.disclaimerTextVariant) {
+    render3(nothing3, target);
+    return;
+  }
+  let teaserLabel;
+  switch (input.displayState) {
+    case AiCodeGenerationTeaserDisplayState.TRIGGER: {
+      if (!input.disclaimerTooltipId) {
+        render3(nothing3, target);
+        return;
+      }
+      const toLearnHowYourDataIsBeingUsedScreenReaderOnly = Host3.Platform.isMac() ? UIStringsNotTranslate3.pressCmdPeriodToLearnHowYourDataIsBeingUsed : UIStringsNotTranslate3.pressCtrlPeriodToLearnHowYourDataIsBeingUsed;
+      const screenReaderText = (Host3.Platform.isMac() ? UIStringsNotTranslate3.cmdItoGenerateCode : UIStringsNotTranslate3.ctrlItoGenerateCode) + " " + toLearnHowYourDataIsBeingUsedScreenReaderOnly;
+      const cmdOrCtrl = Host3.Platform.isMac() ? lockedString3(UIStringsNotTranslate3.cmd) : lockedString3(UIStringsNotTranslate3.ctrl);
+      const toGenerateCode = html3`<span class="ai-code-generation-keyboard-action">
+          <span>${cmdOrCtrl}</span>
+          <span>${lockedString3(UIStringsNotTranslate3.i)}</span>
+        </span>&nbsp;${lockedString3(UIStringsNotTranslate3.toGenerateCode)}`;
+      const toLearnHowYourDataIsBeingUsedVisible = html3`<span class="ai-code-generation-keyboard-action">
+          <span>${cmdOrCtrl}</span>
+          <span>${lockedString3(UIStringsNotTranslate3.period)}</span>
+        </span>&nbsp;${lockedString3(UIStringsNotTranslate3.toLearnHowYourDataIsBeingUsed)}`;
+      const teaserText = input.showDataUsageTeaser ? html3`${toGenerateCode}.&nbsp;${toLearnHowYourDataIsBeingUsedVisible}` : toGenerateCode;
+      const tooltipDisclaimerText = getTooltipDisclaimerText2(input.noLogging, input.disclaimerTextVariant);
+      teaserLabel = html3`<div class="ai-code-generation-teaser-trigger">
+        <span aria-hidden="true">${teaserText}</span>
+        <span class="ai-code-generation-teaser-screen-reader-only" aria-atomic="true" aria-live="assertive">
+          ${lockedString3(screenReaderText)}
+        </span>
+        &nbsp;<devtools-button
+          .data=${{
+        title: lockedString3(UIStringsNotTranslate3.learnMoreAboutHowYourDataIsBeingUsed),
+        size: "MICRO",
+        iconName: "info",
+        variant: "icon",
+        jslogContext: "ai-code-generation-teaser.info-button"
+      }}
+            aria-details=${input.disclaimerTooltipId}
+            aria-describedby=${input.disclaimerTooltipId}
+          ></devtools-button>
+          <devtools-tooltip
+              id=${input.disclaimerTooltipId}
+              variant="rich"
+              jslogContext="ai-code-generation-disclaimer"
+              ${Directives2.ref((el) => {
+        if (el instanceof HTMLElement) {
+          output.hideTooltip = () => {
+            el.hidePopover();
+          };
+          output.showTooltip = () => {
+            el.showPopover();
+            UI3.ARIAUtils.LiveAnnouncer.status(tooltipDisclaimerText);
+          };
+        }
+      })}>
+            <div class="disclaimer-tooltip-container"><div class="tooltip-text">
+                ${tooltipDisclaimerText}
+                </div>
+                <span
+                    tabIndex="0"
+                    class="link"
+                    role="link"
+                    jslog=${VisualLogging3.link("open-ai-settings").track({
+        click: true
+      })}
+                    @click=${input.onManageInSettingsTooltipClick}
+                >${lockedString3(UIStringsNotTranslate3.manageInSettings)}</span></div></devtools-tooltip>
+                  </div>`;
+      break;
+    }
+    case AiCodeGenerationTeaserDisplayState.DISCOVERY: {
+      if (!input.showDiscoveryTeaser) {
+        teaserLabel = nothing3;
+        break;
+      }
+      const newBadge = UI3.UIUtils.maybeCreateNewBadge(PROMOTION_ID2);
+      const teaserText = input.disclaimerTextVariant === "console" ? lockedString3(UIStringsNotTranslate3.writeACommentToGenerateCodeInConsole) : lockedString3(UIStringsNotTranslate3.writeACommentToGenerateCode);
+      teaserLabel = newBadge ? html3`${teaserText}&nbsp;${newBadge}` : nothing3;
+      break;
+    }
+    case AiCodeGenerationTeaserDisplayState.LOADING: {
+      const teaserAriaLabel = lockedString3(UIStringsNotTranslate3.generatingAriaLabel);
+      teaserLabel = html3`
+        <div class="ai-code-generation-teaser-screen-reader-only">${teaserAriaLabel}</div>
+        <span class="ai-code-generation-spinner" aria-hidden="true">
+          &nbsp;${lockedString3(UIStringsNotTranslate3.generating)}
+          <span class="ai-code-generation-keyboard-action"><span>${lockedString3(UIStringsNotTranslate3.esc)}</span></span>
+          ${lockedString3(UIStringsNotTranslate3.toCancel)}&nbsp;
+        </span>
+        <span class="ai-code-generation-timer" aria-hidden="true" ${Directives2.ref((el) => {
+        if (el) {
+          output.setTimerText = (text) => {
+            el.textContent = text;
+          };
+        }
+      })}></span>`;
+      break;
+    }
+    case AiCodeGenerationTeaserDisplayState.GENERATED: {
+      teaserLabel = html3`<div class="ai-code-generation-teaser-generated">
+          <span>${lockedString3(UIStringsNotTranslate3.tab)}</span>
+          &nbsp;${lockedString3(UIStringsNotTranslate3.or)}&nbsp;
+          <span>${lockedString3(UIStringsNotTranslate3.enter)}</span>
+          &nbsp;${lockedString3(UIStringsNotTranslate3.toAccept)}
+        </div>`;
+      break;
+    }
+  }
+  render3(html3`
+          <style>${aiCodeGenerationTeaser_css_default}</style>
+          <style>@scope to (devtools-widget > *) { ${UI3.inspectorCommonStyles} }</style>
+          <div class="ai-code-generation-teaser">
+            &nbsp;${teaserLabel}
+          </div>
+        `, target);
+};
+var AiCodeGenerationTeaser = class _AiCodeGenerationTeaser extends UI3.Widget.Widget {
+  #view;
+  #viewOutput = {};
+  #displayState = AiCodeGenerationTeaserDisplayState.DISCOVERY;
+  #disclaimerTooltipId;
+  #noLogging;
+  // Whether the enterprise setting is `ALLOW_WITHOUT_LOGGING` or not.
+  #disclaimerTextVariant;
+  #timerIntervalId;
+  #loadStartTime;
+  #aiCodeGenerationUsedSetting = Common2.Settings.Settings.instance().createSetting("ai-code-generation-used", false);
+  static #showDataUsageTeaser = true;
+  static #discoveryTeaserShownInSession = false;
+  constructor(view) {
+    super();
+    this.markAsExternallyManaged();
+    this.#noLogging = Root3.Runtime.hostConfig.aidaAvailability?.enterprisePolicyValue === Root3.Runtime.GenAiEnterprisePolicyValue.ALLOW_WITHOUT_LOGGING;
+    this.#view = view ?? DEFAULT_VIEW2;
+    this.requestUpdate();
+  }
+  performUpdate() {
+    this.#view({
+      displayState: this.#displayState,
+      onManageInSettingsTooltipClick: this.#onManageInSettingsTooltipClick.bind(this),
+      disclaimerTooltipId: this.#disclaimerTooltipId,
+      noLogging: this.#noLogging,
+      showDataUsageTeaser: _AiCodeGenerationTeaser.#showDataUsageTeaser,
+      showDiscoveryTeaser: !this.#aiCodeGenerationUsedSetting.get() && !_AiCodeGenerationTeaser.#discoveryTeaserShownInSession,
+      disclaimerTextVariant: this.#disclaimerTextVariant
+    }, this.#viewOutput, this.contentElement);
+  }
+  willHide() {
+    super.willHide();
+    this.#stopLoadingAnimation();
+  }
+  get displayState() {
+    return this.#displayState;
+  }
+  set displayState(displayState) {
+    if (displayState === this.#displayState) {
+      return;
+    }
+    if (this.#displayState === AiCodeGenerationTeaserDisplayState.TRIGGER) {
+      _AiCodeGenerationTeaser.#showDataUsageTeaser = false;
+    }
+    if (this.#displayState === AiCodeGenerationTeaserDisplayState.DISCOVERY) {
+      _AiCodeGenerationTeaser.#discoveryTeaserShownInSession = true;
+    }
+    this.#displayState = displayState;
+    this.requestUpdate();
+    if (this.#displayState === AiCodeGenerationTeaserDisplayState.LOADING) {
+      void this.updateComplete.then(() => {
+        void this.#startLoadingAnimation();
+      });
+    } else if (this.#loadStartTime) {
+      this.#stopLoadingAnimation();
+    }
+  }
+  #startLoadingAnimation() {
+    this.#stopLoadingAnimation();
+    this.#loadStartTime = performance.now();
+    this.#viewOutput.setTimerText?.("(0s)");
+    this.#timerIntervalId = window.setInterval(() => {
+      if (this.#loadStartTime) {
+        const elapsedSeconds = Math.floor((performance.now() - this.#loadStartTime) / 1e3);
+        this.#viewOutput.setTimerText?.(`(${elapsedSeconds}s)`);
+      }
+    }, 1e3);
+  }
+  #stopLoadingAnimation() {
+    if (this.#timerIntervalId) {
+      clearInterval(this.#timerIntervalId);
+      this.#timerIntervalId = void 0;
+    }
+    this.#loadStartTime = void 0;
+  }
+  set disclaimerTooltipId(disclaimerTooltipId) {
+    this.#disclaimerTooltipId = disclaimerTooltipId;
+    this.requestUpdate();
+  }
+  set disclaimerTextVariant(disclaimerTextVariant) {
+    this.#disclaimerTextVariant = disclaimerTextVariant;
+    this.requestUpdate();
+  }
+  #onManageInSettingsTooltipClick(event) {
+    event.stopPropagation();
+    this.#viewOutput.hideTooltip?.();
+    void UI3.ViewManager.ViewManager.instance().showView("chrome-ai");
+    event.consume(true);
+  }
+  showTooltip() {
+    this.#viewOutput.showTooltip?.();
+  }
+  static setDiscoveryTeaserShownInSessionForTest(value) {
+    _AiCodeGenerationTeaser.#discoveryTeaserShownInSession = value;
+  }
+  static setShowDataUsageTeaserForTest(value) {
+    _AiCodeGenerationTeaser.#showDataUsageTeaser = value;
+  }
+};
+
+// gen/front_end/ui/components/text_editor/AiCodeGenerationUpgradeDialog.js
+var AiCodeGenerationUpgradeDialog_exports = {};
+__export(AiCodeGenerationUpgradeDialog_exports, {
+  AiCodeGenerationUpgradeDialog: () => AiCodeGenerationUpgradeDialog
+});
+import * as Host4 from "./..\\..\\..\\core\\host\\host.js";
+import * as i18n7 from "./..\\..\\..\\core\\i18n\\i18n.js";
+import * as UI4 from "./..\\..\\legacy\\legacy.js";
+import * as Lit from "./..\\..\\lit\\lit.js";
+import * as Buttons2 from "./..\\buttons\\buttons.js";
+
+// gen/front_end/ui/components/text_editor/aiCodeGenerationUpgradeDialog.css.js
+var aiCodeGenerationUpgradeDialog_css_default = `/*
+ * Copyright 2026 The Chromium Authors
+ * Use of this source code is governed by a BSD-style license that can be
+ * found in the LICENSE file.
+ */
+
+
+.ai-code-generation-upgrade-dialog {
+  width: var(--sys-size-33);
+  padding: var(--sys-size-9);
+
+  header {
+    display: flex;
+    gap: var(--sys-size-8);
+    margin-bottom: var(--sys-size-6);
+    align-items: center;
+
+    h2 {
+      margin: 0;
+      color: var(--sys-color-on-surface);
+      font: var(--sys-typescale-headline5);
+    }
+
+    .header-icon-container {
+      background: linear-gradient(
+        135deg,
+        var(--sys-color-gradient-primary),
+        var(--sys-color-gradient-tertiary)
+      );
+      border-radius: var(--sys-size-4);
+      min-height: var(--sys-size-14);
+      min-width: var(--sys-size-14);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+
+      devtools-icon {
+        width: var(--sys-size-9);
+        height: var(--sys-size-9);
+      }
+    }
+  }
+
+  .reminder-container {
+    border-radius: var(--sys-size-6);
+    background-color: var(--sys-color-surface4);
+    padding: var(--sys-size-9);
+    gap: var(--sys-size-6);
+    display: flex;
+    flex-direction: column;
+
+    .reminder-item {
+      display: flex;
+      flex-direction: row;
+      align-items: center;
+      gap: var(--sys-size-5);
+      font: var(--sys-typescale-body4-regular);
+
+      devtools-icon.reminder-icon {
+        width: var(--sys-size-8);
+        height: var(--sys-size-8);
+      }
+    }
+  }
+
+  footer {
+    display: flex;
+    flex-direction: row;
+    align-items: flex-start;
+    justify-content: flex-end;
+    margin-top: var(--sys-size-8);
+    min-width: var(--sys-size-28);
+
+    .right-buttons {
+      display: flex;
+      gap: var(--sys-size-5);
+    }
+  }
+}
+
+/*# sourceURL=${import.meta.resolve("./aiCodeGenerationUpgradeDialog.css")} */`;
+
+// gen/front_end/ui/components/text_editor/AiCodeGenerationUpgradeDialog.js
+var { html: html4 } = Lit;
+var UIStringsNotTranslate4 = {
+  /**
+   * @description Header text for the upgrade notice dialog.
+   */
+  codeCompletionJustGotBetter: "Code completion just got better",
+  /**
+   * @description First item in the description.
+   */
+  describeCodeInComment: "Pressing ctrl+i on a comment in the Console and Sources panels now generates entire code blocks based on the instructions in the comment",
+  /**
+   * @description First item in the description.
+   */
+  describeCodeInCommentForMacOs: "Pressing cmd+i on a comment in the Console and Sources panels now generates entire code blocks based on the instructions in the comment",
+  /**
+   * @description Second item in the description.
+   */
+  asYouType: "You will still receive the real-time, as-you-type suggestions to help you code faster",
+  /**
+   * @description Third item in the description.
+   */
+  disclaimerTextPrivacy: "To generate code suggestions, your console input, the history of your current console session, the currently inspected CSS, and the contents of the currently open file are shared with Google. This data may be seen by human reviewers to improve this feature.",
+  /**
+   * @description Third item in the description.
+   */
+  disclaimerTextPrivacyNoLogging: "To generate code suggestions, your console input, the history of your current console session, the currently inspected CSS, and the contents of the currently open file are shared with Google. This data will not be used to improve Google\u2019s AI models. Your organization may change these settings at any time.",
+  /**
+   * @description Text for the manage in settings button in the upgrade notice dialog.
+   */
+  manageInSettings: "Manage in settings",
+  /**
+   * @description Text for the generate code button in the upgrade notice dialog.
+   */
+  generateCode: "Generate code"
+};
+var lockedString4 = i18n7.i18n.lockedString;
+var AiCodeGenerationUpgradeDialog = class {
+  static show({ noLogging }) {
+    const dialog = new UI4.Dialog.Dialog();
+    dialog.setAriaLabel(lockedString4(UIStringsNotTranslate4.codeCompletionJustGotBetter));
+    const result = Promise.withResolvers();
+    Lit.render(html4`
+      <div class="ai-code-generation-upgrade-dialog">
+        <style>
+          ${aiCodeGenerationUpgradeDialog_css_default}
+        </style>
+        <header>
+          <div class="header-icon-container">
+            <devtools-icon name="pen-spark"></devtools-icon>
+          </div>
+          <h2 tabindex="-1">
+            ${lockedString4(UIStringsNotTranslate4.codeCompletionJustGotBetter)}
+          </h2>
+        </header>
+        <main class="reminder-container">
+          <div class="reminder-item">
+            <devtools-icon class="reminder-icon" name="text-analysis"></devtools-icon>
+            <span>
+              ${Host4.Platform.isMac() ? lockedString4(UIStringsNotTranslate4.describeCodeInCommentForMacOs) : lockedString4(UIStringsNotTranslate4.describeCodeInComment)}
+            </span>
+          </div>
+          <div class="reminder-item">
+            <devtools-icon class="reminder-icon" name="code"></devtools-icon>
+            <span>${lockedString4(UIStringsNotTranslate4.asYouType)}</span>
+          </div>
+          <div class="reminder-item">
+            <devtools-icon class="reminder-icon" name="google"></devtools-icon>
+            <span>${noLogging ? lockedString4(UIStringsNotTranslate4.disclaimerTextPrivacyNoLogging) : lockedString4(UIStringsNotTranslate4.disclaimerTextPrivacy)}
+            </span>
+          </div>
+        </main>
+        <footer>
+          <div class="right-buttons">
+            <devtools-button
+              @click=${() => {
+      result.resolve(false);
+      void UI4.ViewManager.ViewManager.instance().showView("chrome-ai");
+    }}
+              jslogcontext="ai-code-generation-upgrade-dialog.manage-in-settings"
+              .variant=${"outlined"}
+              aria-label=${lockedString4(UIStringsNotTranslate4.manageInSettings)}>
+              ${lockedString4(UIStringsNotTranslate4.manageInSettings)}
+            </devtools-button>
+            <devtools-button
+              @click=${() => {
+      result.resolve(true);
+      dialog.hide();
+    }}
+              jslogcontext="ai-code-generation-upgrade-dialog.continue"
+              .variant=${"primary"}>
+              ${lockedString4(UIStringsNotTranslate4.generateCode)}
+            </devtools-button>
+          </div>
+        </footer>
+      </div>`, dialog.contentElement);
+    dialog.setOutsideClickCallback((ev) => {
+      ev.consume(true);
+    });
+    dialog.setOnHideCallback(() => {
+      result.resolve(false);
+    });
+    dialog.setSizeBehavior(
+      "MeasureContent"
+      /* UI.GlassPane.SizeBehavior.MEASURE_CONTENT */
+    );
+    dialog.setDimmed(true);
+    dialog.show();
+    return result.promise;
+  }
+  constructor() {
+  }
+};
+
+// gen/front_end/ui/components/text_editor/config.js
+var config_exports = {};
+__export(config_exports, {
+  DynamicSetting: () => DynamicSetting,
+  acceptAiAutoCompleteSuggestion: () => acceptAiAutoCompleteSuggestion,
+  aiAutoCompleteSuggestion: () => aiAutoCompleteSuggestion,
+  aiAutoCompleteSuggestionState: () => aiAutoCompleteSuggestionState,
+  allowScrollPastEof: () => allowScrollPastEof,
+  autoDetectIndent: () => autoDetectIndent,
+  autocompletion: () => autocompletion2,
+  baseConfiguration: () => baseConfiguration,
+  bracketMatching: () => bracketMatching2,
+  closeBrackets: () => closeBrackets2,
+  codeFolding: () => codeFolding,
+  conservativeCompletion: () => conservativeCompletion,
+  contentIncludingHint: () => contentIncludingHint,
+  domWordWrap: () => domWordWrap,
+  dummyDarkTheme: () => dummyDarkTheme,
+  dynamicSetting: () => dynamicSetting,
+  hasActiveAiSuggestion: () => hasActiveAiSuggestion,
+  indentUnit: () => indentUnit2,
+  removeTooltipHost: () => removeTooltipHost,
+  setAiAutoCompleteSuggestion: () => setAiAutoCompleteSuggestion,
+  showCompletionHint: () => showCompletionHint,
+  showWhitespace: () => showWhitespace,
+  sourcesWordWrap: () => sourcesWordWrap,
+  tabMovesFocus: () => tabMovesFocus,
+  theme: () => theme,
+  themeSelection: () => themeSelection
+});
+import * as Common3 from "./..\\..\\..\\core\\common\\common.js";
+import * as i18n9 from "./..\\..\\..\\core\\i18n\\i18n.js";
+import * as TextUtils from "./..\\..\\..\\core\\text_utils\\text_utils.js";
+import * as CM3 from "./..\\..\\..\\third_party\\codemirror.next\\codemirror.next.js";
+import { Icon } from "./..\\..\\kit\\kit.js";
+import * as UI5 from "./..\\..\\legacy\\legacy.js";
+import * as VisualLogging4 from "./..\\..\\visual_logging\\visual_logging.js";
+import * as CodeHighlighter from "./..\\code_highlighter\\code_highlighter.js";
+
+// gen/front_end/ui/components/text_editor/theme.js
+import * as CM2 from "./..\\..\\..\\third_party\\codemirror.next\\codemirror.next.js";
+var editorTheme = CM2.EditorView.theme({
+  "&.cm-editor": {
+    color: "color: var(--sys-color-on-subtle)",
+    cursor: "auto",
+    "&.cm-focused": {
+      outline: "none"
+    }
+  },
+  ".cm-scroller": {
+    lineHeight: "1.4em",
+    fontFamily: "var(--source-code-font-family)",
+    fontSize: "var(--source-code-font-size)"
+  },
+  ".cm-content": {
+    lineHeight: "1.4em"
+  },
+  ".cm-panels": {
+    backgroundColor: "var(--sys-color-cdt-base-container)"
+  },
+  ".cm-panels-bottom": {
+    borderTop: "1px solid var(--sys-color-divider)"
+  },
+  ".cm-selectionMatch": {
+    backgroundColor: "var(--sys-color-yellow-container)"
+  },
+  ".cm-cursor": {
+    borderLeft: "1px solid var(--sys-color-inverse-surface)"
+  },
+  "&.cm-readonly .cm-cursor": {
+    display: "none"
+  },
+  ".cm-cursor-secondary": {
+    borderLeft: "1px solid var(--sys-color-neutral-outline)"
+  },
+  "&.cm-focused > .cm-scroller > .cm-selectionLayer .cm-selectionBackground": {
+    background: "var(--sys-color-tonal-container)"
+  },
+  ".cm-line::selection": {
+    color: "currentColor"
+  },
+  ".cm-selectionBackground": {
+    background: "var(--sys-color-neutral-container)"
+  },
+  ".cm-gutters": {
+    borderRight: "none",
+    whiteSpace: "nowrap",
+    backgroundColor: "var(--sys-color-cdt-base-container)"
+  },
+  ".cm-gutters .cm-foldGutterElement": {
+    cursor: "pointer",
+    opacity: "0%",
+    transition: "opacity 0.2s"
+  },
+  ".cm-gutters .cm-foldGutterElement-folded, .cm-gutters:hover .cm-foldGutterElement": {
+    opacity: "100%"
+  },
+  ".cm-lineNumbers": {
+    overflow: "visible",
+    minWidth: "40px"
+  },
+  ".cm-lineNumbers .cm-gutterElement": {
+    color: "var(--sys-color-outline)",
+    padding: "0 3px 0 9px"
+  },
+  ".cm-foldPlaceholder": {
+    background: "transparent",
+    border: "none",
+    color: "var(--sys-color-token-subtle)"
+  },
+  ".cm-matchingBracket, .cm-nonmatchingBracket": {
+    background: "transparent",
+    borderBottom: "none"
+  },
+  "&:focus-within .cm-matchingBracket": {
+    color: "inherit",
+    backgroundColor: "var(--sys-color-surface-variant)",
+    borderBottom: "1px solid var(--sys-color-outline)"
+  },
+  "&:focus-within .cm-nonmatchingBracket": {
+    backgroundColor: "var(--sys-color-error-container)",
+    borderBottom: "1px solid var(--sys-color-error)"
+  },
+  ".cm-trailingWhitespace": {
+    backgroundColor: "var(--sys-color-error-container)"
+  },
+  ".cm-highlightedTab": {
+    display: "inline-block",
+    position: "relative",
+    "&:before": {
+      content: '""',
+      borderBottom: "1px solid var(--sys-color-token-subtle)",
+      position: "absolute",
+      left: "5%",
+      bottom: "50%",
+      width: "90%",
+      pointerEvents: "none"
+    }
+  },
+  ".cm-highlightedSpaces:before": {
+    color: "var(--sys-color-token-subtle)",
+    content: "attr(data-display)",
+    position: "absolute",
+    pointerEvents: "none"
+  },
+  ".cm-placeholder": {
+    color: "var(--sys-color-token-subtle)"
+  },
+  ".cm-completionHint": {
+    color: "var(--sys-color-token-subtle)"
+  },
+  ".cm-tooltip": {
+    boxShadow: "var(--drop-shadow)",
+    backgroundColor: "var(--sys-color-neutral-container)"
+  },
+  ".cm-argumentHints": {
+    pointerEvents: "none",
+    padding: "0 4px",
+    whiteSpace: "nowrap",
+    lineHeight: "20px",
+    marginBottom: "4px",
+    width: "fit-content"
+  },
+  ".cm-tooltip.cm-tooltip-autocomplete > ul": {
+    backgroundColor: "var(--sys-color-cdt-base-container)",
+    maxHeight: "25em",
+    minWidth: "16em",
+    "& > li": {
+      display: "flex",
+      justifyContent: "space-between",
+      border: "1px solid var(--sys-color-cdt-base-container)"
+    },
+    "& > li.cm-secondaryCompletion": {
+      display: "flex",
+      backgroundColor: "var(--sys-color-neutral-container)",
+      borderColor: "var(--sys-color-neutral-container)",
+      justifyContent: "space-between",
+      "&::before": {
+        content: '">"',
+        fontWeight: "bold",
+        color: "var(--sys-color-primary-bright)",
+        marginRight: "5px"
+      }
+    },
+    "& > li:hover": {
+      backgroundColor: "var(--sys-color-state-hover-on-subtle)"
+    },
+    "& > li[aria-selected]": {
+      backgroundColor: "var(--sys-color-tonal-container)",
+      borderColor: "var(--sys-color-tonal-container)",
+      "&, &.cm-secondaryCompletion::before": {
+        color: "var(--sys-color-on-tonal-container)"
+      },
+      "&::after": {
+        content: '"tab"',
+        color: "var(--sys-color-primary-bright)",
+        border: "1px solid var(--sys-color-primary-bright)",
+        borderRadius: "2px",
+        marginLeft: "5px",
+        padding: "1px 3px",
+        fontSize: "10px",
+        lineHeight: "10px"
+      }
+    }
+  },
+  ".cm-tooltip.cm-tooltip-autocomplete.cm-conservativeCompletion > ul > li[aria-selected]": {
+    backgroundColor: "var(--sys-color-cdt-base-container)",
+    border: "1px dotted var(--sys-color-on-surface)",
+    "&, &.cm-secondaryCompletion::before": {
+      color: "var(--sys-color-on-surface)"
+    },
+    "&::after": {
+      border: "1px solid var(--sys-color-neutral-outline)",
+      color: "var(--sys-color-token-subtle)"
+    }
+  },
+  ".cm-completionMatchedText": {
+    textDecoration: "none",
+    fontWeight: "bold"
+  },
+  ".cm-highlightedLine": {
+    animation: "cm-fading-highlight 2s 0s"
+  },
+  "@keyframes cm-fading-highlight": {
+    from: {
+      backgroundColor: "var(--sys-color-yellow-container)"
+    },
+    to: {
+      backgroundColor: "transparent"
+    }
+  }
+});
+
+// gen/front_end/ui/components/text_editor/config.js
+var LINES_TO_SCAN_FOR_INDENTATION_GUESSING = 1e3;
+var RECOMPUTE_INDENT_MAX_SIZE = 200;
+var UIStrings = {
+  /**
+   * @description Label text for the editor.
+   */
+  codeEditor: "Code editor",
+  /**
+   * @description Aria alert to read the suggestion for the suggestion box when typing in text editor.
+   * @example {name} PH1
+   * @example {2} PH2
+   * @example {5} PH3
+   */
+  sSuggestionSOfS: "{PH1}, suggestion {PH2} of {PH3}"
+};
+var str_ = i18n9.i18n.registerUIStrings("ui/components/text_editor/config.ts", UIStrings);
+var i18nString = i18n9.i18n.getLocalizedString.bind(void 0, str_);
+var empty = [];
+var dynamicSetting = CM3.Facet.define();
+var DynamicSetting = class _DynamicSetting {
+  settingName;
+  getExtension;
+  compartment = new CM3.Compartment();
+  constructor(settingName, getExtension) {
+    this.settingName = settingName;
+    this.getExtension = getExtension;
+  }
+  settingValue() {
+    return Common3.Settings.Settings.instance().moduleSetting(this.settingName).get();
+  }
+  instance() {
+    return [
+      this.compartment.of(this.getExtension(this.settingValue())),
+      dynamicSetting.of(this)
+    ];
+  }
+  sync(state, value) {
+    const cur = this.compartment.get(state);
+    const needed = this.getExtension(value);
+    return cur === needed ? null : this.compartment.reconfigure(needed);
+  }
+  static bool(name, enabled, disabled = empty) {
+    return new _DynamicSetting(name, (val) => val ? enabled : disabled);
+  }
+  static none = [];
+};
+var tabMovesFocus = DynamicSetting.bool("text-editor-tab-moves-focus", [], CM3.keymap.of([{
+  key: "Tab",
+  run: (view) => view.state.doc.length ? CM3.indentMore(view) : false,
+  shift: (view) => view.state.doc.length ? CM3.indentLess(view) : false
+}]));
+var disableConservativeCompletion = CM3.StateEffect.define();
+var conservativeCompletion = CM3.StateField.define({
+  create() {
+    return true;
+  },
+  update(value, tr) {
+    if (CM3.completionStatus(tr.state) !== "active") {
+      return true;
+    }
+    if ((CM3.selectedCompletionIndex(tr.startState) ?? 0) !== (CM3.selectedCompletionIndex(tr.state) ?? 0) || tr.effects.some((e) => e.is(disableConservativeCompletion))) {
+      return false;
+    }
+    return value;
+  }
+});
+function acceptCompletionIfNotConservative(view) {
+  return !view.state.field(conservativeCompletion, false) && CM3.acceptCompletion(view);
+}
+function acceptCompletionIfAtEndOfLine(view) {
+  const cursorPosition = view.state.selection.main.head;
+  const line = view.state.doc.lineAt(cursorPosition);
+  const column = cursorPosition - line.from;
+  const isCursorAtEndOfLine = column >= line.length;
+  if (isCursorAtEndOfLine) {
+    return CM3.acceptCompletion(view);
+  }
+  return false;
+}
+function moveCompletionSelectionIfNotConservative(forward, by = "option") {
+  return (view) => {
+    if (CM3.completionStatus(view.state) !== "active") {
+      return false;
+    }
+    if (view.state.field(conservativeCompletion, false)) {
+      view.dispatch({ effects: disableConservativeCompletion.of(null) });
+      announceSelectedCompletionInfo(view);
+      return true;
+    }
+    const moveSelectionResult = CM3.moveCompletionSelection(forward, by)(view);
+    announceSelectedCompletionInfo(view);
+    return moveSelectionResult;
+  };
+}
+function moveCompletionSelectionBackwardWrapper() {
+  return (view) => {
+    if (CM3.completionStatus(view.state) !== "active") {
+      return false;
+    }
+    CM3.moveCompletionSelection(false)(view);
+    announceSelectedCompletionInfo(view);
+    return true;
+  };
+}
+function announceSelectedCompletionInfo(view) {
+  const ariaMessage = i18nString(UIStrings.sSuggestionSOfS, {
+    PH1: CM3.selectedCompletion(view.state)?.label || "",
+    PH2: (CM3.selectedCompletionIndex(view.state) || 0) + 1,
+    PH3: CM3.currentCompletions(view.state).length
+  });
+  UI5.ARIAUtils.LiveAnnouncer.alert(ariaMessage);
+}
+var autocompletion2 = new DynamicSetting("text-editor-autocompletion", (activateOnTyping) => [
+  CM3.autocompletion({
+    activateOnTyping,
+    icons: false,
+    optionClass: (option) => option.type === "secondary" ? "cm-secondaryCompletion" : "",
+    tooltipClass: (state) => {
+      return state.field(conservativeCompletion, false) ? "cm-conservativeCompletion" : "";
+    },
+    defaultKeymap: false,
+    updateSyncTime: 100
+  }),
+  CM3.Prec.highest(CM3.keymap.of([
+    { key: "End", run: acceptCompletionIfAtEndOfLine },
+    { key: "ArrowRight", run: acceptCompletionIfAtEndOfLine },
+    { key: "Ctrl-Space", run: CM3.startCompletion },
+    { key: "Escape", run: CM3.closeCompletion },
+    { key: "ArrowDown", run: moveCompletionSelectionIfNotConservative(true) },
+    { key: "ArrowUp", run: moveCompletionSelectionBackwardWrapper() },
+    { mac: "Ctrl-n", run: moveCompletionSelectionIfNotConservative(true) },
+    { mac: "Ctrl-p", run: moveCompletionSelectionBackwardWrapper() },
+    { key: "PageDown", run: CM3.moveCompletionSelection(true, "page") },
+    { key: "PageUp", run: CM3.moveCompletionSelection(false, "page") },
+    { key: "Enter", run: acceptCompletionIfNotConservative }
+  ]))
+]);
+var bracketMatching2 = DynamicSetting.bool("text-editor-bracket-matching", CM3.bracketMatching());
+var codeFolding = DynamicSetting.bool("text-editor-code-folding", [
+  CM3.foldGutter({
+    markerDOM(open) {
+      const iconName = open ? "triangle-down" : "triangle-right";
+      const icon = new Icon();
+      icon.setAttribute("class", open ? "cm-foldGutterElement" : "cm-foldGutterElement cm-foldGutterElement-folded");
+      icon.setAttribute("jslog", `${VisualLogging4.expand().track({ click: true })}`);
+      icon.name = iconName;
+      icon.classList.add("small");
+      return icon;
+    }
+  }),
+  CM3.keymap.of(CM3.foldKeymap)
+]);
+var AutoDetectIndent = CM3.StateField.define({
+  create: (state) => detectIndentation(state.doc),
+  update: (indent, tr) => {
+    return tr.docChanged && preservedLength(tr.changes) <= RECOMPUTE_INDENT_MAX_SIZE ? detectIndentation(tr.state.doc) : indent;
+  },
+  provide: (f) => CM3.Prec.highest(CM3.indentUnit.from(f))
+});
+function preservedLength(ch) {
+  let len = 0;
+  ch.iterGaps((_from, _to, l) => {
+    len += l;
+  });
+  return len;
+}
+function detectIndentation(doc) {
+  const lines = doc.iterLines(1, Math.min(doc.lines + 1, LINES_TO_SCAN_FOR_INDENTATION_GUESSING));
+  const indentUnit3 = TextUtils.TextUtils.detectIndentation(lines);
+  return indentUnit3 ?? Common3.Settings.Settings.instance().moduleSetting("text-editor-indent").get();
+}
+var autoDetectIndent = DynamicSetting.bool("text-editor-auto-detect-indent", AutoDetectIndent);
+function matcher(decorator) {
+  return CM3.ViewPlugin.define((view) => ({
+    decorations: decorator.createDeco(view),
+    update(u) {
+      this.decorations = decorator.updateDeco(u, this.decorations);
+    }
+  }), {
+    decorations: (v) => v.decorations
+  });
+}
+var WhitespaceDeco = /* @__PURE__ */ new Map();
+function getWhitespaceDeco(space) {
+  const cached = WhitespaceDeco.get(space);
+  if (cached) {
+    return cached;
+  }
+  const result = CM3.Decoration.mark({
+    attributes: space === "	" ? {
+      class: "cm-highlightedTab"
+    } : { class: "cm-highlightedSpaces", "data-display": "\xB7".repeat(space.length) }
+  });
+  WhitespaceDeco.set(space, result);
+  return result;
+}
+var showAllWhitespace = matcher(new CM3.MatchDecorator({
+  regexp: /\t| +/g,
+  decoration: (match) => getWhitespaceDeco(match[0]),
+  boundary: /\S/
+}));
+var showTrailingWhitespace = matcher(new CM3.MatchDecorator({
+  regexp: /\s+$/g,
+  decoration: CM3.Decoration.mark({ class: "cm-trailingWhitespace" }),
+  boundary: /\S/
+}));
+var showWhitespace = new DynamicSetting("show-whitespaces-in-editor", (value) => {
+  if (value === "all") {
+    return showAllWhitespace;
+  }
+  if (value === "trailing") {
+    return showTrailingWhitespace;
+  }
+  return empty;
+});
+var allowScrollPastEof = DynamicSetting.bool("allow-scroll-past-eof", CM3.scrollPastEnd());
+var cachedIndentUnit = /* @__PURE__ */ Object.create(null);
+function getIndentUnit(indent) {
+  let value = cachedIndentUnit[indent];
+  if (!value) {
+    value = cachedIndentUnit[indent] = CM3.indentUnit.of(indent);
+  }
+  return value;
+}
+var indentUnit2 = new DynamicSetting("text-editor-indent", getIndentUnit);
+var domWordWrap = DynamicSetting.bool("dom-word-wrap", CM3.EditorView.lineWrapping);
+var sourcesWordWrap = DynamicSetting.bool("sources.word-wrap", CM3.EditorView.lineWrapping);
+function detectLineSeparator(text) {
+  if (/\r\n/.test(text) && !/(^|[^\r])\n/.test(text)) {
+    return CM3.EditorState.lineSeparator.of("\r\n");
+  }
+  return [];
+}
+var baseKeymap = CM3.keymap.of([
+  { key: "Tab", run: CM3.acceptCompletion },
+  { key: "Ctrl-m", run: CM3.cursorMatchingBracket, shift: CM3.selectMatchingBracket },
+  { key: "Mod-/", run: CM3.toggleComment },
+  { key: "Mod-d", run: CM3.selectNextOccurrence },
+  { key: "Alt-ArrowLeft", mac: "Ctrl-ArrowLeft", run: CM3.cursorSyntaxLeft, shift: CM3.selectSyntaxLeft },
+  { key: "Alt-ArrowRight", mac: "Ctrl-ArrowRight", run: CM3.cursorSyntaxRight, shift: CM3.selectSyntaxRight },
+  { key: "Ctrl-ArrowLeft", mac: "Alt-ArrowLeft", run: CM3.cursorGroupLeft, shift: CM3.selectGroupLeft },
+  { key: "Ctrl-ArrowRight", mac: "Alt-ArrowRight", run: CM3.cursorGroupRight, shift: CM3.selectGroupRight },
+  ...CM3.standardKeymap,
+  ...CM3.historyKeymap
+]);
+function themeIsDark() {
+  const setting = Common3.Settings.Settings.instance().moduleSetting("ui-theme").get();
+  return setting === "systemPreferred" ? window.matchMedia("(prefers-color-scheme: dark)").matches : setting === "dark";
+}
+var dummyDarkTheme = CM3.EditorView.theme({}, { dark: true });
+var themeSelection = new CM3.Compartment();
+function theme() {
+  return [editorTheme, themeIsDark() ? themeSelection.of(dummyDarkTheme) : themeSelection.of([])];
+}
+var sideBarElement = null;
+function getTooltipSpace() {
+  if (!sideBarElement) {
+    sideBarElement = UI5.UIUtils.getDevToolsBoundingElement();
+  }
+  return sideBarElement.getBoundingClientRect();
+}
+function baseConfiguration(text) {
+  return [
+    theme(),
+    CM3.highlightSpecialChars(),
+    CM3.highlightSelectionMatches(),
+    CM3.history(),
+    CM3.drawSelection(),
+    CM3.EditorState.allowMultipleSelections.of(true),
+    CM3.indentOnInput(),
+    CM3.syntaxHighlighting(CodeHighlighter.CodeHighlighter.highlightStyle),
+    baseKeymap,
+    CM3.EditorView.clickAddsSelectionRange.of((mouseEvent) => mouseEvent.altKey || mouseEvent.ctrlKey),
+    tabMovesFocus.instance(),
+    bracketMatching2.instance(),
+    indentUnit2.instance(),
+    CM3.Prec.lowest(CM3.EditorView.contentAttributes.of({ "aria-label": i18nString(UIStrings.codeEditor) })),
+    text instanceof CM3.Text ? [] : detectLineSeparator(text),
+    CM3.tooltips({
+      parent: getTooltipHost(),
+      tooltipSpace: getTooltipSpace
+    }),
+    CM3.bidiIsolates()
+  ];
+}
+var closeBrackets2 = DynamicSetting.bool("text-editor-bracket-closing", [
+  CM3.html.autoCloseTags,
+  CM3.closeBrackets(),
+  CM3.keymap.of(CM3.closeBracketsKeymap)
+]);
+var tooltipHost = null;
+function getTooltipHost() {
+  if (!tooltipHost) {
+    const styleModules = CM3.EditorState.create({
+      extensions: [
+        editorTheme,
+        themeIsDark() ? dummyDarkTheme : [],
+        CM3.syntaxHighlighting(CodeHighlighter.CodeHighlighter.highlightStyle),
+        CM3.showTooltip.of({
+          pos: 0,
+          create() {
+            return { dom: document.createElement("div") };
+          }
+        })
+      ]
+    }).facet(CM3.EditorView.styleModule);
+    const host = document.body.appendChild(document.createElement("div"));
+    host.className = "editor-tooltip-host";
+    tooltipHost = host.attachShadow({ mode: "open" });
+    CM3.StyleModule.mount(tooltipHost, styleModules);
+  }
+  return tooltipHost;
+}
+function removeTooltipHost() {
+  if (tooltipHost) {
+    tooltipHost.host.remove();
+    tooltipHost = null;
+  }
+}
+var CompletionHint = class extends CM3.WidgetType {
+  text;
+  constructor(text) {
+    super();
+    this.text = text;
+  }
+  eq(other) {
+    return this.text === other.text;
+  }
+  toDOM() {
+    const span = document.createElement("span");
+    span.className = "cm-completionHint";
+    span.textContent = this.text;
+    return span;
+  }
+};
+var showCompletionHint = CM3.ViewPlugin.fromClass(class {
+  decorations = CM3.Decoration.none;
+  currentHint = null;
+  update(update) {
+    const top = this.currentHint = this.topCompletion(update.state);
+    if (!top || update.state.field(conservativeCompletion, false)) {
+      this.decorations = CM3.Decoration.none;
+    } else {
+      this.decorations = CM3.Decoration.set([CM3.Decoration.widget({ widget: new CompletionHint(top), side: 1 }).range(update.state.selection.main.head)]);
+    }
+  }
+  topCompletion(state) {
+    const completion2 = CM3.selectedCompletion(state);
+    if (!completion2) {
+      return null;
+    }
+    let { label, apply } = completion2;
+    if (typeof apply === "string") {
+      label = apply;
+      apply = void 0;
+    }
+    if (apply || label.length > 100 || label.indexOf("\n") > -1 || completion2.type === "secondary") {
+      return null;
+    }
+    const pos = state.selection.main.head;
+    const lineBefore = state.doc.lineAt(pos);
+    if (pos !== lineBefore.to) {
+      return null;
+    }
+    const partBefore = (label[0] === "'" ? /'(\\.|[^'\\])*$/ : label[0] === '"' ? /"(\\.|[^"\\])*$/ : /#?[\w$]+$/).exec(lineBefore.text);
+    if (partBefore && !label.startsWith(partBefore[0])) {
+      return null;
+    }
+    return label.slice(partBefore ? partBefore[0].length : 0);
+  }
+}, { decorations: (p) => p.decorations });
+function contentIncludingHint(view) {
+  const plugin = view.plugin(showCompletionHint);
+  let content = view.state.doc.toString();
+  if (plugin?.currentHint) {
+    const { head } = view.state.selection.main;
+    content = content.slice(0, head) + plugin.currentHint + content.slice(head);
+  }
+  return content;
+}
+var setAiAutoCompleteSuggestion = CM3.StateEffect.define();
+var aiAutoCompleteSuggestionState = CM3.StateField.define({
+  create: () => null,
+  update(value, tr) {
+    for (const effect of tr.effects) {
+      if (effect.is(setAiAutoCompleteSuggestion)) {
+        if (effect.value) {
+          return effect.value;
+        }
+        value?.clearCachedRequest?.();
+        return null;
+      }
+    }
+    if (!value) {
+      return value;
+    }
+    if (value.from > tr.state.doc.length) {
+      value.clearCachedRequest?.();
+      return null;
+    }
+    if (tr.docChanged && tr.state.doc.length < tr.startState.doc.length) {
+      value.clearCachedRequest?.();
+      return null;
+    }
+    const from = tr.changes.mapPos(value.from);
+    const { head } = tr.state.selection.main;
+    if (tr.docChanged && head < from) {
+      value.clearCachedRequest?.();
+      return null;
+    }
+    const typedText = tr.state.doc.sliceString(from, head);
+    return value.text.startsWith(typedText) ? value : null;
+  }
+});
+function hasActiveAiSuggestion(state) {
+  return state.field(aiAutoCompleteSuggestionState) !== null;
+}
+function acceptAiAutoCompleteSuggestion(view) {
+  const selectedCompletion2 = CM3.selectedCompletion(view.state);
+  if (selectedCompletion2) {
+    return { accepted: false };
+  }
+  const suggestion = view.state.field(aiAutoCompleteSuggestionState);
+  if (!suggestion) {
+    return { accepted: false };
+  }
+  const { text, from } = suggestion;
+  const { head } = view.state.selection.main;
+  const typedText = view.state.doc.sliceString(from, head);
+  if (!text.startsWith(typedText)) {
+    return { accepted: false };
+  }
+  const remainingText = text.slice(typedText.length);
+  view.dispatch({
+    changes: { from: head, insert: remainingText },
+    selection: { anchor: head + remainingText.length },
+    effects: setAiAutoCompleteSuggestion.of(null),
+    userEvent: "input.complete"
+  });
+  suggestion.clearCachedRequest?.();
+  return { accepted: true, suggestion };
+}
+var aiAutoCompleteSuggestion = [
+  aiAutoCompleteSuggestionState,
+  CM3.ViewPlugin.fromClass(class {
+    decorations = CM3.Decoration.none;
+    #lastLoggedSuggestion = null;
+    update(update) {
+      if (update.state.doc.length === 0) {
+        this.decorations = CM3.Decoration.none;
+        return;
+      }
+      const activeSuggestion = update.state.field(aiAutoCompleteSuggestionState);
+      if (!activeSuggestion) {
+        this.decorations = CM3.Decoration.none;
+        return;
+      }
+      if (CM3.completionStatus(update.view.state) === "pending") {
+        this.decorations = CM3.Decoration.none;
+        return;
+      }
+      const selectedCompletionIndex2 = CM3.selectedCompletionIndex(update.state);
+      if (selectedCompletionIndex2 && selectedCompletionIndex2 > 0) {
+        this.decorations = CM3.Decoration.none;
+        return;
+      }
+      const { head } = update.state.selection.main;
+      if (head < activeSuggestion.from) {
+        this.decorations = CM3.Decoration.none;
+        return;
+      }
+      const selectedCompletion2 = CM3.selectedCompletion(update.state);
+      const additionallyTypedText = update.state.doc.sliceString(activeSuggestion.from, head);
+      if (!activeSuggestion.text.startsWith(additionallyTypedText)) {
+        this.decorations = CM3.Decoration.none;
+        return;
+      }
+      let ghostText = activeSuggestion.text.slice(additionallyTypedText.length);
+      if (selectedCompletion2) {
+        if (selectedCompletion2.type?.includes("keyword")) {
+          this.decorations = CM3.Decoration.none;
+          return;
+        }
+        const overlappingText = TextUtils.TextUtils.getOverlap(selectedCompletion2.label, ghostText) ?? "";
+        const lineAtAiSuggestion = update.state.doc.lineAt(activeSuggestion.from).text;
+        const overlapsWithSelectedCompletion = (lineAtAiSuggestion + overlappingText).endsWith(selectedCompletion2.label);
+        if (!overlapsWithSelectedCompletion) {
+          this.decorations = CM3.Decoration.none;
+          return;
+        }
+      }
+      const currentMenuHint = update.view.plugin(showCompletionHint)?.currentHint;
+      const conservativeCompletionEnabled = update.state.field(conservativeCompletion, false);
+      if (!conservativeCompletionEnabled && currentMenuHint) {
+        ghostText = ghostText.slice(currentMenuHint.length);
+      }
+      this.decorations = CM3.Decoration.set([CM3.Decoration.widget({ widget: new CompletionHint(ghostText), side: 1 }).range(head)]);
+      this.#registerImpressionIfNeeded(activeSuggestion);
+    }
+    #registerImpressionIfNeeded(activeSuggestion) {
+      if (!activeSuggestion.rpcGlobalId) {
+        return;
+      }
+      if (this.#lastLoggedSuggestion?.rpcGlobalId === activeSuggestion?.rpcGlobalId && this.#lastLoggedSuggestion?.sampleId === activeSuggestion?.sampleId) {
+        return;
+      }
+      const latency = performance.now() - activeSuggestion.startTime;
+      activeSuggestion.onImpression(activeSuggestion.rpcGlobalId, latency, activeSuggestion.sampleId);
+      this.#lastLoggedSuggestion = activeSuggestion;
+    }
+  }, { decorations: (p) => p.decorations })
+];
+
+// gen/front_end/ui/components/text_editor/AiCodeGenerationProvider.js
+var AiCodeGenerationTeaserMode;
+(function(AiCodeGenerationTeaserMode2) {
+  AiCodeGenerationTeaserMode2["ACTIVE"] = "active";
+  AiCodeGenerationTeaserMode2["DISMISSED"] = "dismissed";
+})(AiCodeGenerationTeaserMode || (AiCodeGenerationTeaserMode = {}));
+var setAiCodeGenerationTeaserMode = CodeMirror2.StateEffect.define();
+var aiCodeGenerationTeaserModeState = CodeMirror2.StateField.define({
+  create: () => AiCodeGenerationTeaserMode.ACTIVE,
+  update(value, tr) {
+    return tr.effects.find((effect) => effect.is(setAiCodeGenerationTeaserMode))?.value ?? value;
+  }
+});
+var AiCodeGenerationProvider = class _AiCodeGenerationProvider {
+  // 'ai-code-completion-enabled' setting controls both AI code completion and AI code generation.
+  // Since this provider deals with code generation, the field has been named `#aiCodeGenerationEnabledSetting`.
+  #aiCodeGenerationEnabledSetting = Common4.Settings.Settings.instance().createSetting("ai-code-completion-enabled", false);
+  #aiCodeGenerationSettingEnabled = this.#aiCodeGenerationEnabledSetting.get();
+  #aiCodeGenerationOnboardingCompletedSetting = Common4.Settings.Settings.instance().createSetting("ai-code-generation-onboarding-completed", false);
+  #aiCodeGenerationUsedSetting = Common4.Settings.Settings.instance().createSetting("ai-code-generation-used", false);
+  #generationTeaserCompartment = new CodeMirror2.Compartment();
+  #generationTeaser;
+  #editor;
+  #aiCodeGenerationConfig;
+  #aiCodeGeneration;
+  #aiCodeGenerationCitations = [];
+  #aidaClient = new Host5.AidaClient.AidaClient();
+  #boundOnAidaAvailabilityChange = (ev) => {
+    void this.#updateAiCodeGenerationStateWithAvailability(ev.data);
+  };
+  #boundOnSettingChange = () => {
+    const aidaAvailability = Host5.AidaClient.HostConfigTracker.instance().aidaAvailability;
+    if (aidaAvailability !== void 0) {
+      void this.#updateAiCodeGenerationStateWithAvailability(aidaAvailability);
+    }
+  };
+  #controller = new AbortController();
+  constructor(aiCodeGenerationConfig) {
+    if (!AiCodeGeneration3.AiCodeGeneration.AiCodeGeneration.isAiCodeGenerationAvailable()) {
+      throw new Error("AI code generation feature is not available.");
+    }
+    this.#generationTeaser = new AiCodeGenerationTeaser();
+    this.#generationTeaser.disclaimerTooltipId = aiCodeGenerationConfig.disclaimerTooltipId;
+    this.#generationTeaser.disclaimerTextVariant = aiCodeGenerationConfig.disclaimerTextVariant;
+    this.#aiCodeGenerationConfig = aiCodeGenerationConfig;
+  }
+  static createInstance(aiCodeGenerationConfig) {
+    return new _AiCodeGenerationProvider(aiCodeGenerationConfig);
+  }
+  extension() {
+    return [
+      CodeMirror2.EditorView.updateListener.of((update) => this.#activateTeaser(update)),
+      CodeMirror2.EditorView.updateListener.of((update) => this.#abortOrDismissGenerationDuringUpdate(update)),
+      aiAutoCompleteSuggestion,
+      aiAutoCompleteSuggestionState,
+      aiCodeGenerationTeaserModeState,
+      CodeMirror2.Prec.highest(this.#generationTeaserCompartment.of([])),
+      CodeMirror2.Prec.highest(CodeMirror2.keymap.of(this.#editorKeymap()))
+    ];
+  }
+  dispose() {
+    this.#controller.abort();
+    this.#cleanupAiCodeGeneration();
+    this.#aiCodeGenerationEnabledSetting.removeChangeListener(this.#boundOnSettingChange);
+    Host5.AidaClient.HostConfigTracker.instance().removeEventListener("aidaAvailabilityChanged", this.#boundOnAidaAvailabilityChange);
+  }
+  editorInitialized(editor) {
+    this.#editor = editor;
+    Host5.AidaClient.HostConfigTracker.instance().addEventListener("aidaAvailabilityChanged", this.#boundOnAidaAvailabilityChange);
+    this.#aiCodeGenerationEnabledSetting.addChangeListener(this.#boundOnSettingChange);
+    const initialAvailability = Host5.AidaClient.HostConfigTracker.instance().aidaAvailability;
+    if (initialAvailability !== void 0) {
+      void this.#updateAiCodeGenerationStateWithAvailability(initialAvailability);
+    }
+  }
+  async #setupAiCodeGeneration() {
+    if (this.#aiCodeGeneration) {
+      return;
+    }
+    this.#aiCodeGeneration = new AiCodeGeneration3.AiCodeGeneration.AiCodeGeneration({
+      aidaClient: this.#aidaClient,
+      serverSideLoggingEnabled: !Root4.Runtime.hostConfig.aidaAvailability?.disallowLogging
+    });
+    this.#editor?.dispatch({
+      effects: [this.#generationTeaserCompartment.reconfigure([aiCodeGenerationTeaserExtension(this.#generationTeaser)])]
+    });
+  }
+  #cleanupAiCodeGeneration() {
+    if (!this.#aiCodeGeneration) {
+      return;
+    }
+    this.#aiCodeGeneration = void 0;
+    this.#editor?.dispatch({
+      effects: [this.#generationTeaserCompartment.reconfigure([])]
+    });
+  }
+  async #updateAiCodeGenerationStateWithAvailability(aidaAvailability) {
+    const isAvailable = aidaAvailability === "available";
+    const devtoolsLocale = i18n11.DevToolsLocale.DevToolsLocale.instance().locale;
+    const aiCodeGenerationEnabled = AiCodeGeneration3.AiCodeGeneration.AiCodeGeneration.isAiCodeGenerationEnabled(devtoolsLocale);
+    const isSettingEnabled = this.#aiCodeGenerationEnabledSetting.get();
+    if (isAvailable && aiCodeGenerationEnabled && isSettingEnabled) {
+      if (!this.#aiCodeGenerationSettingEnabled) {
+        this.#aiCodeGenerationOnboardingCompletedSetting.set(true);
+      }
+      await this.#setupAiCodeGeneration();
+    } else {
+      this.#cleanupAiCodeGeneration();
+    }
+    this.#aiCodeGenerationSettingEnabled = isSettingEnabled;
+  }
+  #editorKeymap() {
+    return [
+      {
+        key: "Escape",
+        run: () => {
+          if (!this.#editor || !this.#aiCodeGeneration) {
+            return false;
+          }
+          if (hasActiveAiSuggestion(this.#editor.state)) {
+            if (this.#editor.state.field(aiAutoCompleteSuggestionState)?.source === "completion") {
+              return false;
+            }
+            this.#dismissTeaserAndSuggestion();
+            return true;
+          }
+          const generationTeaserIsLoading = this.#generationTeaser.displayState === AiCodeGenerationTeaserDisplayState.LOADING;
+          if (this.#generationTeaser.isShowing() && generationTeaserIsLoading) {
+            this.#controller.abort();
+            this.#controller = new AbortController();
+            this.#dismissTeaserAndSuggestion();
+            return true;
+          }
+          return false;
+        }
+      },
+      {
+        key: "Tab",
+        run: this.#acceptAiSuggestion.bind(this)
+      },
+      {
+        key: "Enter",
+        run: this.#acceptAiSuggestion.bind(this)
+      },
+      {
+        any: (_view, event) => {
+          if (!this.#editor || !this.#aiCodeGeneration || !this.#generationTeaser.isShowing()) {
+            return false;
+          }
+          if (UI6.KeyboardShortcut.KeyboardShortcut.eventHasCtrlEquivalentKey(event)) {
+            if (event.key === "i") {
+              void this.#triggerAiCodeGenerationFlow(event);
+              return true;
+            }
+          }
+          return false;
+        }
+      }
+    ];
+  }
+  async #triggerAiCodeGenerationFlow(event) {
+    event.consume(true);
+    const isOnboarded = await this.#onboardUser();
+    if (!isOnboarded) {
+      return;
+    }
+    void VisualLogging5.logKeyDown(event.currentTarget, event, "ai-code-generation.triggered");
+    if (this.#aiCodeGenerationConfig?.disclaimerTextVariant === "console") {
+      Host5.userMetrics.actionTaken(Host5.UserMetrics.Action.AiCodeGenerationRequestTriggeredFromConsole);
+      void VisualLogging5.logKeyDown(event.currentTarget, event, "ai-code-generation.triggered-from-console");
+    } else if (this.#aiCodeGenerationConfig?.disclaimerTextVariant === "sources") {
+      Host5.userMetrics.actionTaken(Host5.UserMetrics.Action.AiCodeGenerationRequestTriggeredFromSources);
+      void VisualLogging5.logKeyDown(event.currentTarget, event, "ai-code-generation.triggered-from-sources");
+    }
+    void this.#triggerAiCodeGeneration({ signal: this.#controller.signal });
+  }
+  async #onboardUser() {
+    if (this.#aiCodeGenerationOnboardingCompletedSetting.get()) {
+      return true;
+    }
+    const noLogging = Root4.Runtime.hostConfig.aidaAvailability?.enterprisePolicyValue === Root4.Runtime.GenAiEnterprisePolicyValue.ALLOW_WITHOUT_LOGGING;
+    const resolved = await AiCodeGenerationUpgradeDialog.show({ noLogging });
+    this.#aiCodeGenerationOnboardingCompletedSetting.set(resolved);
+    return resolved;
+  }
+  #dismissTeaserAndSuggestion() {
+    this.#generationTeaser.displayState = AiCodeGenerationTeaserDisplayState.TRIGGER;
+    this.#editor?.dispatch({
+      effects: [
+        setAiCodeGenerationTeaserMode.of(AiCodeGenerationTeaserMode.DISMISSED),
+        setAiAutoCompleteSuggestion.of(null)
+      ]
+    });
+  }
+  #acceptAiSuggestion() {
+    if (!this.#aiCodeGeneration || !this.#editor || !hasActiveAiSuggestion(this.#editor.state)) {
+      return false;
+    }
+    const { accepted, suggestion } = acceptAiAutoCompleteSuggestion(this.#editor.editor);
+    if (!accepted) {
+      return false;
+    }
+    if (suggestion?.rpcGlobalId) {
+      this.#aiCodeGeneration.registerUserAcceptance(suggestion.rpcGlobalId, suggestion.sampleId);
+    }
+    this.#aiCodeGenerationConfig?.onSuggestionAccepted(this.#aiCodeGenerationCitations);
+    return true;
+  }
+  #activateTeaser(update) {
+    const currentTeaserMode = update.state.field(aiCodeGenerationTeaserModeState);
+    if (currentTeaserMode === AiCodeGenerationTeaserMode.ACTIVE) {
+      return;
+    }
+    if (!update.docChanged && update.state.selection.main.head === update.startState.selection.main.head) {
+      return;
+    }
+    update.view.dispatch({ effects: setAiCodeGenerationTeaserMode.of(AiCodeGenerationTeaserMode.ACTIVE) });
+  }
+  /**
+   * Monitors editor changes to cancel an ongoing AI generation or dismiss one
+   * if it already exists.
+   * We abort the request (or dismiss suggestion) and dismiss the teaser if the
+   * user modifies the document or moves their cursor/selection. These actions
+   * indicate the user is no longer focused on the current generation point or
+   * has manually resumed editing, making the suggestion irrelevant.
+   */
+  #abortOrDismissGenerationDuringUpdate(update) {
+    if (!update.docChanged && update.state.selection.main.head === update.startState.selection.main.head) {
+      return;
+    }
+    const currentTeaserMode = update.state.field(aiCodeGenerationTeaserModeState);
+    if (currentTeaserMode === AiCodeGenerationTeaserMode.DISMISSED) {
+      return;
+    }
+    if (this.#generationTeaser.displayState === AiCodeGenerationTeaserDisplayState.LOADING) {
+      this.#controller.abort();
+      this.#controller = new AbortController();
+      this.#dismissTeaserAndSuggestion();
+      return;
+    }
+    if (this.#generationTeaser.displayState === AiCodeGenerationTeaserDisplayState.GENERATED) {
+      update.view.dispatch({ effects: setAiAutoCompleteSuggestion.of(null) });
+      this.#generationTeaser.displayState = AiCodeGenerationTeaserDisplayState.DISCOVERY;
+      return;
+    }
+  }
+  async #triggerAiCodeGeneration(options) {
+    if (!this.#editor || !this.#aiCodeGeneration) {
+      return;
+    }
+    this.#aiCodeGenerationUsedSetting.set(true);
+    this.#aiCodeGenerationCitations = [];
+    const cursor = this.#editor.state.selection.main.head;
+    const commentNodeInfo = AiCodeGenerationParser.extractCommentNodeInfo(this.#editor.state, cursor);
+    if (!commentNodeInfo) {
+      return;
+    }
+    this.#editor.dispatch({ selection: { anchor: commentNodeInfo.to } });
+    const query = commentNodeInfo.text;
+    if (!query || query.trim().length === 0) {
+      return;
+    }
+    this.#generationTeaser.displayState = AiCodeGenerationTeaserDisplayState.LOADING;
+    try {
+      const startTime = performance.now();
+      this.#aiCodeGenerationConfig.onRequestTriggered();
+      Host5.userMetrics.actionTaken(Host5.UserMetrics.Action.AiCodeGenerationRequestTriggered);
+      const preamble = AiCodeGeneration3.AiCodeGeneration.basePreamble + this.#aiCodeGenerationConfig.generationContext.additionalPreambleContext;
+      const generationResponse = await this.#aiCodeGeneration.generateCode(query, preamble, this.#aiCodeGenerationConfig.generationContext.inferenceLanguage, options);
+      if (this.#generationTeaser) {
+        this.#dismissTeaserAndSuggestion();
+      }
+      if (generationResponse.samples.length === 0) {
+        this.#aiCodeGenerationConfig.onResponseReceived();
+        return;
+      }
+      const topSample = generationResponse.samples[0];
+      const shouldBlock = topSample.attributionMetadata?.attributionAction === Host5.AidaClient.RecitationAction.BLOCK;
+      if (shouldBlock) {
+        return;
+      }
+      const backtickRegex = /^```(?:\w+)?\n([\s\S]*?)\n```$/;
+      const matchArray = topSample.generationString.match(backtickRegex);
+      const suggestionText = matchArray ? matchArray[1].trim() : topSample.generationString;
+      this.#editor.dispatch({
+        effects: [
+          setAiAutoCompleteSuggestion.of({
+            text: "\n" + suggestionText + "\n",
+            from: commentNodeInfo.to,
+            rpcGlobalId: generationResponse.metadata.rpcGlobalId,
+            sampleId: topSample.sampleId,
+            startTime,
+            onImpression: this.#aiCodeGeneration?.registerUserImpression.bind(this.#aiCodeGeneration),
+            source: "generation"
+          }),
+          setAiCodeGenerationTeaserMode.of(AiCodeGenerationTeaserMode.ACTIVE)
+        ]
+      });
+      this.#generationTeaser.displayState = AiCodeGenerationTeaserDisplayState.GENERATED;
+      AiCodeGeneration3.debugLog("Suggestion dispatched to the editor", suggestionText);
+      const citations = topSample.attributionMetadata?.citations ?? [];
+      this.#aiCodeGenerationCitations = citations;
+      this.#aiCodeGenerationConfig.onResponseReceived();
+      return;
+    } catch (e) {
+      if (e instanceof Host5.AidaClient.AidaAbortError) {
+        return;
+      }
+      AiCodeGeneration3.debugLog("Error while fetching code generation suggestions from AIDA", e);
+      this.#aiCodeGenerationConfig.onResponseReceived();
+      Host5.userMetrics.actionTaken(Host5.UserMetrics.Action.AiCodeGenerationError);
+    }
+    if (this.#generationTeaser) {
+      this.#dismissTeaserAndSuggestion();
+    }
+  }
+};
+function aiCodeGenerationTeaserExtension(teaser) {
+  return CodeMirror2.ViewPlugin.fromClass(class {
+    #view;
+    constructor(view) {
+      this.#view = view;
+      this.#updateTeaserState(view.state);
+    }
+    update(update) {
+      if (!update.docChanged && update.state.selection.main.head === update.startState.selection.main.head) {
+        return;
+      }
+      this.#updateTeaserState(update.state);
+    }
+    get decorations() {
+      const teaserMode = this.#view.state.field(aiCodeGenerationTeaserModeState);
+      if (teaserMode === AiCodeGenerationTeaserMode.DISMISSED) {
+        return CodeMirror2.Decoration.none;
+      }
+      const cursorPosition = this.#view.state.selection.main.head;
+      const line = this.#view.state.doc.lineAt(cursorPosition);
+      const isEmptyLine = line.length === 0;
+      const canShowDiscoveryState = UI6.UIUtils.PromotionManager.instance().canShowPromotion(PROMOTION_ID2);
+      if (isEmptyLine && canShowDiscoveryState) {
+        return CodeMirror2.Decoration.set([
+          CodeMirror2.Decoration.widget({ widget: new AccessiblePlaceholder(teaser), side: 1 }).range(cursorPosition)
+        ]);
+      }
+      const commentInfo = AiCodeGenerationParser.extractCommentNodeInfo(this.#view.state, cursorPosition);
+      if (commentInfo) {
+        const decorationPos = Math.max(cursorPosition, commentInfo.to);
+        return CodeMirror2.Decoration.set([
+          CodeMirror2.Decoration.widget({ widget: new AccessiblePlaceholder(teaser), side: 1 }).range(decorationPos)
+        ]);
+      }
+      return CodeMirror2.Decoration.none;
+    }
+    #updateTeaserState(state) {
+      if (teaser.displayState === AiCodeGenerationTeaserDisplayState.LOADING || teaser.displayState === AiCodeGenerationTeaserDisplayState.GENERATED) {
+        return;
+      }
+      const cursorPosition = state.selection.main.head;
+      const line = state.doc.lineAt(cursorPosition);
+      const isEmptyLine = line.length === 0;
+      if (isEmptyLine) {
+        teaser.displayState = AiCodeGenerationTeaserDisplayState.DISCOVERY;
+      } else {
+        teaser.displayState = AiCodeGenerationTeaserDisplayState.TRIGGER;
+      }
+    }
+  }, {
+    decorations: (v) => v.decorations,
+    eventHandlers: {
+      mousemove(event) {
+        return event.target instanceof Node && teaser.contentElement.contains(event.target);
+      },
+      mousedown(event, view) {
+        if (!(event.target instanceof Node) || !teaser.contentElement.contains(event.target)) {
+          return false;
+        }
+        const cursorPosition = view.state.selection.main.head;
+        const line = view.state.doc.lineAt(cursorPosition);
+        if (cursorPosition !== line.to) {
+          view.dispatch({ selection: { anchor: line.to, head: line.to } });
+        }
+        view.focus();
+        return true;
+      },
+      keydown(event) {
+        if (!UI6.KeyboardShortcut.KeyboardShortcut.eventHasCtrlEquivalentKey(event) || teaser.displayState !== AiCodeGenerationTeaserDisplayState.TRIGGER) {
+          return false;
+        }
+        if (event.key === ".") {
+          event.consume(true);
+          void VisualLogging5.logKeyDown(event.currentTarget, event, "ai-code-generation-teaser.show-disclaimer-info-tooltip");
+          teaser.showTooltip();
+          return true;
+        }
+        return false;
+      }
+    }
+  });
+}
+
+// gen/front_end/ui/components/text_editor/AiCodeCompletionProvider.js
+var AiCodeCompletionTeaserMode;
+(function(AiCodeCompletionTeaserMode2) {
+  AiCodeCompletionTeaserMode2["OFF"] = "off";
+  AiCodeCompletionTeaserMode2["ON"] = "on";
+  AiCodeCompletionTeaserMode2["ONLY_SHOW_ON_EMPTY"] = "onlyShowOnEmpty";
+})(AiCodeCompletionTeaserMode || (AiCodeCompletionTeaserMode = {}));
+var setAiCodeCompletionTeaserMode = CodeMirror3.StateEffect.define();
+var aiCodeCompletionTeaserModeState = CodeMirror3.StateField.define({
+  create: () => AiCodeCompletionTeaserMode.OFF,
+  update(value, tr) {
+    return tr.effects.find((effect) => effect.is(setAiCodeCompletionTeaserMode))?.value ?? value;
+  }
+});
+var DELAY_BEFORE_SHOWING_RESPONSE_MS = 500;
+var AIDA_REQUEST_DEBOUNCE_TIMEOUT_MS = 200;
+var MAX_PREFIX_SUFFIX_LENGTH = 2e4;
+var AiCodeCompletionProvider = class _AiCodeCompletionProvider {
+  #aidaClient = new Host6.AidaClient.AidaClient();
+  #aiCodeCompletion;
+  #aiCodeCompletionSetting = Common5.Settings.Settings.instance().createSetting("ai-code-completion-enabled", false);
+  #aiCodeCompletionTeaserDismissedSetting = Common5.Settings.Settings.instance().createSetting("ai-code-completion-teaser-dismissed", false);
+  #teaserCompartment = new CodeMirror3.Compartment();
+  #teaser;
+  #suggestionRenderingTimeout;
+  #editor;
+  #aiCodeCompletionCitations = [];
+  #aiCodeCompletionConfig;
+  #aiCodeGenerationConfig;
+  #aiCodeGenerationProvider;
+  #boundOnAidaAvailabilityChange = (ev) => {
+    this.#updateAiCodeCompletionStateWithAvailability(ev.data);
+  };
+  #boundOnSettingChange = () => {
+    const aidaAvailability = Host6.AidaClient.HostConfigTracker.instance().aidaAvailability;
+    if (aidaAvailability !== void 0) {
+      this.#updateAiCodeCompletionStateWithAvailability(aidaAvailability);
+    }
+  };
+  constructor(aiCodeCompletionConfig) {
+    if (!AiCodeCompletion.AiCodeCompletion.AiCodeCompletion.isAiCodeCompletionAvailable()) {
+      throw new Error("AI code completion feature is not available.");
+    }
+    this.#aiCodeCompletionConfig = aiCodeCompletionConfig;
+    if (AiCodeGeneration5.AiCodeGeneration.AiCodeGeneration.isAiCodeGenerationAvailable()) {
+      this.#aiCodeGenerationConfig = {
+        generationContext: {
+          inferenceLanguage: this.#aiCodeCompletionConfig.completionContext.inferenceLanguage,
+          additionalPreambleContext: this.#aiCodeCompletionConfig.generationContext.additionalPreambleContext
+        },
+        onSuggestionAccepted: this.#aiCodeCompletionConfig.onSuggestionAccepted.bind(this),
+        onRequestTriggered: this.#aiCodeCompletionConfig.onRequestTriggered.bind(this),
+        onResponseReceived: this.#aiCodeCompletionConfig.onResponseReceived.bind(this),
+        disclaimerTooltipId: this.#aiCodeCompletionConfig.disclaimerTooltipId,
+        disclaimerTextVariant: this.#aiCodeCompletionConfig.disclaimerTextVariant
+      };
+      this.#aiCodeGenerationProvider = AiCodeGenerationProvider.createInstance(this.#aiCodeGenerationConfig);
+    }
+  }
+  static createInstance(aiCodeCompletionConfig) {
+    return new _AiCodeCompletionProvider(aiCodeCompletionConfig);
+  }
+  extension() {
+    const extensions = [
+      CodeMirror3.EditorView.updateListener.of((update) => this.#triggerAiCodeCompletion(update)),
+      this.#teaserCompartment.of([]),
+      aiAutoCompleteSuggestion,
+      aiCodeCompletionTeaserModeState,
+      aiAutoCompleteSuggestionState,
+      CodeMirror3.Prec.highest(CodeMirror3.keymap.of(this.#editorKeymap()))
+    ];
+    if (this.#aiCodeGenerationProvider) {
+      extensions.push(this.#aiCodeGenerationProvider.extension());
+    }
+    return extensions;
+  }
+  dispose() {
+    this.#detachTeaser();
+    this.#teaser = void 0;
+    this.#aiCodeCompletionSetting.removeChangeListener(this.#boundOnSettingChange);
+    Host6.AidaClient.HostConfigTracker.instance().removeEventListener("aidaAvailabilityChanged", this.#boundOnAidaAvailabilityChange);
+    this.#cleanupAiCodeCompletion();
+    this.#aiCodeGenerationProvider?.dispose();
+  }
+  editorInitialized(editor) {
+    this.#editor = editor;
+    if (!this.#aiCodeCompletionSetting.get() && !this.#aiCodeCompletionTeaserDismissedSetting.get()) {
+      this.#teaser = new AiCodeCompletionTeaser({
+        onDetach: () => this.#detachTeaser.bind(this),
+        disclaimerTextVariant: this.#aiCodeCompletionConfig?.disclaimerTextVariant
+      });
+      this.#editor.editor.dispatch({ effects: this.#teaserCompartment.reconfigure([aiCodeCompletionTeaserExtension(this.#teaser)]) });
+    }
+    Host6.AidaClient.HostConfigTracker.instance().addEventListener("aidaAvailabilityChanged", this.#boundOnAidaAvailabilityChange);
+    this.#aiCodeCompletionSetting.addChangeListener(this.#boundOnSettingChange);
+    const initialAvailability = Host6.AidaClient.HostConfigTracker.instance().aidaAvailability;
+    if (initialAvailability !== void 0) {
+      this.#updateAiCodeCompletionStateWithAvailability(initialAvailability);
+    }
+    this.#aiCodeGenerationProvider?.editorInitialized(editor);
+  }
+  clearCache() {
+    this.#aiCodeCompletion?.clearCachedRequest();
+  }
+  #setupAiCodeCompletion() {
+    if (!this.#editor || !this.#aiCodeCompletionConfig) {
+      return;
+    }
+    if (this.#aiCodeCompletion) {
+      return;
+    }
+    this.#aiCodeCompletion = new AiCodeCompletion.AiCodeCompletion.AiCodeCompletion({
+      aidaClient: this.#aidaClient,
+      serverSideLoggingEnabled: !Root5.Runtime.hostConfig.aidaAvailability?.disallowLogging
+    }, void 0, this.#aiCodeCompletionConfig.completionContext.stopSequences);
+    this.#aiCodeCompletionConfig.onFeatureEnabled();
+  }
+  #cleanupAiCodeCompletion() {
+    if (!this.#aiCodeCompletion) {
+      return;
+    }
+    if (this.#suggestionRenderingTimeout) {
+      clearTimeout(this.#suggestionRenderingTimeout);
+      this.#suggestionRenderingTimeout = void 0;
+    }
+    this.#editor?.dispatch({
+      effects: setAiAutoCompleteSuggestion.of(null)
+    });
+    this.#aiCodeCompletion = void 0;
+    this.#aiCodeCompletionConfig?.onFeatureDisabled();
+  }
+  #updateAiCodeCompletionStateWithAvailability(aidaAvailability) {
+    const isAvailable = aidaAvailability === "available";
+    const devtoolsLocale = i18n12.DevToolsLocale.DevToolsLocale.instance().locale;
+    const aiCodeCompletionEnabled = AiCodeCompletion.AiCodeCompletion.AiCodeCompletion.isAiCodeCompletionEnabled(devtoolsLocale);
+    const isSettingEnabled = this.#aiCodeCompletionSetting.get();
+    if (isAvailable && aiCodeCompletionEnabled) {
+      if (isSettingEnabled) {
+        this.#detachTeaser();
+        this.#setupAiCodeCompletion();
+      } else {
+        if (this.#teaser && !this.#aiCodeCompletionTeaserDismissedSetting.get()) {
+          this.#editor?.editor.dispatch({ effects: this.#teaserCompartment.reconfigure([aiCodeCompletionTeaserExtension(this.#teaser)]) });
+        }
+        this.#cleanupAiCodeCompletion();
+      }
+    } else {
+      this.#detachTeaser();
+      this.#cleanupAiCodeCompletion();
+    }
+  }
+  #editorKeymap() {
+    return [
+      {
+        key: "Escape",
+        run: () => {
+          if (!this.#aiCodeCompletion || !this.#editor || !hasActiveAiSuggestion(this.#editor.state)) {
+            return false;
+          }
+          if (this.#editor.state.field(aiAutoCompleteSuggestionState)?.source === "generation") {
+            return false;
+          }
+          this.#editor.dispatch({
+            effects: setAiAutoCompleteSuggestion.of(null)
+          });
+          return true;
+        }
+      },
+      {
+        key: "Tab",
+        run: () => {
+          if (!this.#aiCodeCompletion || !this.#editor || !hasActiveAiSuggestion(this.#editor.state)) {
+            return false;
+          }
+          const { accepted, suggestion } = acceptAiAutoCompleteSuggestion(this.#editor.editor);
+          if (!accepted) {
+            return false;
+          }
+          if (suggestion?.rpcGlobalId) {
+            this.#aiCodeCompletion?.registerUserAcceptance(suggestion.rpcGlobalId, suggestion.sampleId);
+          }
+          this.#aiCodeCompletionConfig?.onSuggestionAccepted(this.#aiCodeCompletionCitations);
+          return true;
+        }
+      }
+    ];
+  }
+  #detachTeaser() {
+    if (!this.#teaser) {
+      return;
+    }
+    this.#editor?.editor.dispatch({ effects: this.#teaserCompartment.reconfigure([]) });
+  }
+  /**
+   * This method is responsible for fetching code completion suggestions and
+   * displaying them in the text editor.
+   *
+   * 1. **Debouncing requests:** As the user types, we don't want to send a request
+   *    for every keystroke. Instead, we use debouncing to schedule a request
+   *    only after the user has paused typing for a short period
+   *    (AIDA_REQUEST_THROTTLER_TIMEOUT_MS). This prevents spamming the backend with
+   *    requests for intermediate typing states.
+   *
+   * 2. **Delaying suggestions:** When a suggestion is received from the AIDA
+   *    backend, we don't show it immediately. There is a minimum delay
+   *    (DELAY_BEFORE_SHOWING_RESPONSE_MS) from when the request was sent to when
+   *    the suggestion is displayed.
+   */
+  #triggerAiCodeCompletion(update) {
+    if (!update.docChanged || !this.#editor || !this.#aiCodeCompletion) {
+      return;
+    }
+    const { doc, selection } = update.state;
+    const query = doc.toString();
+    const cursor = selection.main.head;
+    let prefix = query.substring(0, cursor);
+    if (prefix.trim().length === 0) {
+      return;
+    }
+    const completionContextPrefix = this.#aiCodeCompletionConfig?.completionContext.getPrefix?.();
+    if (completionContextPrefix) {
+      prefix = completionContextPrefix + prefix;
+    }
+    if (prefix.length > MAX_PREFIX_SUFFIX_LENGTH) {
+      prefix = prefix.substring(prefix.length - MAX_PREFIX_SUFFIX_LENGTH);
+    }
+    const suffix = query.substring(cursor, cursor + MAX_PREFIX_SUFFIX_LENGTH);
+    this.#debouncedRequestAidaSuggestion(prefix, suffix, cursor, this.#aiCodeCompletionConfig?.completionContext.inferenceLanguage, this.#aiCodeCompletionConfig?.completionContext.additionalFiles);
+  }
+  #debouncedRequestAidaSuggestion = Common5.Debouncer.debounce((prefix, suffix, cursorPositionAtRequest, inferenceLanguage, additionalFiles) => {
+    void this.#requestAidaSuggestion(prefix, suffix, cursorPositionAtRequest, inferenceLanguage, additionalFiles);
+  }, AIDA_REQUEST_DEBOUNCE_TIMEOUT_MS);
+  async #requestAidaSuggestion(prefix, suffix, cursorPositionAtRequest, inferenceLanguage, additionalFiles) {
+    this.#aiCodeCompletionCitations = [];
+    if (!this.#aiCodeCompletion) {
+      AiCodeCompletion.debugLog("Ai Code Completion is not initialized");
+      this.#aiCodeCompletionConfig?.onResponseReceived();
+      Host6.userMetrics.actionTaken(Host6.UserMetrics.Action.AiCodeCompletionError);
+      return;
+    }
+    const startTime = performance.now();
+    this.#aiCodeCompletionConfig?.onRequestTriggered();
+    const disclaimerTextVariant = this.#aiCodeCompletionConfig?.disclaimerTextVariant;
+    if (disclaimerTextVariant === "console") {
+      Host6.userMetrics.actionTaken(Host6.UserMetrics.Action.AiCodeCompletionRequestTriggeredFromConsole);
+    } else if (disclaimerTextVariant === "sources") {
+      Host6.userMetrics.actionTaken(Host6.UserMetrics.Action.AiCodeCompletionRequestTriggeredFromSources);
+    }
+    try {
+      const completionResponse = await this.#aiCodeCompletion.completeCode(prefix, suffix, cursorPositionAtRequest, inferenceLanguage, additionalFiles);
+      if (!completionResponse) {
+        this.#aiCodeCompletionConfig?.onResponseReceived();
+        return;
+      }
+      const { response, fromCache } = completionResponse;
+      if (!response) {
+        this.#aiCodeCompletionConfig?.onResponseReceived();
+        return;
+      }
+      const sampleResponse = await this.#generateSampleForRequest(response, prefix, suffix);
+      if (!sampleResponse) {
+        this.#aiCodeCompletionConfig?.onResponseReceived();
+        return;
+      }
+      const { suggestionText, sampleId, citations, rpcGlobalId } = sampleResponse;
+      const remainingDelay = Math.max(DELAY_BEFORE_SHOWING_RESPONSE_MS - (performance.now() - startTime), 0);
+      this.#suggestionRenderingTimeout = window.setTimeout(() => {
+        const currentCursorPosition = this.#editor?.editor.state.selection.main.head;
+        if (currentCursorPosition !== cursorPositionAtRequest) {
+          this.#aiCodeCompletionConfig?.onResponseReceived();
+          return;
+        }
+        if (this.#aiCodeCompletion) {
+          this.#editor?.dispatch({
+            effects: setAiAutoCompleteSuggestion.of({
+              text: suggestionText,
+              from: cursorPositionAtRequest,
+              rpcGlobalId,
+              sampleId,
+              startTime,
+              clearCachedRequest: this.clearCache.bind(this),
+              onImpression: this.#aiCodeCompletion?.registerUserImpression.bind(this.#aiCodeCompletion),
+              source: "completion"
+            })
+          });
+        }
+        if (fromCache) {
+          Host6.userMetrics.actionTaken(Host6.UserMetrics.Action.AiCodeCompletionResponseServedFromCache);
+        }
+        AiCodeCompletion.debugLog("Suggestion dispatched to the editor", suggestionText, "at cursor position", cursorPositionAtRequest);
+        this.#aiCodeCompletionCitations = citations;
+        this.#aiCodeCompletionConfig?.onResponseReceived();
+      }, remainingDelay);
+    } catch (e) {
+      AiCodeCompletion.debugLog("Error while fetching code completion suggestions from AIDA", e);
+      this.#aiCodeCompletionConfig?.onResponseReceived();
+      Host6.userMetrics.actionTaken(Host6.UserMetrics.Action.AiCodeCompletionError);
+    }
+  }
+  async #generateSampleForRequest(response, prefix, suffix) {
+    const suggestionSample = this.#pickSampleFromResponse(response);
+    if (!suggestionSample) {
+      return null;
+    }
+    const shouldBlock = suggestionSample.attributionMetadata?.attributionAction === Host6.AidaClient.RecitationAction.BLOCK;
+    if (shouldBlock) {
+      return null;
+    }
+    const isRepetitive = this.#checkIfSuggestionRepeatsExistingText(suggestionSample.generationString, prefix, suffix);
+    if (isRepetitive) {
+      return null;
+    }
+    const suggestionText = _AiCodeCompletionProvider.trimSuggestionOverlap(suggestionSample.generationString, suffix);
+    if (suggestionText.length === 0) {
+      return null;
+    }
+    return {
+      suggestionText,
+      sampleId: suggestionSample.sampleId,
+      citations: suggestionSample.attributionMetadata?.citations ?? [],
+      rpcGlobalId: response.metadata.rpcGlobalId
+    };
+  }
+  #pickSampleFromResponse(response) {
+    if (!response.generatedSamples.length) {
+      return null;
+    }
+    const currentHintInMenu = this.#editor?.editor.plugin(showCompletionHint)?.currentHint;
+    if (!currentHintInMenu) {
+      return response.generatedSamples[0];
+    }
+    return response.generatedSamples.find((sample) => sample.generationString.startsWith(currentHintInMenu)) ?? response.generatedSamples[0];
+  }
+  #checkIfSuggestionRepeatsExistingText(generationString, prefix, suffix) {
+    return Boolean(prefix.includes(generationString.trim()) || suffix?.includes(generationString.trim()));
+  }
+  /**
+   * Removes the end of a suggestion if it overlaps with the start of the suffix.
+   */
+  static trimSuggestionOverlap(generationString, suffix) {
+    if (!suffix) {
+      return generationString;
+    }
+    for (let i = Math.min(generationString.length, suffix.length); i > 0; i--) {
+      const overlapCandidate = suffix.substring(0, i);
+      if (generationString.endsWith(overlapCandidate)) {
+        return generationString.slice(0, -i);
+      }
+    }
+    return generationString;
+  }
+};
+function aiCodeCompletionTeaserExtension(teaser) {
+  return CodeMirror3.ViewPlugin.fromClass(class {
+    view;
+    teaser;
+    #teaserDecoration = CodeMirror3.Decoration.none;
+    #teaserMode;
+    #teaserDisplayTimeout;
+    constructor(view) {
+      this.view = view;
+      this.teaser = teaser;
+      this.#teaserMode = view.state.field(aiCodeCompletionTeaserModeState);
+      this.#setupDecoration();
+    }
+    destroy() {
+      window.clearTimeout(this.#teaserDisplayTimeout);
+    }
+    update(update) {
+      const currentTeaserMode = update.state.field(aiCodeCompletionTeaserModeState);
+      if (currentTeaserMode !== this.#teaserMode) {
+        this.#teaserMode = currentTeaserMode;
+        this.#setupDecoration();
+        return;
+      }
+      if (this.#teaserMode === AiCodeCompletionTeaserMode.ONLY_SHOW_ON_EMPTY && update.docChanged) {
+        this.#updateTeaserDecorationForOnlyShowOnEmptyMode();
+      } else if (this.#teaserMode === AiCodeCompletionTeaserMode.ON) {
+        if (update.docChanged) {
+          this.#teaserDecoration = CodeMirror3.Decoration.none;
+          window.clearTimeout(this.#teaserDisplayTimeout);
+          this.#updateTeaserDecorationForOnMode();
+        } else if (update.selectionSet && update.state.doc.length > 0) {
+          this.#teaserDecoration = CodeMirror3.Decoration.none;
+        }
+      }
+    }
+    get decorations() {
+      return this.#teaserDecoration;
+    }
+    #setupDecoration() {
+      switch (this.#teaserMode) {
+        case AiCodeCompletionTeaserMode.ON:
+          this.#updateTeaserDecorationForOnModeImmediately();
+          return;
+        case AiCodeCompletionTeaserMode.ONLY_SHOW_ON_EMPTY:
+          this.#updateTeaserDecorationForOnlyShowOnEmptyMode();
+          return;
+        case AiCodeCompletionTeaserMode.OFF:
+          this.#teaserDecoration = CodeMirror3.Decoration.none;
+          return;
+      }
+    }
+    #updateTeaserDecorationForOnlyShowOnEmptyMode() {
+      if (this.view.state.doc.length === 0) {
+        this.#addTeaserWidget(0);
+      } else {
+        this.#teaserDecoration = CodeMirror3.Decoration.none;
+      }
+    }
+    #updateTeaserDecorationForOnMode = Common5.Debouncer.debounce(() => {
+      this.#teaserDisplayTimeout = window.setTimeout(() => {
+        this.#updateTeaserDecorationForOnModeImmediately();
+        this.view.dispatch({});
+      }, DELAY_BEFORE_SHOWING_RESPONSE_MS);
+    }, AIDA_REQUEST_DEBOUNCE_TIMEOUT_MS);
+    #updateTeaserDecorationForOnModeImmediately() {
+      const cursorPosition = this.view.state.selection.main.head;
+      const line = this.view.state.doc.lineAt(cursorPosition);
+      if (cursorPosition >= line.to) {
+        this.#addTeaserWidget(cursorPosition);
+      }
+    }
+    #addTeaserWidget(pos) {
+      this.#teaserDecoration = CodeMirror3.Decoration.set([
+        CodeMirror3.Decoration.widget({ widget: new AccessiblePlaceholder(this.teaser), side: 1 }).range(pos)
+      ]);
+    }
+  }, {
+    decorations: (v) => v.decorations,
+    eventHandlers: {
+      mousedown(event) {
+        return event.target instanceof Node && teaser.contentElement.contains(event.target);
+      },
+      keydown(event) {
+        if (!UI7.KeyboardShortcut.KeyboardShortcut.eventHasCtrlEquivalentKey(event) || !teaser.isShowing()) {
+          return false;
+        }
+        if (event.key === "i") {
+          event.consume(true);
+          void VisualLogging6.logKeyDown(event.currentTarget, event, "ai-code-completion-teaser.fre");
+          void this.teaser.onAction(event);
+          return true;
+        }
+        if (event.key === "x") {
+          event.consume(true);
+          void VisualLogging6.logKeyDown(event.currentTarget, event, "ai-code-completion-teaser.dismiss");
+          this.teaser.onDismiss(event);
+          return true;
+        }
+        return false;
+      }
+    }
+  });
+}
+
+// gen/front_end/ui/components/text_editor/AutocompleteHistory.js
+var AutocompleteHistory_exports = {};
+__export(AutocompleteHistory_exports, {
+  AutocompleteHistory: () => AutocompleteHistory
+});
+var AutocompleteHistory = class _AutocompleteHistory {
+  static #historySize = 300;
+  #setting;
+  /**
+   * The data mirrors the setting. We have the mirror for 2 reasons:
+   *   1) The setting is size limited
+   *   2) We track the user's current input, even though it's not committed yet.
+   */
+  #data = [];
+  /** 1-based entry in the history stack. */
+  #historyOffset = 1;
+  #uncommittedIsTop = false;
+  /**
+   * Tracks session-local edits made to history entries during navigation.
+   * Maps history index to edited text. Cleared when a new command is committed.
+   */
+  #editedEntries = /* @__PURE__ */ new Map();
+  /**
+   * The prefix used for filtering history during navigation (zsh-style).
+   * Set on first navigation when user has typed something.
+   */
+  #searchPrefix = "";
+  /**
+   * Stack of history indices visited during filtered navigation.
+   * Used to navigate forward through the same filtered entries.
+   */
+  #filteredIndices = [];
+  /**
+   * Creates a new settings-backed history. The class assumes it has sole
+   * ownership of the setting.
+   */
+  constructor(setting) {
+    this.#setting = setting;
+    this.#data = this.#setting.get();
+  }
+  clear() {
+    this.#data = [];
+    this.#setting.set([]);
+    this.#historyOffset = 1;
+    this.#editedEntries.clear();
+    this.#searchPrefix = "";
+    this.#filteredIndices = [];
+  }
+  length() {
+    return this.#data.length;
+  }
+  /**
+   * Pushes a committed text into the history.
+   */
+  pushHistoryItem(text) {
+    if (this.#uncommittedIsTop) {
+      this.#data.pop();
+      this.#uncommittedIsTop = false;
+    }
+    this.#historyOffset = 1;
+    this.#editedEntries.clear();
+    this.#searchPrefix = "";
+    this.#filteredIndices = [];
+    if (text !== this.#currentHistoryItem()) {
+      this.#data.push(text);
+    }
+    this.#store();
+  }
+  /**
+   * Pushes the current (uncommitted) text into the history.
+   */
+  #pushCurrentText(currentText) {
+    if (this.#uncommittedIsTop) {
+      this.#data.pop();
+    }
+    this.#uncommittedIsTop = true;
+    this.#data.push(currentText);
+  }
+  previous(currentText) {
+    if (this.#historyOffset > this.#data.length) {
+      return void 0;
+    }
+    currentText = currentText ?? "";
+    if (this.#historyOffset === 1) {
+      this.#pushCurrentText(currentText);
+      this.#filteredIndices = [];
+      this.#searchPrefix = currentText;
+    } else {
+      this.#saveCurrentEdit(currentText);
+    }
+    if (this.#searchPrefix.length === 0) {
+      ++this.#historyOffset;
+      return this.#currentHistoryItem();
+    }
+    const result = this.#findNextMatch();
+    if (!result) {
+      if (this.#historyOffset === 1) {
+        this.#searchPrefix = "";
+        ++this.#historyOffset;
+        return this.#currentHistoryItem();
+      }
+      return void 0;
+    }
+    this.#filteredIndices.push(result.index);
+    this.#historyOffset = this.#data.length - result.index;
+    return result.value;
+  }
+  /**
+   * Finds the next history entry that matches the search prefix.
+   * Returns undefined if no more matches are found.
+   */
+  #findNextMatch() {
+    const startIndex = this.#data.length - this.#historyOffset - 1;
+    for (let i = startIndex; i >= 0; --i) {
+      const storedValue = this.#data[i];
+      if (storedValue.startsWith(this.#searchPrefix)) {
+        const value = this.#editedEntries.get(i) ?? storedValue;
+        return { index: i, value };
+      }
+    }
+    return void 0;
+  }
+  /**
+   * Saves the current text as an edit if it differs from the current history item
+   * (which may already have edits from a previous navigation).
+   * Only saves non-empty edits to avoid issues with navigation-only calls.
+   */
+  #saveCurrentEdit(text) {
+    const index = this.#data.length - this.#historyOffset;
+    const currentValue = this.#currentHistoryItem();
+    if (text === currentValue) {
+      return;
+    }
+    const original = this.#data[index];
+    if (text !== original && text.length > 0) {
+      this.#editedEntries.set(index, text);
+    } else {
+      this.#editedEntries.delete(index);
+    }
+  }
+  next(currentText) {
+    if (this.#historyOffset === 1) {
+      return void 0;
+    }
+    currentText = currentText ?? this.#currentHistoryItem() ?? "";
+    this.#saveCurrentEdit(currentText);
+    if (this.#searchPrefix.length === 0) {
+      --this.#historyOffset;
+      return this.#currentHistoryItem();
+    }
+    this.#filteredIndices.pop();
+    if (this.#filteredIndices.length === 0) {
+      this.#historyOffset = 1;
+      return this.#currentHistoryItem();
+    }
+    const prevIndex = this.#filteredIndices[this.#filteredIndices.length - 1];
+    this.#historyOffset = this.#data.length - prevIndex;
+    return this.#currentHistoryItem();
+  }
+  /** Returns a de-duplicated list of history entries that start with the specified prefix */
+  matchingEntries(prefix, limit = 50) {
+    const result = /* @__PURE__ */ new Set();
+    for (let i = this.#data.length - 1; i >= 0 && result.size < limit; --i) {
+      const entry = this.#data[i];
+      if (entry.startsWith(prefix)) {
+        result.add(entry);
+      }
+    }
+    return result;
+  }
+  #currentHistoryItem() {
+    const index = this.#data.length - this.#historyOffset;
+    return this.#editedEntries.get(index) ?? this.#data[index];
+  }
+  #store() {
+    this.#setting.set(this.#data.slice(-_AutocompleteHistory.#historySize));
+  }
+};
+
+// gen/front_end/ui/components/text_editor/ExecutionPositionHighlighter.js
+var ExecutionPositionHighlighter_exports = {};
+__export(ExecutionPositionHighlighter_exports, {
+  clearHighlightedPosition: () => clearHighlightedPosition,
+  positionHighlighter: () => positionHighlighter,
+  setHighlightedPosition: () => setHighlightedPosition
+});
+import * as CodeMirror4 from "./..\\..\\..\\third_party\\codemirror.next\\codemirror.next.js";
+var setHighlightedPosition = CodeMirror4.StateEffect.define();
+var clearHighlightedPosition = CodeMirror4.StateEffect.define();
+function positionHighlighter(executionLineClassName, executionTokenClassName) {
+  const executionLine = CodeMirror4.Decoration.line({ attributes: { class: executionLineClassName } });
+  const executionToken = CodeMirror4.Decoration.mark({ attributes: { class: executionTokenClassName } });
+  const positionHighlightedState = CodeMirror4.StateField.define({
+    create() {
+      return null;
+    },
+    update(pos, tr) {
+      if (pos) {
+        pos = tr.changes.mapPos(pos, -1, CodeMirror4.MapMode.TrackDel);
+      }
+      for (const effect of tr.effects) {
+        if (effect.is(clearHighlightedPosition)) {
+          pos = null;
+        } else if (effect.is(setHighlightedPosition)) {
+          pos = Math.max(0, Math.min(effect.value, tr.newDoc.length - 1));
+        }
+      }
+      return pos;
+    }
+  });
+  function getHighlightedPosition(state) {
+    return state.field(positionHighlightedState);
+  }
+  class PositionHighlighter {
+    tree;
+    decorations;
+    constructor({ state }) {
+      this.tree = CodeMirror4.syntaxTree(state);
+      this.decorations = this.#computeDecorations(state, getHighlightedPosition(state));
+    }
+    update(update) {
+      const tree = CodeMirror4.syntaxTree(update.state);
+      const position = getHighlightedPosition(update.state);
+      const positionChanged = position !== getHighlightedPosition(update.startState);
+      if (tree.length !== this.tree.length || positionChanged) {
+        this.tree = tree;
+        this.decorations = this.#computeDecorations(update.state, position);
+      } else {
+        this.decorations = this.decorations.map(update.changes);
+      }
+    }
+    #computeDecorations(state, position) {
+      const builder = new CodeMirror4.RangeSetBuilder();
+      if (position !== null) {
+        const { doc } = state;
+        const line = doc.lineAt(position);
+        builder.add(line.from, line.from, executionLine);
+        const syntaxTree4 = CodeMirror4.syntaxTree(state);
+        const syntaxNode = syntaxTree4.resolveInner(position, 1);
+        const tokenEnd = Math.min(line.to, syntaxNode.to);
+        if (tokenEnd > position) {
+          builder.add(position, tokenEnd, executionToken);
+        }
+      }
+      return builder.finish();
+    }
+  }
+  const positionHighlighterSpec = {
+    decorations: ({ decorations }) => decorations
+  };
+  return [
+    positionHighlightedState,
+    CodeMirror4.ViewPlugin.fromClass(PositionHighlighter, positionHighlighterSpec)
+  ];
+}
+
+// gen/front_end/ui/components/text_editor/javascript.js
+var javascript_exports = {};
+__export(javascript_exports, {
+  argumentHints: () => argumentHints,
+  argumentsList: () => argumentsList,
+  closeArgumentsHintsTooltip: () => closeArgumentsHintsTooltip,
+  completeInContext: () => completeInContext,
+  completion: () => completion,
+  getQueryType: () => getQueryType,
+  isExpressionComplete: () => isExpressionComplete,
+  javascriptCompletionSource: () => javascriptCompletionSource
+});
+import * as SDK from "./..\\..\\..\\core\\sdk\\sdk.js";
+import * as Bindings from "./..\\..\\..\\models\\bindings\\bindings.js";
+import * as JavaScriptMetaData from "./..\\..\\..\\models\\javascript_metadata\\javascript_metadata.js";
+import * as SourceMapScopes from "./..\\..\\..\\models\\source_map_scopes\\source_map_scopes.js";
+import * as CodeMirror6 from "./..\\..\\..\\third_party\\codemirror.next\\codemirror.next.js";
+import * as UI8 from "./..\\..\\legacy\\legacy.js";
+
+// gen/front_end/ui/components/text_editor/cursor_tooltip.js
+import * as CodeMirror5 from "./..\\..\\..\\third_party\\codemirror.next\\codemirror.next.js";
+var closeTooltip = CodeMirror5.StateEffect.define();
+function cursorTooltip(source) {
+  const openTooltip = CodeMirror5.StateEffect.define();
+  const state = CodeMirror5.StateField.define({
+    create() {
+      return null;
+    },
+    update(val, tr) {
+      if (tr.selection) {
+        val = null;
+      }
+      if (val && !tr.changes.empty) {
+        const newPos = tr.changes.mapPos(val.pos, -1, CodeMirror5.MapMode.TrackDel);
+        val = newPos === null ? null : { pos: newPos, create: val.create, above: true };
+      }
+      for (const effect of tr.effects) {
+        if (effect.is(openTooltip)) {
+          val = { pos: tr.state.selection.main.from, create: effect.value, above: true };
+        } else if (effect.is(closeTooltip)) {
+          val = null;
+        }
+      }
+      return val;
+    },
+    provide: (field) => CodeMirror5.showTooltip.from(field)
+  });
+  const plugin = CodeMirror5.ViewPlugin.fromClass(class {
+    pending = -1;
+    updateID = 0;
+    update(update) {
+      this.updateID++;
+      if (update.transactions.some((tr) => tr.selection) && update.state.selection.main.empty) {
+        this.#scheduleUpdate(update.view);
+      }
+    }
+    #scheduleUpdate(view) {
+      if (this.pending > -1) {
+        clearTimeout(this.pending);
+      }
+      this.pending = window.setTimeout(() => this.#startUpdate(view), 50);
+    }
+    #startUpdate(view) {
+      this.pending = -1;
+      const { main } = view.state.selection;
+      if (main.empty) {
+        const { updateID } = this;
+        void source(view.state, main.from).then((tooltip) => {
+          if (this.updateID !== updateID) {
+            if (this.pending < 0) {
+              this.#scheduleUpdate(view);
+            }
+          } else if (tooltip) {
+            view.dispatch({ effects: openTooltip.of(tooltip) });
+          } else {
+            view.dispatch({ effects: closeTooltip.of(null) });
+          }
+        });
+      }
+    }
+  });
+  return [state, plugin];
+}
+
+// gen/front_end/ui/components/text_editor/javascript.js
+function completion() {
+  return CodeMirror6.javascript.javascriptLanguage.data.of({
+    autocomplete: javascriptCompletionSource
+  });
+}
+async function completeInContext(textBefore, query, force = false) {
+  const state = CodeMirror6.EditorState.create({
+    doc: textBefore + query,
+    selection: { anchor: textBefore.length },
+    extensions: CodeMirror6.javascript.javascriptLanguage
+  });
+  const result = await javascriptCompletionSource(new CodeMirror6.CompletionContext(state, state.doc.length, force));
+  return result ? result.options.filter((o) => o.label.startsWith(query)).map((o) => ({
+    text: o.label,
+    priority: 100 + (o.boost || 0),
+    isSecondary: o.type === "secondary"
+  })) : [];
+}
+var CompletionSet = class _CompletionSet {
+  completions;
+  seen;
+  constructor(completions = [], seen = /* @__PURE__ */ new Set()) {
+    this.completions = completions;
+    this.seen = seen;
+  }
+  add(completion2) {
+    if (!this.seen.has(completion2.label)) {
+      this.seen.add(completion2.label);
+      this.completions.push(completion2);
+    }
+  }
+  copy() {
+    return new _CompletionSet(this.completions.slice(), new Set(this.seen));
+  }
+};
+var javascriptKeywords = [
+  "async",
+  "await",
+  "break",
+  "case",
+  "catch",
+  "class",
+  "const",
+  "continue",
+  "debugger",
+  "default",
+  "delete",
+  "do",
+  "else",
+  "export",
+  "extends",
+  "false",
+  "finally",
+  "for",
+  "function",
+  "if",
+  "import",
+  "in",
+  "instanceof",
+  "let",
+  "new",
+  "null",
+  "of",
+  "return",
+  "static",
+  "super",
+  "switch",
+  "this",
+  "throw",
+  "true",
+  "try",
+  "typeof",
+  "var",
+  "void",
+  "while",
+  "with",
+  "yield"
+];
+var consoleBuiltinFunctions = [
+  "clear",
+  "copy",
+  "debug",
+  "dir",
+  "dirxml",
+  "getEventListeners",
+  "inspect",
+  "keys",
+  "monitor",
+  "monitorEvents",
+  "profile",
+  "profileEnd",
+  "queryObjects",
+  "table",
+  "undebug",
+  "unmonitor",
+  "unmonitorEvents",
+  "values"
+];
+var consoleBuiltinVariables = ["$", "$$", "$x", "$0", "$_"];
+var baseCompletions = new CompletionSet();
+for (const kw of javascriptKeywords) {
+  baseCompletions.add({ label: kw, type: "keyword" });
+}
+for (const builtin of consoleBuiltinFunctions) {
+  baseCompletions.add({ label: builtin, type: "function" });
+}
+for (const varName of consoleBuiltinVariables) {
+  baseCompletions.add({ label: varName, type: "variable" });
+}
+var dontCompleteIn = /* @__PURE__ */ new Set([
+  "TemplateString",
+  "LineComment",
+  "BlockComment",
+  "TypeDefinition",
+  "VariableDefinition",
+  "PropertyDefinition",
+  "TypeName"
+]);
+function getQueryType(tree, pos, doc) {
+  let node = tree.resolveInner(pos, -1);
+  const parent = node.parent;
+  if (dontCompleteIn.has(node.name)) {
+    return null;
+  }
+  if (node.name === "PropertyName" || node.name === "PrivatePropertyName") {
+    return parent?.name !== "MemberExpression" ? null : { type: 1, from: node.from, relatedNode: parent };
+  }
+  if (node.name === "VariableName" || // Treat alphabetic keywords as variables
+  !node.firstChild && node.to - node.from < 20 && !/[^a-z]/.test(doc.sliceString(node.from, node.to))) {
+    return { type: 0, from: node.from };
+  }
+  if (node.name === "String") {
+    const parent2 = node.parent;
+    return parent2?.name === "MemberExpression" && parent2.childBefore(node.from)?.name === "[" ? { type: 2, from: node.from, relatedNode: parent2 } : null;
+  }
+  node = node.enterUnfinishedNodesBefore(pos);
+  if (node.to === pos && node.parent?.name === "MemberExpression") {
+    node = node.parent;
+  }
+  if (node.name === "MemberExpression") {
+    const before = node.childBefore(Math.min(pos, node.to));
+    if (before?.name === "[") {
+      return { type: 2, relatedNode: node };
+    }
+    if (before?.name === "." || before?.name === "?.") {
+      return { type: 1, relatedNode: node };
+    }
+  }
+  if (node.name === "(") {
+    if (parent?.name === "ArgList" && parent?.parent?.name === "CallExpression") {
+      const callReceiver = parent?.parent?.firstChild;
+      if (callReceiver?.name === "MemberExpression") {
+        const propertyExpression = callReceiver?.lastChild;
+        if (propertyExpression && doc.sliceString(propertyExpression.from, propertyExpression.to) === "get") {
+          const potentiallyMapObject = callReceiver?.firstChild;
+          return { type: 3, relatedNode: potentiallyMapObject || void 0 };
+        }
+      }
+    }
+  }
+  return {
+    type: 0
+    /* QueryType.EXPRESSION */
+  };
+}
+async function javascriptCompletionSource(cx) {
+  const query = getQueryType(CodeMirror6.syntaxTree(cx.state), cx.pos, cx.state.doc);
+  if (!query || query.from === void 0 && !cx.explicit && query.type === 0) {
+    return null;
+  }
+  const script = getExecutionContext()?.debuggerModel.selectedCallFrame()?.script;
+  if (script && Bindings.DebuggerWorkspaceBinding.DebuggerWorkspaceBinding.instance().pluginManager.hasPluginForScript(script)) {
+    return null;
+  }
+  let result;
+  let quote = void 0;
+  if (query.type === 0) {
+    const [scope, global] = await Promise.all([
+      completeExpressionInScope(),
+      completeExpressionGlobal()
+    ]);
+    if (scope.completions.length) {
+      result = scope;
+      for (const r of global.completions) {
+        result.add(r);
+      }
+    } else {
+      result = global;
+    }
+  } else if (query.type === 1 || query.type === 2) {
+    const objectExpr = query.relatedNode.getChild("Expression");
+    if (query.type === 2) {
+      quote = query.from === void 0 ? "'" : cx.state.sliceDoc(query.from, query.from + 1);
+    }
+    if (!objectExpr) {
+      return null;
+    }
+    result = await completeProperties(cx.state.sliceDoc(objectExpr.from, objectExpr.to), quote, cx.state.sliceDoc(cx.pos, cx.pos + 1) === "]");
+  } else if (query.type === 3) {
+    const potentialMapObject = query.relatedNode;
+    if (!potentialMapObject) {
+      return null;
+    }
+    result = await maybeCompleteKeysFromMap(cx.state.sliceDoc(potentialMapObject.from, potentialMapObject.to));
+  } else {
+    return null;
+  }
+  return {
+    from: query.from ?? cx.pos,
+    options: result.completions,
+    validFor: !quote ? SPAN_IDENT : quote === "'" ? SPAN_SINGLE_QUOTE : SPAN_DOUBLE_QUOTE
+  };
+}
+var SPAN_IDENT = /^#?(?:[$_\p{ID_Start}])(?:[$_\u200C\u200D\p{ID_Continue}])*$/u;
+var SPAN_SINGLE_QUOTE = /^\'(\\.|[^\\'\n])*'?$/;
+var SPAN_DOUBLE_QUOTE = /^"(\\.|[^\\"\n])*"?$/;
+function getExecutionContext() {
+  return UI8.Context.Context.instance().flavor(SDK.RuntimeModel.ExecutionContext);
+}
+async function evaluateExpression(context, expression, group) {
+  const result = await context.evaluateWithSelectedFrameFallback({
+    expression,
+    objectGroup: group,
+    includeCommandLineAPI: true,
+    silent: true,
+    returnByValue: false,
+    generatePreview: false,
+    throwOnSideEffect: true,
+    timeout: 500,
+    replMode: true
+  }, false, false);
+  if ("error" in result || result.exceptionDetails || !result.object) {
+    return null;
+  }
+  return result.object;
+}
+var primitivePrototypes = /* @__PURE__ */ new Map([
+  ["string", "String"],
+  ["symbol", "Symbol"],
+  ["number", "Number"],
+  ["boolean", "Boolean"],
+  ["bigint", "BigInt"]
+]);
+var maxCacheAge = 3e4;
+var cacheInstance = null;
+var PropertyCache = class _PropertyCache {
+  #cache = /* @__PURE__ */ new Map();
+  constructor() {
+    const clear = () => this.#cache.clear();
+    SDK.TargetManager.TargetManager.instance().addModelListener(SDK.ConsoleModel.ConsoleModel, SDK.ConsoleModel.Events.CommandEvaluated, clear);
+    UI8.Context.Context.instance().addFlavorChangeListener(SDK.RuntimeModel.ExecutionContext, clear);
+    SDK.TargetManager.TargetManager.instance().addModelListener(SDK.DebuggerModel.DebuggerModel, SDK.DebuggerModel.Events.DebuggerResumed, clear);
+    SDK.TargetManager.TargetManager.instance().addModelListener(SDK.DebuggerModel.DebuggerModel, SDK.DebuggerModel.Events.DebuggerPaused, clear);
+  }
+  get(expression) {
+    return this.#cache.get(expression);
+  }
+  set(expression, value) {
+    this.#cache.set(expression, value);
+    window.setTimeout(() => {
+      if (this.#cache.get(expression) === value) {
+        this.#cache.delete(expression);
+      }
+    }, maxCacheAge);
+  }
+  static instance() {
+    if (!cacheInstance) {
+      cacheInstance = new _PropertyCache();
+    }
+    return cacheInstance;
+  }
+};
+async function maybeCompleteKeysFromMap(objectVariable) {
+  const result = new CompletionSet();
+  const context = getExecutionContext();
+  if (!context) {
+    return result;
+  }
+  const maybeRetrieveKeys = await evaluateExpression(context, `[...Map.prototype.keys.call(${objectVariable})]`, "completion");
+  if (!maybeRetrieveKeys) {
+    return result;
+  }
+  const properties = SDK.RemoteObject.RemoteArray.objectAsArray(maybeRetrieveKeys);
+  const numProperties = properties.length();
+  for (let i = 0; i < numProperties; i++) {
+    result.add({
+      label: `"${(await properties.at(i)).value}")`,
+      type: "constant",
+      boost: i * -1
+    });
+  }
+  return result;
+}
+async function completeProperties(expression, quoted, hasBracket = false) {
+  const cache = PropertyCache.instance();
+  if (!quoted) {
+    const cached = cache.get(expression);
+    if (cached) {
+      return await cached;
+    }
+  }
+  const context = getExecutionContext();
+  if (!context) {
+    return new CompletionSet();
+  }
+  const result = completePropertiesInner(expression, context, quoted, hasBracket);
+  if (!quoted) {
+    cache.set(expression, result);
+  }
+  return await result;
+}
+async function completePropertiesInner(expression, context, quoted, hasBracket = false) {
+  const result = new CompletionSet();
+  if (!context) {
+    return result;
+  }
+  let object = await evaluateExpression(context, expression, "completion");
+  if (!object) {
+    return result;
+  }
+  while (object.type === "object" && object.subtype === "proxy") {
+    const properties = await object.getOwnProperties(false);
+    const innerObject = properties.internalProperties?.find((p) => p.name === "[[Target]]")?.value;
+    if (!innerObject) {
+      break;
+    }
+    object = innerObject;
+  }
+  const toPrototype = primitivePrototypes.get(object.type);
+  if (toPrototype) {
+    object = await evaluateExpression(context, toPrototype + ".prototype", "completion");
+  }
+  const functionType = expression === "globalThis" ? "function" : "method";
+  const otherType = expression === "globalThis" ? "variable" : "property";
+  if (object && (object.type === "object" || object.type === "function")) {
+    const properties = await object.getAllProperties(
+      /* accessorPropertiesOnly */
+      false,
+      /* generatePreview */
+      false,
+      /* nonIndexedPropertiesOnly */
+      true
+    );
+    const isFunction = object.type === "function";
+    for (const prop of properties.properties || []) {
+      if (!prop.symbol && !(isFunction && (prop.name === "arguments" || prop.name === "caller")) && (quoted || SPAN_IDENT.test(prop.name))) {
+        const label = quoted ? quoted + prop.name.replaceAll("\\", "\\\\").replaceAll(quoted, "\\" + quoted) + quoted : prop.name;
+        const apply = quoted && !hasBracket ? `${label}]` : void 0;
+        const boost = 2 * Number(prop.isOwn) + 1 * Number(prop.enumerable);
+        const type = prop.value?.type === "function" ? functionType : otherType;
+        result.add({ apply, label, type, boost });
+      }
+    }
+  }
+  context.runtimeModel.releaseObjectGroup("completion");
+  return result;
+}
+async function completeExpressionInScope() {
+  const result = new CompletionSet();
+  const selectedFrame = getExecutionContext()?.debuggerModel.selectedCallFrame();
+  if (!selectedFrame) {
+    return result;
+  }
+  const debuggerWorkspaceBinding = Bindings.DebuggerWorkspaceBinding.DebuggerWorkspaceBinding.instance();
+  const scopes = await Promise.all(selectedFrame.scopeChain().map((scope) => SourceMapScopes.NamesResolver.resolveScopeInObject(scope, debuggerWorkspaceBinding).getAllProperties(false, false)));
+  for (const scope of scopes) {
+    for (const property of scope.properties || []) {
+      result.add({
+        label: property.name,
+        type: property.value?.type === "function" ? "function" : "variable"
+      });
+    }
+  }
+  return result;
+}
+async function completeExpressionGlobal() {
+  const cache = PropertyCache.instance();
+  const cached = cache.get("");
+  if (cached) {
+    return await cached;
+  }
+  const context = getExecutionContext();
+  if (!context) {
+    return baseCompletions;
+  }
+  const result = baseCompletions.copy();
+  const fetchNames = completePropertiesInner("globalThis", context).then((fromWindow) => {
+    return context.globalLexicalScopeNames().then((globals) => {
+      for (const option of fromWindow.completions) {
+        result.add(option);
+      }
+      for (const name of globals || []) {
+        result.add({ label: name, type: "variable" });
+      }
+      return result;
+    });
+  });
+  cache.set("", fetchNames);
+  return await fetchNames;
+}
+async function isExpressionComplete(expression) {
+  const currentExecutionContext = UI8.Context.Context.instance().flavor(SDK.RuntimeModel.ExecutionContext);
+  if (!currentExecutionContext) {
+    return true;
+  }
+  const result = await currentExecutionContext.runtimeModel.compileScript(expression, "", false, currentExecutionContext.id);
+  if (!result?.exceptionDetails?.exception) {
+    return true;
+  }
+  const description = result.exceptionDetails.exception.description;
+  if (description) {
+    return !description.startsWith("SyntaxError: Unexpected end of input") && !description.startsWith("SyntaxError: Unterminated template literal");
+  }
+  return false;
+}
+function argumentHints() {
+  return cursorTooltip(getArgumentHints);
+}
+function closeArgumentsHintsTooltip(view, tooltip) {
+  if (view.state.field(tooltip) === null) {
+    return false;
+  }
+  view.dispatch({ effects: closeTooltip.of(null) });
+  return true;
+}
+async function getArgumentHints(state, pos) {
+  const node = CodeMirror6.syntaxTree(state).resolveInner(pos).enterUnfinishedNodesBefore(pos);
+  if (node.name !== "ArgList") {
+    return null;
+  }
+  const callee = node.parent?.getChild("Expression");
+  if (!callee) {
+    return null;
+  }
+  const argumentList = await getArgumentsForExpression(callee, state.doc);
+  if (!argumentList) {
+    return null;
+  }
+  let argumentIndex = 0;
+  for (let scanPos = pos; ; ) {
+    const before = node.childBefore(scanPos);
+    if (!before) {
+      break;
+    }
+    if (before.type.is("Expression")) {
+      argumentIndex++;
+    }
+    scanPos = before.from;
+  }
+  return () => tooltipBuilder(argumentList, argumentIndex);
+}
+async function getArgumentsForExpression(callee, doc) {
+  const context = getExecutionContext();
+  if (!context) {
+    return null;
+  }
+  const expression = doc.sliceString(callee.from, callee.to);
+  const result = await evaluateExpression(context, expression, "argumentsHint");
+  if (result?.type !== "function") {
+    return null;
+  }
+  const objGetter = async () => {
+    const first = callee.firstChild;
+    if (!first || callee.name !== "MemberExpression") {
+      return null;
+    }
+    return await evaluateExpression(context, doc.sliceString(first.from, first.to), "argumentsHint");
+  };
+  return await getArgumentsForFunctionValue(result, objGetter, expression).finally(() => context.runtimeModel.releaseObjectGroup("argumentsHint"));
+}
+function argumentsList(input) {
+  function parseParamList(cursor) {
+    while (cursor.name !== "ParamList") {
+      cursor.nextSibling();
+    }
+    const parameters = [];
+    if (cursor.name === "ParamList" && cursor.firstChild()) {
+      let prefix = "";
+      do {
+        switch (cursor.name) {
+          case "ArrayPattern":
+            parameters.push(prefix + "arr");
+            prefix = "";
+            break;
+          case "ObjectPattern":
+            parameters.push(prefix + "obj");
+            prefix = "";
+            break;
+          case "VariableDefinition":
+            parameters.push(prefix + input.slice(cursor.from, cursor.to));
+            prefix = "";
+            break;
+          case "Spread":
+            prefix = "...";
+            break;
+        }
+      } while (cursor.nextSibling());
+    }
+    return parameters;
+  }
+  try {
+    try {
+      const { parser } = CodeMirror6.javascript.javascriptLanguage.configure({ strict: true, top: "SingleClassItem" });
+      const cursor = parser.parse(input).cursor();
+      if (cursor.firstChild() && cursor.name === "MethodDeclaration" && cursor.firstChild()) {
+        return parseParamList(cursor);
+      }
+      throw new Error("SingleClassItem rule is expected to have exactly one MethodDeclaration child");
+    } catch {
+      const { parser } = CodeMirror6.javascript.javascriptLanguage.configure({ strict: true, top: "SingleExpression" });
+      const cursor = parser.parse(input).cursor();
+      if (!cursor.firstChild()) {
+        throw new Error("SingleExpression rule is expected to have children");
+      }
+      switch (cursor.name) {
+        case "ArrowFunction":
+        case "FunctionExpression": {
+          if (!cursor.firstChild()) {
+            throw new Error(`${cursor.name} rule is expected to have children`);
+          }
+          return parseParamList(cursor);
+        }
+        case "ClassExpression": {
+          if (!cursor.firstChild()) {
+            throw new Error(`${cursor.name} rule is expected to have children`);
+          }
+          do {
+            cursor.nextSibling();
+          } while (cursor.name !== "ClassBody");
+          if (cursor.name === "ClassBody" && cursor.firstChild()) {
+            do {
+              if (cursor.name === "MethodDeclaration" && cursor.firstChild()) {
+                if (cursor.name === "PropertyDefinition" && input.slice(cursor.from, cursor.to) === "constructor") {
+                  return parseParamList(cursor);
+                }
+                cursor.parent();
+              }
+            } while (cursor.nextSibling());
+          }
+          return [];
+        }
+      }
+      throw new Error("Unexpected expression");
+    }
+  } catch (cause) {
+    throw new Error(`Failed to parse for arguments list: ${input}`, { cause });
+  }
+}
+async function getArgumentsForFunctionValue(object, receiverObjGetter, functionName) {
+  const description = object.description;
+  if (!description) {
+    return null;
+  }
+  if (!description.endsWith("{ [native code] }")) {
+    return [argumentsList(description)];
+  }
+  if (description === "function () { [native code] }") {
+    const fromBound = await getArgumentsForBoundFunction(object);
+    if (fromBound) {
+      return fromBound;
+    }
+  }
+  const javaScriptMetadata = JavaScriptMetaData.JavaScriptMetadata.JavaScriptMetadataImpl.instance();
+  const descriptionRegexResult = /^function ([^(]*)\(/.exec(description);
+  const name = descriptionRegexResult?.[1] || functionName;
+  if (!name) {
+    return null;
+  }
+  const uniqueSignatures = javaScriptMetadata.signaturesForNativeFunction(name);
+  if (uniqueSignatures) {
+    return uniqueSignatures;
+  }
+  const receiverObj = await receiverObjGetter();
+  if (!receiverObj) {
+    return null;
+  }
+  const className = receiverObj.className;
+  if (className) {
+    const instanceMethods = javaScriptMetadata.signaturesForInstanceMethod(name, className);
+    if (instanceMethods) {
+      return instanceMethods;
+    }
+  }
+  if (receiverObj.description && receiverObj.type === "function" && receiverObj.description.endsWith("{ [native code] }")) {
+    const receiverDescriptionRegexResult = /^function ([^(]*)\(/.exec(receiverObj.description);
+    if (receiverDescriptionRegexResult) {
+      const receiverName = receiverDescriptionRegexResult[1];
+      const staticSignatures = javaScriptMetadata.signaturesForStaticMethod(name, receiverName);
+      if (staticSignatures) {
+        return staticSignatures;
+      }
+    }
+  }
+  for (const proto of await prototypesFromObject(receiverObj)) {
+    const instanceSignatures = javaScriptMetadata.signaturesForInstanceMethod(name, proto);
+    if (instanceSignatures) {
+      return instanceSignatures;
+    }
+  }
+  return null;
+}
+async function prototypesFromObject(object) {
+  if (object.type === "number") {
+    return ["Number", "Object"];
+  }
+  if (object.type === "string") {
+    return ["String", "Object"];
+  }
+  if (object.type === "symbol") {
+    return ["Symbol", "Object"];
+  }
+  if (object.type === "bigint") {
+    return ["BigInt", "Object"];
+  }
+  if (object.type === "boolean") {
+    return ["Boolean", "Object"];
+  }
+  if (object.type === "undefined" || object.subtype === "null") {
+    return [];
+  }
+  return await object.callFunctionJSON(function() {
+    const result = [];
+    for (let object2 = this; object2; object2 = Object.getPrototypeOf(object2)) {
+      if (typeof object2 === "object" && object2.constructor?.name) {
+        result[result.length] = object2.constructor.name;
+      }
+    }
+    return result;
+  }, []) ?? [];
+}
+async function getArgumentsForBoundFunction(object) {
+  const { internalProperties } = await object.getOwnProperties(false);
+  if (!internalProperties) {
+    return null;
+  }
+  const target = internalProperties.find((p) => p.name === "[[TargetFunction]]")?.value;
+  const args = internalProperties.find((p) => p.name === "[[BoundArgs]]")?.value;
+  const thisValue = internalProperties.find((p) => p.name === "[[BoundThis]]")?.value;
+  if (!thisValue || !target || !args) {
+    return null;
+  }
+  const originalSignatures = await getArgumentsForFunctionValue(target, () => Promise.resolve(thisValue));
+  const boundArgsLength = SDK.RemoteObject.RemoteObject.arrayLength(args);
+  if (!originalSignatures) {
+    return null;
+  }
+  return originalSignatures.map((signature) => {
+    const restIndex = signature.findIndex((arg) => arg.startsWith("..."));
+    return restIndex > -1 && restIndex < boundArgsLength ? signature.slice(restIndex) : signature.slice(boundArgsLength);
+  });
+}
+function tooltipBuilder(signatures, currentIndex) {
+  const tooltip = document.createElement("div");
+  tooltip.className = "cm-argumentHints";
+  for (const args of signatures) {
+    const argumentsElement = document.createElement("span");
+    for (let i = 0; i < args.length; i++) {
+      if (i === currentIndex || i < currentIndex && args[i].startsWith("...")) {
+        const argElement = argumentsElement.appendChild(document.createElement("b"));
+        argElement.appendChild(document.createTextNode(args[i]));
+      } else {
+        argumentsElement.appendChild(document.createTextNode(args[i]));
+      }
+      if (i < args.length - 1) {
+        argumentsElement.appendChild(document.createTextNode(", "));
+      }
+    }
+    const signatureElement = tooltip.appendChild(document.createElement("div"));
+    signatureElement.className = "source-code";
+    signatureElement.appendChild(document.createTextNode("\u0192("));
+    signatureElement.appendChild(argumentsElement);
+    signatureElement.appendChild(document.createTextNode(")"));
+  }
+  return { dom: tooltip };
+}
+
+// gen/front_end/ui/components/text_editor/position.js
+var position_exports = {};
+__export(position_exports, {
+  toLineColumn: () => toLineColumn,
+  toOffset: () => toOffset
+});
+function toOffset(doc, { lineNumber, columnNumber }) {
+  const line = doc.line(Math.max(1, Math.min(doc.lines, lineNumber + 1)));
+  return Math.max(line.from, Math.min(line.to, line.from + columnNumber));
+}
+function toLineColumn(doc, offset) {
+  offset = Math.max(0, Math.min(offset, doc.length));
+  const line = doc.lineAt(offset);
+  return { lineNumber: line.number - 1, columnNumber: offset - line.from };
+}
+
+// gen/front_end/ui/components/text_editor/TextEditor.js
+var TextEditor_exports = {};
+__export(TextEditor_exports, {
+  TextEditor: () => TextEditor
+});
+import * as Common6 from "./..\\..\\..\\core\\common\\common.js";
+import * as CodeMirror7 from "./..\\..\\..\\third_party\\codemirror.next\\codemirror.next.js";
+import * as UI9 from "./..\\..\\legacy\\legacy.js";
+import * as ThemeSupport from "./..\\..\\legacy\\theme_support\\theme_support.js";
+import * as CodeHighlighter3 from "./..\\code_highlighter\\code_highlighter.js";
+var TextEditor = class extends HTMLElement {
+  #shadow = this.attachShadow({ mode: "open" });
+  #activeEditor = void 0;
+  #dynamicSettings = DynamicSetting.none;
+  #activeSettingListeners = [];
+  #pendingState;
+  #lastScrollSnapshot;
+  #resizeTimeout = -1;
+  #resizeListener = () => {
+    if (this.#resizeTimeout < 0) {
+      this.#resizeTimeout = window.setTimeout(() => {
+        this.#resizeTimeout = -1;
+        if (this.#activeEditor) {
+          CodeMirror7.repositionTooltips(this.#activeEditor);
+        }
+      }, 50);
+    }
+  };
+  #devtoolsResizeObserver = new ResizeObserver(this.#resizeListener);
+  constructor(pendingState) {
+    super();
+    this.#pendingState = pendingState;
+    this.#shadow.createChild("style").textContent = CodeHighlighter3.codeHighlighterStyles;
+  }
+  #createEditor() {
+    this.#activeEditor = new CodeMirror7.EditorView({
+      state: this.state,
+      parent: this.#shadow,
+      root: this.#shadow,
+      dispatch: (tr, view) => {
+        view.update([tr]);
+        this.#maybeDispatchInput(tr);
+        if (tr.reconfigured) {
+          this.#ensureSettingListeners();
+        }
+      },
+      scrollTo: this.#lastScrollSnapshot
+    });
+    this.#activeEditor.scrollDOM.addEventListener("scroll", () => {
+      if (!this.#activeEditor) {
+        return;
+      }
+      this.#lastScrollSnapshot = this.#activeEditor.scrollSnapshot();
+      this.scrollEventHandledToSaveScrollPositionForTest();
+    });
+    this.#activeEditor.scrollDOM.addEventListener("scrollend", () => {
+      this.dispatchEvent(new Event("scrollend"));
+    });
+    this.#ensureSettingListeners();
+    this.#startObservingResize();
+    ThemeSupport.ThemeSupport.instance().addEventListener(ThemeSupport.ThemeChangeEvent.eventName, () => {
+      const currentTheme = ThemeSupport.ThemeSupport.instance().themeName() === "dark" ? dummyDarkTheme : [];
+      this.editor.dispatch({
+        effects: themeSelection.reconfigure(currentTheme)
+      });
+    });
+    return this.#activeEditor;
+  }
+  get editor() {
+    return this.#activeEditor || this.#createEditor();
+  }
+  dispatch(spec) {
+    return this.editor.dispatch(spec);
+  }
+  get state() {
+    if (this.#activeEditor) {
+      return this.#activeEditor.state;
+    }
+    if (!this.#pendingState) {
+      this.#pendingState = CodeMirror7.EditorState.create({ extensions: baseConfiguration("") });
+    }
+    return this.#pendingState;
+  }
+  set state(state) {
+    if (this.#pendingState === state) {
+      return;
+    }
+    this.#pendingState = state;
+    if (this.#activeEditor) {
+      this.#activeEditor.setState(state);
+      this.#ensureSettingListeners();
+    }
+  }
+  scrollEventHandledToSaveScrollPositionForTest() {
+  }
+  connectedCallback() {
+    if (!this.#activeEditor) {
+      this.#createEditor();
+    } else {
+      this.#activeEditor.dispatch({ effects: this.#lastScrollSnapshot });
+    }
+  }
+  disconnectedCallback() {
+    if (this.#activeEditor) {
+      this.#activeEditor.dispatch({ effects: clearHighlightedLine.of(null) });
+      this.#pendingState = this.#activeEditor.state;
+      this.#devtoolsResizeObserver.disconnect();
+      window.removeEventListener("resize", this.#resizeListener);
+      this.#activeEditor.destroy();
+      this.#activeEditor = void 0;
+      this.#ensureSettingListeners();
+    }
+  }
+  focus() {
+    this.editor.focus();
+  }
+  #ensureSettingListeners() {
+    const dynamicSettings = this.#activeEditor ? this.#activeEditor.state.facet(dynamicSetting) : DynamicSetting.none;
+    if (dynamicSettings === this.#dynamicSettings) {
+      return;
+    }
+    this.#dynamicSettings = dynamicSettings;
+    for (const [setting, listener] of this.#activeSettingListeners) {
+      setting.removeChangeListener(listener);
+    }
+    this.#activeSettingListeners = [];
+    for (const dynamicSetting2 of dynamicSettings) {
+      const handler = ({ data }) => {
+        const change = dynamicSetting2.sync(this.state, data);
+        if (change && this.#activeEditor) {
+          this.#activeEditor.dispatch({ effects: change });
+        }
+      };
+      const setting = Common6.Settings.Settings.instance().moduleSetting(dynamicSetting2.settingName);
+      setting.addChangeListener(handler);
+      this.#activeSettingListeners.push([setting, handler]);
+    }
+  }
+  #startObservingResize() {
+    const devtoolsElement = UI9.UIUtils.getDevToolsBoundingElement();
+    if (devtoolsElement) {
+      this.#devtoolsResizeObserver.observe(devtoolsElement);
+    }
+    window.addEventListener("resize", this.#resizeListener);
+  }
+  #maybeDispatchInput(transaction) {
+    const userEvent = transaction.annotation(CodeMirror7.Transaction.userEvent);
+    const inputType = userEvent ? CODE_MIRROR_USER_EVENT_TO_INPUT_EVENT_TYPE.get(userEvent) : null;
+    if (inputType) {
+      this.dispatchEvent(new InputEvent("input", { inputType }));
+    }
+  }
+  revealPosition(selection, highlight = true) {
+    const view = this.#activeEditor;
+    if (!view) {
+      return;
+    }
+    const line = view.state.doc.lineAt(selection.main.head);
+    const effects = [];
+    if (highlight) {
+      if (!view.state.field(highlightedLineState, false)) {
+        view.dispatch({ effects: CodeMirror7.StateEffect.appendConfig.of(highlightedLineState) });
+      } else {
+        view.dispatch({ effects: clearHighlightedLine.of(null) });
+      }
+      effects.push(setHighlightedLine.of(line.from));
+    }
+    const editorRect = view.scrollDOM.getBoundingClientRect();
+    const targetPos = view.coordsAtPos(selection.main.head);
+    if (!selection.main.empty) {
+      effects.push(CodeMirror7.EditorView.scrollIntoView(selection.main));
+    } else if (!targetPos || targetPos.top < editorRect.top || targetPos.bottom > editorRect.bottom) {
+      effects.push(CodeMirror7.EditorView.scrollIntoView(selection.main, { y: "center" }));
+    } else if (targetPos.left < editorRect.left || targetPos.right > editorRect.right) {
+      effects.push(CodeMirror7.EditorView.scrollIntoView(selection.main, { x: "center" }));
+    }
+    view.dispatch({
+      selection,
+      effects,
+      userEvent: "select.reveal"
+    });
+  }
+  createSelection(head, anchor) {
+    const { doc } = this.state;
+    const headPos = toOffset(doc, head);
+    return CodeMirror7.EditorSelection.single(anchor ? toOffset(doc, anchor) : headPos, headPos);
+  }
+  toLineColumn(pos) {
+    return toLineColumn(this.state.doc, pos);
+  }
+  toOffset(pos) {
+    return toOffset(this.state.doc, pos);
+  }
+};
+customElements.define("devtools-text-editor", TextEditor);
+var clearHighlightedLine = CodeMirror7.StateEffect.define();
+var setHighlightedLine = CodeMirror7.StateEffect.define();
+var highlightedLineState = CodeMirror7.StateField.define({
+  create: () => CodeMirror7.Decoration.none,
+  update(value, tr) {
+    if (!tr.changes.empty && value.size) {
+      value = value.map(tr.changes);
+    }
+    for (const effect of tr.effects) {
+      if (effect.is(clearHighlightedLine)) {
+        value = CodeMirror7.Decoration.none;
+      } else if (effect.is(setHighlightedLine)) {
+        value = CodeMirror7.Decoration.set([
+          CodeMirror7.Decoration.line({ attributes: { class: "cm-highlightedLine" } }).range(effect.value)
+        ]);
+      }
+    }
+    return value;
+  },
+  provide: (field) => CodeMirror7.EditorView.decorations.from(field, (value) => value)
+});
+var CODE_MIRROR_USER_EVENT_TO_INPUT_EVENT_TYPE = /* @__PURE__ */ new Map([
+  ["input.type", "insertText"],
+  ["input.type.compose", "insertCompositionText"],
+  ["input.paste", "insertFromPaste"],
+  ["input.drop", "insertFromDrop"],
+  ["input.complete", "insertReplacementText"],
+  ["delete.selection", "deleteContent"],
+  ["delete.forward", "deleteContentForward"],
+  ["delete.backward", "deleteContentBackward"],
+  ["delete.cut", "deleteByCut"],
+  ["move.drop", "deleteByDrag"],
+  ["undo", "historyUndo"],
+  ["redo", "historyRedo"]
+]);
+
+// gen/front_end/ui/components/text_editor/TextEditorHistory.js
+var TextEditorHistory_exports = {};
+__export(TextEditorHistory_exports, {
+  TextEditorHistory: () => TextEditorHistory
+});
+import * as CodeMirror8 from "./..\\..\\..\\third_party\\codemirror.next\\codemirror.next.js";
+var TextEditorHistory = class {
+  #editor;
+  #history;
+  constructor(editor, history2) {
+    this.#editor = editor;
+    this.#history = history2;
+  }
+  /**
+   * Replaces the text editor content with entries from the history. Does nothing
+   * if the cursor is not positioned correctly (unless `force` is `true`).
+   */
+  moveHistory(dir, force = false) {
+    const { editor } = this.#editor, { main } = editor.state.selection;
+    const isBackward = dir === -1;
+    if (!force) {
+      if (!main.empty) {
+        return false;
+      }
+      const cursorCoords = editor.coordsAtPos(main.head);
+      const endCoords = editor.coordsAtPos(isBackward ? 0 : editor.state.doc.length);
+      if (cursorCoords && endCoords && (isBackward ? cursorCoords.top > endCoords.top + 5 : cursorCoords.bottom < endCoords.bottom - 5)) {
+        return false;
+      }
+    }
+    const text = editor.state.doc.toString();
+    const history2 = this.#history;
+    const newText = isBackward ? history2.previous(text) : history2.next(text);
+    if (newText === void 0) {
+      return false;
+    }
+    const cursorPos = newText.length;
+    editor.dispatch({
+      changes: { from: 0, to: editor.state.doc.length, insert: newText },
+      selection: CodeMirror8.EditorSelection.cursor(cursorPos),
+      scrollIntoView: true
+    });
+    if (isBackward) {
+      const firstLineBreak = newText.search(/\n|$/);
+      editor.dispatch({
+        selection: CodeMirror8.EditorSelection.cursor(firstLineBreak)
+      });
+    }
+    return true;
+  }
+  historyCompletions(context) {
+    const { explicit, pos, state } = context;
+    const text = state.doc.toString();
+    const caretIsAtEndOfPrompt = pos === text.length;
+    if (!caretIsAtEndOfPrompt || !text.length && !explicit) {
+      return null;
+    }
+    const matchingEntries = this.#history.matchingEntries(text);
+    if (!matchingEntries.size) {
+      return null;
+    }
+    const options = [...matchingEntries].map((label) => ({ label, type: "secondary", boost: -1e5 }));
+    return { from: 0, to: text.length, options };
+  }
+};
+export {
+  AccessiblePlaceholder_exports as AccessiblePlaceholder,
+  AiCodeCompletionDisclaimer_exports as AiCodeCompletionDisclaimer,
+  AiCodeCompletionProvider_exports as AiCodeCompletionProvider,
+  AiCodeCompletionTeaser_exports as AiCodeCompletionTeaser,
+  AiCodeGenerationParser_exports as AiCodeGenerationParser,
+  AiCodeGenerationProvider_exports as AiCodeGenerationProvider,
+  AiCodeGenerationTeaser_exports as AiCodeGenerationTeaser,
+  AiCodeGenerationUpgradeDialog_exports as AiCodeGenerationUpgradeDialog,
+  AutocompleteHistory_exports as AutocompleteHistory,
+  config_exports as Config,
+  ExecutionPositionHighlighter_exports as ExecutionPositionHighlighter,
+  javascript_exports as JavaScript,
+  position_exports as Position,
+  TextEditor_exports as TextEditor,
+  TextEditorHistory_exports as TextEditorHistory
+};
+//# sourceMappingURL=text_editor.js.map

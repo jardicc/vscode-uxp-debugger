@@ -1,0 +1,2 @@
+native/**/*.sh filter=lfs diff=lfs merge=lfs -text
+native/**/*.bat filter=lfs diff=lfs merge=lfs -text

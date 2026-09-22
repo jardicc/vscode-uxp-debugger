@@ -1,0 +1,195 @@
+// Copyright 2021 The Chromium Authors
+// Use of this source code is governed by a BSD-style license that can be
+// found in the LICENSE file.
+/*
+ * Copyright (C) 2012 Research In Motion Limited. All rights reserved.
+ *
+ * This library is free software; you can redistribute it and/or
+ * modify it under the terms of the GNU Lesser General Public
+ * License as published by the Free Software Foundation; either
+ * version 2 of the License, or (at your option) any later version.
+ *
+ * This library is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
+ * Lesser General Public License for more details.
+ *
+ * You should have received a copy of the GNU Lesser General Public
+ * License along with this library; if not, write to the Free Software
+ * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301  USA
+ */
+import * as Common from '../../core/common/common.js';
+import * as i18n from '../../core/i18n/i18n.js';
+import * as Platform from '../../core/platform/platform.js';
+import * as SDK from '../../core/sdk/sdk.js';
+import * as TextUtils from '../../core/text_utils/text_utils.js';
+import * as VisualLogging from '../../ui/visual_logging/visual_logging.js';
+import { BinaryResourceView } from './BinaryResourceView.js';
+import { DataGridItem, ResourceChunkView } from './ResourceChunkView.js';
+const UIStrings = {
+    /**
+     * @description Text in Resource Web Socket Frame View of the Network panel. Displays which Opcode
+     * is relevant to a particular operation. 'mask' indicates that the Opcode used a mask, which is a
+     * way of modifying a value by overlaying another value on top of it, partially covering/changing
+     * it, hence 'masking' it.
+     * https://developer.mozilla.org/en-US/docs/Web/API/WebSockets_API/Writing_WebSocket_servers
+     * @example {Localized name of the Opcode} PH1
+     * @example {0} PH2
+     */
+    sOpcodeSMask: '{PH1} (Opcode {PH2}, mask)',
+    /**
+     * @description Text in Resource Web Socket Frame View of the Network panel. Displays which Opcode
+     * is relevant to a particular operation.
+     * @example {Localized name of the Opcode} PH1
+     * @example {0} PH2
+     */
+    sOpcodeS: '{PH1} (Opcode {PH2})',
+    /**
+     * @description WebSocket opcode (operation code) name for a continuation frame in WebSocket messages view of the Network panel. In the WebSocket protocol, an opcode defines the frame payload type; continuation frames split large messages into multiple chunks.
+     */
+    continuationFrame: 'Continuation frame',
+    /**
+     * @description WebSocket opcode (operation code) name for a text message frame in WebSocket messages view of the Network panel. In the WebSocket protocol, an opcode defines the frame payload type.
+     */
+    textMessage: 'Text message',
+    /**
+     * @description WebSocket opcode (operation code) name for a binary message frame in WebSocket messages view of the Network panel. In the WebSocket protocol, an opcode defines the frame payload type.
+     */
+    binaryMessage: 'Binary message',
+    /**
+     * @description WebSocket opcode (operation code) name for a connection close frame in WebSocket messages view of the Network panel. In the WebSocket protocol, an opcode defines the frame payload type.
+     */
+    connectionCloseMessage: 'Connection close message',
+    /**
+     * @description WebSocket opcode (operation code) name for a ping frame in WebSocket messages view of the Network panel. In the WebSocket protocol, an opcode defines the frame payload type; ping frames check connection liveness.
+     */
+    pingMessage: 'Ping message',
+    /**
+     * @description WebSocket opcode (operation code) name for a pong frame in WebSocket messages view of the Network panel. In the WebSocket protocol, an opcode defines the frame payload type; pong frames reply to ping frames.
+     */
+    pongMessage: 'Pong message',
+    /**
+     * @description Accessible name for WebSocket message data grid in WebSocket messages view of the Network panel.
+     */
+    webSocketFrame: 'WebSocket frame',
+    /**
+     * @description Text shown when a value is not available in WebSocket messages view of the Network panel.
+     */
+    na: 'N/A',
+    /**
+     * @description Placeholder text for filter input in WebSocket messages view of the Network panel.
+     */
+    filterUsingRegex: 'Filter using regex (example: (web)?socket)',
+};
+const str_ = i18n.i18n.registerUIStrings('panels/network/ResourceWebSocketFrameView.ts', UIStrings);
+const i18nString = i18n.i18n.getLocalizedString.bind(undefined, str_);
+const i18nLazyString = i18n.i18n.getLazilyComputedLocalizedString.bind(undefined, str_);
+export class ResourceWebSocketFrameView extends ResourceChunkView {
+    constructor(request) {
+        super(request, 'network-web-socket-message-filter', 'resource-web-socket-frame-split-view-state', i18nString(UIStrings.webSocketFrame), i18nString(UIStrings.filterUsingRegex), { jslog: `${VisualLogging.pane('web-socket-messages').track({ resize: true })}` });
+    }
+    getRequestChunks() {
+        return this.request.frames();
+    }
+    createGridItem(frame) {
+        return new ResourceFrameNode(frame);
+    }
+    chunkFilter(frame) {
+        if (this.filterType && frame.type !== this.filterType) {
+            return false;
+        }
+        return !this.filterRegex || this.filterRegex.test(frame.text);
+    }
+    wasShown() {
+        super.wasShown();
+        this.requestUpdate();
+        this.request.addEventListener(SDK.NetworkRequest.Events.WEBSOCKET_FRAME_ADDED, this.onWebSocketFrameAdded, this);
+    }
+    willHide() {
+        super.willHide();
+        this.request.removeEventListener(SDK.NetworkRequest.Events.WEBSOCKET_FRAME_ADDED, this.onWebSocketFrameAdded, this);
+    }
+    onWebSocketFrameAdded(event) {
+        this.chunkAdded(event.data);
+    }
+    static opCodeDescription(opCode, mask) {
+        const localizedDescription = opCodeDescriptions[opCode] || (() => '');
+        if (mask) {
+            return i18nString(UIStrings.sOpcodeSMask, { PH1: localizedDescription(), PH2: opCode });
+        }
+        return i18nString(UIStrings.sOpcodeS, { PH1: localizedDescription(), PH2: opCode });
+    }
+}
+const opCodeDescriptions = (function () {
+    const map = [];
+    map[0 /* OpCodes.CONTINUATION_FRAME */] = i18nLazyString(UIStrings.continuationFrame);
+    map[1 /* OpCodes.TEXT_FRAME */] = i18nLazyString(UIStrings.textMessage);
+    map[2 /* OpCodes.BINARY_FRAME */] = i18nLazyString(UIStrings.binaryMessage);
+    map[8 /* OpCodes.CONNECTION_CLOSE_FRAME */] = i18nLazyString(UIStrings.connectionCloseMessage);
+    map[9 /* OpCodes.PING_FRAME */] = i18nLazyString(UIStrings.pingMessage);
+    map[10 /* OpCodes.PONG_FRAME */] = i18nLazyString(UIStrings.pongMessage);
+    return map;
+})();
+class ResourceFrameNode extends DataGridItem {
+    frame;
+    isTextFrame;
+    #dataText;
+    #binaryView = null;
+    data;
+    cssClass;
+    constructor(frame) {
+        super();
+        let length = String(frame.text.length);
+        let dataText = frame.text;
+        let description = ResourceWebSocketFrameView.opCodeDescription(frame.opCode, frame.mask);
+        const isTextFrame = frame.opCode === 1 /* OpCodes.TEXT_FRAME */;
+        if (frame.type === SDK.NetworkRequest.WebSocketFrameType.Error) {
+            description = dataText;
+            length = i18nString(UIStrings.na);
+        }
+        else if (isTextFrame) {
+            description = dataText;
+        }
+        else if (frame.opCode === 2 /* OpCodes.BINARY_FRAME */) {
+            length = i18n.ByteUtilities.bytesToString(Platform.StringUtilities.base64ToSize(frame.text));
+            description = opCodeDescriptions[frame.opCode]();
+        }
+        else {
+            dataText = description;
+        }
+        this.frame = frame;
+        this.isTextFrame = isTextFrame;
+        this.#dataText = dataText;
+        this.data = {
+            data: description,
+            length,
+        };
+        if (frame.type === SDK.NetworkRequest.WebSocketFrameType.Error) {
+            this.cssClass = 'resource-chunk-view-row-error';
+        }
+        else if (frame.type === SDK.NetworkRequest.WebSocketFrameType.Send) {
+            this.cssClass = 'resource-chunk-view-row-send';
+        }
+        else if (frame.type === SDK.NetworkRequest.WebSocketFrameType.Receive) {
+            this.cssClass = 'resource-chunk-view-row-receive';
+        }
+    }
+    dataText() {
+        return this.#dataText;
+    }
+    binaryView() {
+        if (this.isTextFrame || this.frame.type === SDK.NetworkRequest.WebSocketFrameType.Error) {
+            return null;
+        }
+        if (!this.#binaryView) {
+            if (this.#dataText.length > 0) {
+                this.#binaryView = new BinaryResourceView(TextUtils.StreamingContentData.StreamingContentData.from(new TextUtils.ContentData.ContentData(this.#dataText, true, 'applicaiton/octet-stream')), Platform.DevToolsPath.EmptyUrlString, Common.ResourceType.resourceTypes.WebSocket);
+            }
+        }
+        return this.#binaryView;
+    }
+    getTime() {
+        return this.frame.time;
+    }
+}
+//# sourceMappingURL=ResourceWebSocketFrameView.js.map

@@ -1,0 +1,774 @@
+var __defProp = Object.defineProperty;
+var __export = (target, all) => {
+  for (var name in all)
+    __defProp(target, name, { get: all[name], enumerable: true });
+};
+
+// gen/front_end/models/stack_trace/DetailedErrorStackParser.js
+var DetailedErrorStackParser_exports = {};
+__export(DetailedErrorStackParser_exports, {
+  augmentRawFramesWithScriptIds: () => augmentRawFramesWithScriptIds,
+  concatErrorDescriptionAndIssueSummary: () => concatErrorDescriptionAndIssueSummary,
+  parseMessage: () => parseMessage,
+  parseRawFramesFromErrorStack: () => parseRawFramesFromErrorStack
+});
+import * as Common from "./..\\..\\core\\common\\common.js";
+var CALL_FRAME_REGEX = /^\s*at\s+/;
+function parseRawFramesFromErrorStack(stack, resolveURL) {
+  const lines = stack.split("\n");
+  const firstAtLineIndex = findFramesStartLine(lines);
+  const rawFrames = [];
+  if (firstAtLineIndex === -1) {
+    return rawFrames;
+  }
+  for (let i = firstAtLineIndex; i < lines.length; ++i) {
+    const line = lines[i];
+    const match = CALL_FRAME_REGEX.exec(line);
+    if (!match) {
+      if (line.trim() === "") {
+        continue;
+      }
+      return null;
+    }
+    let lineContent = line.substring(match[0].length);
+    let isAsync = false;
+    if (lineContent.startsWith("async ")) {
+      isAsync = true;
+      lineContent = lineContent.substring(6);
+    }
+    let isConstructor = false;
+    if (lineContent.startsWith("new ")) {
+      isConstructor = true;
+      lineContent = lineContent.substring(4);
+    }
+    let functionName = "";
+    let url = "";
+    let lineNumber = -1;
+    let columnNumber = -1;
+    let typeName;
+    let methodName;
+    let isEval = false;
+    let isWasm = false;
+    let wasmModuleName;
+    let wasmFunctionIndex;
+    let promiseIndex;
+    let evalOrigin;
+    const openParenIndex = lineContent.indexOf(" (");
+    let location = "";
+    if (lineContent.endsWith(")") && openParenIndex !== -1) {
+      functionName = lineContent.substring(0, openParenIndex).trim();
+      location = lineContent.substring(openParenIndex + 2, lineContent.length - 1);
+    } else if (lineContent.startsWith("(") && lineContent.endsWith(")")) {
+      location = lineContent.substring(1, lineContent.length - 1);
+    } else {
+      location = lineContent;
+    }
+    if (location.startsWith("eval at ")) {
+      isEval = true;
+      const commaIndex = location.lastIndexOf(", ");
+      let evalOriginStr = location;
+      if (commaIndex !== -1) {
+        evalOriginStr = location.substring(0, commaIndex);
+        location = location.substring(commaIndex + 2);
+      } else {
+        location = "";
+      }
+      if (evalOriginStr.startsWith("eval at ")) {
+        evalOriginStr = evalOriginStr.substring(8);
+      }
+      const innerOpenParen = evalOriginStr.indexOf(" (");
+      let evalFunctionName = evalOriginStr;
+      let evalLocation = "";
+      if (innerOpenParen !== -1) {
+        evalFunctionName = evalOriginStr.substring(0, innerOpenParen).trim();
+        evalLocation = evalOriginStr.substring(innerOpenParen + 2, evalOriginStr.length - 1);
+        evalOrigin = parseRawFramesFromErrorStack(`    at ${evalFunctionName} (${evalLocation})`, resolveURL)?.[0];
+      } else {
+        evalOrigin = parseRawFramesFromErrorStack(`    at ${evalFunctionName}`, resolveURL)?.[0];
+      }
+    }
+    if (location.startsWith("index ")) {
+      promiseIndex = parseInt(location.substring(6), 10);
+      url = "";
+    } else if (location === "<anonymous>" || location === "native") {
+      url = "";
+    } else if (location.includes(":wasm-function[")) {
+      isWasm = true;
+      const wasmMatch = /^(.*):wasm-function\[(\d+)\]:(0x[0-9a-fA-F]+)$/.exec(location);
+      if (wasmMatch) {
+        url = wasmMatch[1];
+        wasmFunctionIndex = parseInt(wasmMatch[2], 10);
+        columnNumber = parseInt(wasmMatch[3], 16);
+        lineNumber = 0;
+      }
+    } else if (location) {
+      const splitResult = Common.ParsedURL.ParsedURL.splitLineAndColumn(location);
+      lineNumber = splitResult.lineNumber ?? -1;
+      columnNumber = splitResult.columnNumber ?? -1;
+      if (resolveURL && splitResult.url !== "<anonymous>" && splitResult.url !== "native") {
+        const resolved = resolveURL(splitResult.url);
+        if (!resolved) {
+          return null;
+        }
+        url = resolved;
+      } else {
+        url = splitResult.url;
+      }
+    }
+    if (functionName) {
+      const aliasMatch = /(.*)\s+\[as\s+(.*)\]/.exec(functionName);
+      if (aliasMatch) {
+        methodName = aliasMatch[2];
+        functionName = aliasMatch[1];
+      }
+      const dotIndex = functionName.indexOf(".");
+      if (dotIndex !== -1) {
+        typeName = functionName.substring(0, dotIndex);
+        methodName = methodName ?? functionName.substring(dotIndex + 1);
+      }
+      if (isWasm && typeName) {
+        wasmModuleName = typeName;
+      }
+    }
+    rawFrames.push({
+      url,
+      functionName,
+      lineNumber,
+      columnNumber,
+      isWasm,
+      parsedFrameInfo: {
+        isAsync,
+        isConstructor,
+        isEval,
+        evalOrigin,
+        wasmModuleName,
+        wasmFunctionIndex,
+        typeName,
+        methodName,
+        promiseIndex
+      }
+    });
+  }
+  return rawFrames;
+}
+function findFramesStartLine(lines) {
+  return lines.findIndex((line) => CALL_FRAME_REGEX.test(line));
+}
+function parseMessage(stack) {
+  const lines = stack.split("\n");
+  const firstAtLineIndex = findFramesStartLine(lines);
+  if (firstAtLineIndex !== -1) {
+    return lines.slice(0, firstAtLineIndex).join("\n");
+  }
+  return stack;
+}
+function augmentRawFramesWithScriptIds(rawFrames, protocolStackTrace) {
+  function augmentFrame(rawFrame) {
+    const protocolFrame = protocolStackTrace.callFrames.find((frame) => {
+      return rawFrame.url === frame.url && rawFrame.lineNumber === frame.lineNumber && rawFrame.columnNumber === frame.columnNumber;
+    });
+    if (protocolFrame) {
+      rawFrame.scriptId = protocolFrame.scriptId;
+    }
+    if (rawFrame.parsedFrameInfo?.evalOrigin) {
+      augmentFrame(rawFrame.parsedFrameInfo.evalOrigin);
+    }
+  }
+  for (const rawFrame of rawFrames) {
+    augmentFrame(rawFrame);
+  }
+}
+function concatErrorDescriptionAndIssueSummary(description, issueSummary) {
+  const pos = description.indexOf("\n");
+  const prefix = pos === -1 ? description : description.substring(0, pos);
+  const suffix = pos === -1 ? "" : description.substring(pos);
+  description = `${prefix}. ${issueSummary}${suffix}`;
+  return description;
+}
+
+// gen/front_end/models/stack_trace/StackTraceImpl.js
+var StackTraceImpl_exports = {};
+__export(StackTraceImpl_exports, {
+  AsyncFragmentImpl: () => AsyncFragmentImpl,
+  DebuggableFragmentImpl: () => DebuggableFragmentImpl,
+  DebuggableFrameImpl: () => DebuggableFrameImpl,
+  FragmentImpl: () => FragmentImpl,
+  FrameImpl: () => FrameImpl,
+  ParsedErrorStackFragmentImpl: () => ParsedErrorStackFragmentImpl,
+  ParsedErrorStackFrameImpl: () => ParsedErrorStackFrameImpl,
+  StackTraceImpl: () => StackTraceImpl
+});
+import * as Common2 from "./..\\..\\core\\common\\common.js";
+var StackTraceImpl = class extends Common2.ObjectWrapper.ObjectWrapper {
+  syncFragment;
+  asyncFragments;
+  constructor(syncFragment, asyncFragments) {
+    super();
+    this.syncFragment = syncFragment;
+    this.asyncFragments = asyncFragments;
+    const fragment = syncFragment instanceof DebuggableFragmentImpl || syncFragment instanceof ParsedErrorStackFragmentImpl ? syncFragment.fragment : syncFragment;
+    fragment.stackTraces.add(this);
+    this.asyncFragments.forEach((asyncFragment) => asyncFragment.fragment.stackTraces.add(this));
+  }
+};
+var FragmentImpl = class _FragmentImpl {
+  static EMPTY_FRAGMENT = new _FragmentImpl();
+  node;
+  stackTraces = /* @__PURE__ */ new Set();
+  /**
+   * Fragments are deduplicated based on the node.
+   *
+   * In turn, each fragment can be part of multiple stack traces.
+   */
+  static getOrCreate(node) {
+    if (!node.fragment) {
+      node.fragment = new _FragmentImpl(node);
+    }
+    return node.fragment;
+  }
+  constructor(node) {
+    this.node = node;
+  }
+  get frames() {
+    if (!this.node) {
+      return [];
+    }
+    const frames = [];
+    for (const node of this.node.getCallStack()) {
+      frames.push(...node.frames);
+    }
+    return frames;
+  }
+};
+var AsyncFragmentImpl = class {
+  description;
+  fragment;
+  constructor(description, fragment) {
+    this.description = description;
+    this.fragment = fragment;
+  }
+  get frames() {
+    return this.fragment.frames;
+  }
+};
+var FrameImpl = class {
+  url;
+  uiSourceCode;
+  name;
+  line;
+  column;
+  missingDebugInfo;
+  rawName;
+  isWasm;
+  isInline;
+  constructor(url, uiSourceCode, name, line, column, missingDebugInfo, rawName, isWasm, isInline) {
+    this.url = url;
+    this.uiSourceCode = uiSourceCode;
+    this.name = name;
+    this.line = line;
+    this.column = column;
+    this.missingDebugInfo = missingDebugInfo;
+    this.rawName = rawName;
+    this.isWasm = isWasm;
+    this.isInline = isInline;
+  }
+};
+function createParsedErrorStackFrameImplFromEvalOrigin(evalOrigin, parsedFrameInfo) {
+  if (!evalOrigin || evalOrigin.frames.length === 0) {
+    return void 0;
+  }
+  const frame = evalOrigin.frames[0];
+  const nestedOrigin = createParsedErrorStackFrameImplFromEvalOrigin(evalOrigin.evalOrigin, parsedFrameInfo?.evalOrigin?.parsedFrameInfo);
+  return new ParsedErrorStackFrameImpl(frame, parsedFrameInfo?.evalOrigin?.parsedFrameInfo, nestedOrigin);
+}
+var ParsedErrorStackFragmentImpl = class {
+  fragment;
+  constructor(fragment) {
+    this.fragment = fragment;
+  }
+  get frames() {
+    if (!this.fragment.node) {
+      return [];
+    }
+    const frames = [];
+    for (const node of this.fragment.node.getCallStack()) {
+      const evalOrigin = createParsedErrorStackFrameImplFromEvalOrigin(node.evalOrigin, node.parsedFrameInfo);
+      for (const frame of node.frames) {
+        frames.push(new ParsedErrorStackFrameImpl(frame, node.parsedFrameInfo, evalOrigin));
+      }
+    }
+    return frames;
+  }
+};
+var ParsedErrorStackFrameImpl = class {
+  #frame;
+  #parsedFrameInfo;
+  #evalOrigin;
+  constructor(frame, parsedFrameInfo, evalOrigin) {
+    this.#frame = frame;
+    this.#parsedFrameInfo = parsedFrameInfo;
+    this.#evalOrigin = evalOrigin;
+  }
+  get url() {
+    return this.#frame.url;
+  }
+  get uiSourceCode() {
+    return this.#frame.uiSourceCode;
+  }
+  get name() {
+    return this.#frame.name;
+  }
+  get line() {
+    return this.#frame.line;
+  }
+  get column() {
+    return this.#frame.column;
+  }
+  get missingDebugInfo() {
+    return this.#frame.missingDebugInfo;
+  }
+  get rawName() {
+    return this.#frame.rawName;
+  }
+  get isAsync() {
+    return this.#parsedFrameInfo?.isAsync;
+  }
+  get isConstructor() {
+    return this.#parsedFrameInfo?.isConstructor;
+  }
+  get isEval() {
+    return this.#parsedFrameInfo?.isEval;
+  }
+  get evalOrigin() {
+    return this.#evalOrigin;
+  }
+  get isWasm() {
+    return this.#frame.isWasm;
+  }
+  get isInline() {
+    return this.#frame.isInline;
+  }
+  get wasmModuleName() {
+    return this.#parsedFrameInfo?.wasmModuleName;
+  }
+  get wasmFunctionIndex() {
+    return this.#parsedFrameInfo?.wasmFunctionIndex;
+  }
+  get typeName() {
+    return this.#parsedFrameInfo?.typeName;
+  }
+  get methodName() {
+    return this.#parsedFrameInfo?.methodName;
+  }
+  get promiseIndex() {
+    return this.#parsedFrameInfo?.promiseIndex;
+  }
+};
+var DebuggableFragmentImpl = class {
+  fragment;
+  callFrames;
+  constructor(fragment, callFrames) {
+    this.fragment = fragment;
+    this.callFrames = callFrames;
+  }
+  get frames() {
+    if (!this.fragment.node) {
+      return [];
+    }
+    const frames = [];
+    let index = 0;
+    for (const node of this.fragment.node.getCallStack()) {
+      for (const [inlineIdx, frame] of node.frames.entries()) {
+        const sdkFrame = inlineIdx === 0 ? this.callFrames[index] : this.callFrames[index].createVirtualCallFrame(inlineIdx, frame.name ?? "");
+        frames.push(new DebuggableFrameImpl(frame, sdkFrame));
+      }
+      index++;
+    }
+    return frames;
+  }
+};
+var DebuggableFrameImpl = class {
+  #frame;
+  #sdkFrame;
+  constructor(frame, sdkFrame) {
+    this.#frame = frame;
+    this.#sdkFrame = sdkFrame;
+  }
+  get url() {
+    return this.#frame.url;
+  }
+  get uiSourceCode() {
+    return this.#frame.uiSourceCode;
+  }
+  get name() {
+    return this.#frame.name;
+  }
+  get line() {
+    return this.#frame.line;
+  }
+  get column() {
+    return this.#frame.column;
+  }
+  get missingDebugInfo() {
+    return this.#frame.missingDebugInfo;
+  }
+  get rawName() {
+    return this.#frame.rawName;
+  }
+  get isWasm() {
+    return this.#frame.isWasm;
+  }
+  get isInline() {
+    return this.#frame.isInline;
+  }
+  get sdkFrame() {
+    return this.#sdkFrame;
+  }
+};
+
+// gen/front_end/models/stack_trace/StackTraceModel.js
+var StackTraceModel_exports = {};
+__export(StackTraceModel_exports, {
+  StackTraceModel: () => StackTraceModel
+});
+import * as Common3 from "./..\\..\\core\\common\\common.js";
+import * as SDK from "./..\\..\\core\\sdk\\sdk.js";
+import * as StackTrace from "./stack_trace.js";
+
+// gen/front_end/models/stack_trace/Trie.js
+var Trie_exports = {};
+__export(Trie_exports, {
+  EvalOrigin: () => EvalOrigin,
+  FrameNode: () => FrameNode,
+  Trie: () => Trie,
+  compareRawFrames: () => compareRawFrames,
+  isBuiltinFrame: () => isBuiltinFrame
+});
+function isBuiltinFrame(rawFrame) {
+  return rawFrame.lineNumber === -1 && rawFrame.columnNumber === -1 && !Boolean(rawFrame.scriptId) && !Boolean(rawFrame.url);
+}
+var EvalOrigin = class {
+  frames;
+  evalOrigin;
+  constructor(frames, evalOrigin) {
+    this.frames = frames;
+    this.evalOrigin = evalOrigin;
+  }
+};
+var FrameNode = class {
+  parent;
+  children = [];
+  rawFrame;
+  frames = [];
+  fragment;
+  parsedFrameInfo;
+  evalOrigin;
+  constructor(rawFrame, parent) {
+    this.rawFrame = rawFrame;
+    this.parent = parent;
+    this.parsedFrameInfo = rawFrame.parsedFrameInfo;
+  }
+  /**
+   * Produces the ancestor chain. Including `this` but excluding the `RootFrameNode`.
+   */
+  *getCallStack() {
+    for (let node = this; node.parent; node = node.parent) {
+      yield node;
+    }
+  }
+};
+var Trie = class {
+  #root = { parent: null, children: [] };
+  /**
+   * Most sources produce stack traces in "top-to-bottom" order, so that is what this method expects.
+   *
+   * @returns The {@link FrameNode} corresponding to the top-most stack frame.
+   */
+  insert(frames) {
+    if (frames.length === 0) {
+      throw new Error("Trie.insert called with an empty frames array.");
+    }
+    let currentNode = this.#root;
+    for (let i = frames.length - 1; i >= 0; --i) {
+      currentNode = this.#insert(currentNode, frames[i]);
+    }
+    return currentNode;
+  }
+  /**
+   * Inserts `rawFrame` into the children of the provided node if not already there.
+   *
+   * @returns the child node corresponding to `rawFrame`.
+   */
+  #insert(node, rawFrame) {
+    let i = 0;
+    for (; i < node.children.length; ++i) {
+      const maybeChild = node.children[i];
+      const child = maybeChild instanceof WeakRef ? maybeChild.deref() : maybeChild;
+      if (!child) {
+        continue;
+      }
+      const compareResult = compareRawFrames(child.rawFrame, rawFrame);
+      if (compareResult === 0) {
+        if (rawFrame.parsedFrameInfo && !child.parsedFrameInfo) {
+          child.parsedFrameInfo = rawFrame.parsedFrameInfo;
+        }
+        return child;
+      }
+      if (compareResult > 0) {
+        break;
+      }
+    }
+    const newNode = new FrameNode(rawFrame, node);
+    if (node.parent) {
+      node.children.splice(i, 0, newNode);
+    } else {
+      node.children.splice(i, 0, new WeakRef(newNode));
+    }
+    return newNode;
+  }
+  /**
+   * Traverses the trie in pre-order.
+   *
+   * @param node Start at `node` or `null` to start with the children of the root.
+   * @param visit Called on each node in the trie. Return `true` if the visitor should descend into child nodes of the provided node.
+   */
+  walk(node, visit) {
+    const stack = node ? [node] : [...this.#root.children].map((ref) => ref.deref()).filter((node2) => Boolean(node2));
+    for (let node2 = stack.pop(); node2; node2 = stack.pop()) {
+      const visitChildren = visit(node2);
+      if (visitChildren) {
+        for (let i = node2.children.length - 1; i >= 0; --i) {
+          stack.push(node2.children[i]);
+        }
+      }
+    }
+  }
+};
+function compareRawFrames(a, b) {
+  const scriptIdCompare = (a.scriptId ?? "").localeCompare(b.scriptId ?? "");
+  if (scriptIdCompare !== 0) {
+    return scriptIdCompare;
+  }
+  const urlCompare = (a.url ?? "").localeCompare(b.url ?? "");
+  if (urlCompare !== 0) {
+    return urlCompare;
+  }
+  const nameCompare = (a.functionName ?? "").localeCompare(b.functionName ?? "");
+  if (nameCompare !== 0) {
+    return nameCompare;
+  }
+  if (a.lineNumber !== b.lineNumber) {
+    return a.lineNumber - b.lineNumber;
+  }
+  return a.columnNumber - b.columnNumber;
+}
+
+// gen/front_end/models/stack_trace/StackTraceModel.js
+var _a;
+var StackTraceModel = class extends SDK.SDKModel.SDKModel {
+  #trie = new Trie();
+  #mutex = new Common3.Mutex.Mutex();
+  /** @returns the {@link StackTraceModel} for the target. Throws if the target or its model cannot be found. */
+  static #modelForTarget(target) {
+    const model = target?.model(_a);
+    if (!model) {
+      throw new Error("Unable to find StackTraceModel");
+    }
+    return model;
+  }
+  async createFromProtocolRuntime(stackTrace, rawFramesToUIFrames) {
+    const debuggerModel = this.target().model(SDK.DebuggerModel.DebuggerModel);
+    const syncFrames = stackTrace.callFrames.map((frame) => {
+      const isWasm = debuggerModel?.isWasm(frame.scriptId) ?? false;
+      return { ...frame, isWasm };
+    });
+    const [syncFragment, asyncFragments] = await Promise.all([
+      this.#createFragment(syncFrames, rawFramesToUIFrames),
+      this.#createAsyncFragments(stackTrace, rawFramesToUIFrames)
+    ]);
+    return new StackTraceImpl(syncFragment, asyncFragments);
+  }
+  async createFromErrorStackLikeString(stack, rawFramesToUIFrames, exceptionDetails) {
+    const debuggerModel = this.target().model(SDK.DebuggerModel.DebuggerModel);
+    const baseURL = this.target().inspectedURL();
+    const resolveURL = (url) => {
+      let urlWithScheme = parseOrScriptMatch(debuggerModel, url);
+      if (!urlWithScheme && Common3.ParsedURL.ParsedURL.isRelativeURL(url)) {
+        urlWithScheme = parseOrScriptMatch(debuggerModel, Common3.ParsedURL.ParsedURL.completeURL(baseURL, url));
+      }
+      return urlWithScheme;
+    };
+    const rawFrames = parseRawFramesFromErrorStack(stack, resolveURL);
+    if (!rawFrames) {
+      return null;
+    }
+    if (exceptionDetails?.stackTrace) {
+      augmentRawFramesWithScriptIds(rawFrames, exceptionDetails.stackTrace);
+    }
+    const [syncFragment, asyncFragments] = await Promise.all([
+      this.#createFragment(rawFrames, rawFramesToUIFrames),
+      exceptionDetails?.stackTrace ? this.#createAsyncFragments(exceptionDetails.stackTrace, rawFramesToUIFrames) : Promise.resolve([])
+    ]);
+    return new StackTraceImpl(new ParsedErrorStackFragmentImpl(syncFragment), asyncFragments);
+  }
+  async createFromDebuggerPaused(pausedDetails, rawFramesToUIFrames) {
+    const [syncFragment, asyncFragments] = await Promise.all([
+      this.#createDebuggableFragment(pausedDetails, rawFramesToUIFrames),
+      this.#createAsyncFragments(pausedDetails, rawFramesToUIFrames)
+    ]);
+    return new StackTraceImpl(syncFragment, asyncFragments);
+  }
+  /** Trigger re-translation of all fragments with the provide script in their call stack */
+  async scriptInfoChanged(script, translateRawFrames) {
+    const release = await this.#mutex.acquire();
+    try {
+      const translatePromises = [];
+      let stackTracesToUpdate = /* @__PURE__ */ new Set();
+      for (const fragment of this.#affectedFragments(script)) {
+        if (fragment.node?.children.length === 0) {
+          translatePromises.push(this.#translateFragment(fragment, translateRawFrames));
+        }
+        stackTracesToUpdate = stackTracesToUpdate.union(fragment.stackTraces);
+      }
+      await Promise.all(translatePromises);
+      for (const stackTrace of stackTracesToUpdate) {
+        stackTrace.dispatchEventToListeners(
+          "UPDATED"
+          /* StackTrace.StackTrace.Events.UPDATED */
+        );
+      }
+    } finally {
+      release();
+    }
+  }
+  async #createDebuggableFragment(pausedDetails, rawFramesToUIFrames) {
+    const fragment = await this.#createFragment(pausedDetails.callFrames.map((frame) => ({
+      scriptId: frame.script.scriptId,
+      url: frame.script.sourceURL,
+      functionName: frame.functionName,
+      lineNumber: frame.location().lineNumber,
+      columnNumber: frame.location().columnNumber,
+      isWasm: frame.script.isWasm()
+    })), rawFramesToUIFrames);
+    return new DebuggableFragmentImpl(fragment, pausedDetails.callFrames);
+  }
+  async #createAsyncFragments(stackTraceOrPausedEvent, rawFramesToUIFrames) {
+    const asyncFragments = [];
+    const debuggerModel = this.target().model(SDK.DebuggerModel.DebuggerModel);
+    if (debuggerModel) {
+      for await (const { stackTrace: asyncStackTrace, target } of debuggerModel.iterateAsyncParents(stackTraceOrPausedEvent)) {
+        if (asyncStackTrace.callFrames.length === 0) {
+          continue;
+        }
+        const model = _a.#modelForTarget(target ?? this.target().targetManager().primaryPageTarget());
+        const targetDebuggerModel = target.model(SDK.DebuggerModel.DebuggerModel);
+        const asyncFrames = asyncStackTrace.callFrames.map((frame) => {
+          const isWasm = targetDebuggerModel?.isWasm(frame.scriptId) ?? false;
+          return { ...frame, isWasm };
+        });
+        const asyncFragmentPromise = model.#createFragment(asyncFrames, rawFramesToUIFrames).then((fragment) => new AsyncFragmentImpl(asyncStackTrace.description ?? "", fragment));
+        asyncFragments.push(asyncFragmentPromise);
+      }
+    }
+    return await Promise.all(asyncFragments);
+  }
+  async #createFragment(frames, rawFramesToUIFrames) {
+    if (frames.length === 0) {
+      return FragmentImpl.EMPTY_FRAGMENT;
+    }
+    const release = await this.#mutex.acquire();
+    try {
+      const node = this.#trie.insert(frames);
+      const requiresTranslation = !Boolean(node.fragment);
+      const fragment = FragmentImpl.getOrCreate(node);
+      if (requiresTranslation) {
+        await this.#translateFragment(fragment, rawFramesToUIFrames);
+      }
+      return fragment;
+    } finally {
+      release();
+    }
+  }
+  async #translateFragment(fragment, rawFramesToUIFrames) {
+    if (!fragment.node) {
+      return;
+    }
+    const rawFrames = fragment.node.getCallStack().map((node) => node.rawFrame).toArray();
+    const uiFrames = await rawFramesToUIFrames(rawFrames, this.target());
+    console.assert(rawFrames.length === uiFrames.length, "Broken rawFramesToUIFrames implementation");
+    const evalOriginPromises = [];
+    for (const node of fragment.node.getCallStack()) {
+      if (node.parsedFrameInfo?.evalOrigin) {
+        evalOriginPromises.push(translateEvalOrigin(node.parsedFrameInfo.evalOrigin, rawFramesToUIFrames, this.target()));
+      }
+    }
+    const evalOrigins = await Promise.all(evalOriginPromises);
+    let i = 0;
+    let evalI = 0;
+    for (const node of fragment.node.getCallStack()) {
+      const group = uiFrames[i++];
+      node.frames = group.map((frame, index) => new FrameImpl(frame.url, frame.uiSourceCode, frame.name, frame.line, frame.column, frame.missingDebugInfo, node.rawFrame.functionName, node.rawFrame.isWasm, index < group.length - 1));
+      if (node.parsedFrameInfo?.evalOrigin) {
+        node.evalOrigin = evalOrigins[evalI++];
+      }
+    }
+  }
+  #affectedFragments(script) {
+    const affectedBranches = /* @__PURE__ */ new Set();
+    this.#trie.walk(null, (node) => {
+      if (node.rawFrame.scriptId === script.scriptId || !node.rawFrame.scriptId && node.rawFrame.url === script.sourceURL) {
+        affectedBranches.add(node);
+        return false;
+      }
+      return true;
+    });
+    const fragments = /* @__PURE__ */ new Set();
+    for (const branch of affectedBranches) {
+      this.#trie.walk(branch, (node) => {
+        if (node.fragment) {
+          fragments.add(node.fragment);
+        }
+        return true;
+      });
+    }
+    return fragments;
+  }
+};
+_a = StackTraceModel;
+async function translateEvalOrigin(rawFrame, rawFramesToUIFrames, target) {
+  const uiFrames = await rawFramesToUIFrames([rawFrame], target);
+  const group = uiFrames[0];
+  const frames = group.map((frame, index) => new FrameImpl(frame.url, frame.uiSourceCode, frame.name, frame.line, frame.column, frame.missingDebugInfo, rawFrame.functionName, rawFrame.isWasm, index < group.length - 1));
+  let parentEvalOrigin;
+  if (rawFrame.parsedFrameInfo?.evalOrigin) {
+    parentEvalOrigin = await translateEvalOrigin(rawFrame.parsedFrameInfo.evalOrigin, rawFramesToUIFrames, target);
+  }
+  return new EvalOrigin(frames, parentEvalOrigin);
+}
+function parseOrScriptMatch(debuggerModel, url) {
+  if (!url) {
+    return null;
+  }
+  if (Common3.ParsedURL.ParsedURL.isValidUrlString(url)) {
+    return url;
+  }
+  if (debuggerModel.scriptsForSourceURL(url).length) {
+    return url;
+  }
+  try {
+    const fileUrl = new URL(url, "file://");
+    if (debuggerModel.scriptsForSourceURL(fileUrl.href).length) {
+      return fileUrl.href;
+    }
+  } catch {
+  }
+  return null;
+}
+SDK.SDKModel.SDKModel.register(StackTraceModel, { capabilities: 0, autostart: false });
+export {
+  DetailedErrorStackParser_exports as DetailedErrorStackParser,
+  StackTraceImpl_exports as StackTraceImpl,
+  StackTraceModel_exports as StackTraceModel,
+  Trie_exports as Trie
+};
+//# sourceMappingURL=stack_trace_impl.js.map

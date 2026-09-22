@@ -1,5 +1,8 @@
 node_modules/
 dist/
 *.vsix
+installers/
 .vscode-test/
 out/
+uxp-cli-v1/
+uxp-UDT-v2/

@@ -1,0 +1,231 @@
+// Copyright 2025 The Chromium Authors
+// Use of this source code is governed by a BSD-style license that can be
+// found in the LICENSE file.
+var _a;
+import * as Common from '../../core/common/common.js';
+import * as SDK from '../../core/sdk/sdk.js';
+import { augmentRawFramesWithScriptIds, parseRawFramesFromErrorStack } from './DetailedErrorStackParser.js';
+// eslint-disable-next-line @devtools/es-modules-import
+import * as StackTrace from './stack_trace.js';
+import { AsyncFragmentImpl, DebuggableFragmentImpl, FragmentImpl, FrameImpl, ParsedErrorStackFragmentImpl, StackTraceImpl, } from './StackTraceImpl.js';
+import { EvalOrigin, Trie } from './Trie.js';
+/**
+ * The {@link StackTraceModel} is a thin wrapper around a fragment trie.
+ *
+ * We want to store stack trace fragments per target so a SDKModel is the natural choice.
+ */
+export class StackTraceModel extends SDK.SDKModel.SDKModel {
+    #trie = new Trie();
+    #mutex = new Common.Mutex.Mutex();
+    /** @returns the {@link StackTraceModel} for the target. Throws if the target or its model cannot be found. */
+    static #modelForTarget(target) {
+        const model = target?.model(_a);
+        if (!model) {
+            throw new Error('Unable to find StackTraceModel');
+        }
+        return model;
+    }
+    async createFromProtocolRuntime(stackTrace, rawFramesToUIFrames) {
+        const debuggerModel = this.target().model(SDK.DebuggerModel.DebuggerModel);
+        const syncFrames = stackTrace.callFrames.map((frame) => {
+            const isWasm = debuggerModel?.isWasm(frame.scriptId) ?? false;
+            return { ...frame, isWasm };
+        });
+        const [syncFragment, asyncFragments] = await Promise.all([
+            this.#createFragment(syncFrames, rawFramesToUIFrames),
+            this.#createAsyncFragments(stackTrace, rawFramesToUIFrames),
+        ]);
+        return new StackTraceImpl(syncFragment, asyncFragments);
+    }
+    async createFromErrorStackLikeString(stack, rawFramesToUIFrames, exceptionDetails) {
+        const debuggerModel = this.target().model(SDK.DebuggerModel.DebuggerModel);
+        const baseURL = this.target().inspectedURL();
+        const resolveURL = (url) => {
+            let urlWithScheme = parseOrScriptMatch(debuggerModel, url);
+            if (!urlWithScheme && Common.ParsedURL.ParsedURL.isRelativeURL(url)) {
+                urlWithScheme = parseOrScriptMatch(debuggerModel, Common.ParsedURL.ParsedURL.completeURL(baseURL, url));
+            }
+            return urlWithScheme;
+        };
+        const rawFrames = parseRawFramesFromErrorStack(stack, resolveURL);
+        if (!rawFrames) {
+            return null;
+        }
+        if (exceptionDetails?.stackTrace) {
+            augmentRawFramesWithScriptIds(rawFrames, exceptionDetails.stackTrace);
+        }
+        const [syncFragment, asyncFragments] = await Promise.all([
+            this.#createFragment(rawFrames, rawFramesToUIFrames),
+            exceptionDetails?.stackTrace ? this.#createAsyncFragments(exceptionDetails.stackTrace, rawFramesToUIFrames) :
+                Promise.resolve([]),
+        ]);
+        return new StackTraceImpl(new ParsedErrorStackFragmentImpl(syncFragment), asyncFragments);
+    }
+    async createFromDebuggerPaused(pausedDetails, rawFramesToUIFrames) {
+        const [syncFragment, asyncFragments] = await Promise.all([
+            this.#createDebuggableFragment(pausedDetails, rawFramesToUIFrames),
+            this.#createAsyncFragments(pausedDetails, rawFramesToUIFrames),
+        ]);
+        return new StackTraceImpl(syncFragment, asyncFragments);
+    }
+    /** Trigger re-translation of all fragments with the provide script in their call stack */
+    async scriptInfoChanged(script, translateRawFrames) {
+        const release = await this.#mutex.acquire();
+        try {
+            const translatePromises = [];
+            let stackTracesToUpdate = new Set();
+            for (const fragment of this.#affectedFragments(script)) {
+                // We trigger re-translation only for fragments of leaf-nodes. Any fragment along the ancestor-chain
+                // is re-translated as a side-effect.
+                // We just need to remember the stack traces of the skipped over fragments, so we can send the
+                // UPDATED event also to them.
+                if (fragment.node?.children.length === 0) {
+                    translatePromises.push(this.#translateFragment(fragment, translateRawFrames));
+                }
+                stackTracesToUpdate = stackTracesToUpdate.union(fragment.stackTraces);
+            }
+            await Promise.all(translatePromises);
+            for (const stackTrace of stackTracesToUpdate) {
+                stackTrace.dispatchEventToListeners("UPDATED" /* StackTrace.StackTrace.Events.UPDATED */);
+            }
+        }
+        finally {
+            release();
+        }
+    }
+    async #createDebuggableFragment(pausedDetails, rawFramesToUIFrames) {
+        const fragment = await this.#createFragment(pausedDetails.callFrames.map(frame => ({
+            scriptId: frame.script.scriptId,
+            url: frame.script.sourceURL,
+            functionName: frame.functionName,
+            lineNumber: frame.location().lineNumber,
+            columnNumber: frame.location().columnNumber,
+            isWasm: frame.script.isWasm(),
+        })), rawFramesToUIFrames);
+        return new DebuggableFragmentImpl(fragment, pausedDetails.callFrames);
+    }
+    async #createAsyncFragments(stackTraceOrPausedEvent, rawFramesToUIFrames) {
+        const asyncFragments = [];
+        const debuggerModel = this.target().model(SDK.DebuggerModel.DebuggerModel);
+        if (debuggerModel) {
+            for await (const { stackTrace: asyncStackTrace, target } of debuggerModel.iterateAsyncParents(stackTraceOrPausedEvent)) {
+                if (asyncStackTrace.callFrames.length === 0) {
+                    // Skip empty async fragments, they don't add value.
+                    continue;
+                }
+                const model = _a.#modelForTarget(target ?? this.target().targetManager().primaryPageTarget());
+                const targetDebuggerModel = target.model(SDK.DebuggerModel.DebuggerModel);
+                const asyncFrames = asyncStackTrace.callFrames.map((frame) => {
+                    const isWasm = targetDebuggerModel?.isWasm(frame.scriptId) ?? false;
+                    return { ...frame, isWasm };
+                });
+                const asyncFragmentPromise = model.#createFragment(asyncFrames, rawFramesToUIFrames)
+                    .then(fragment => new AsyncFragmentImpl(asyncStackTrace.description ?? '', fragment));
+                asyncFragments.push(asyncFragmentPromise);
+            }
+        }
+        return await Promise.all(asyncFragments);
+    }
+    async #createFragment(frames, rawFramesToUIFrames) {
+        if (frames.length === 0) {
+            return FragmentImpl.EMPTY_FRAGMENT;
+        }
+        const release = await this.#mutex.acquire();
+        try {
+            const node = this.#trie.insert(frames);
+            const requiresTranslation = !Boolean(node.fragment);
+            const fragment = FragmentImpl.getOrCreate(node);
+            if (requiresTranslation) {
+                await this.#translateFragment(fragment, rawFramesToUIFrames);
+            }
+            return fragment;
+        }
+        finally {
+            release();
+        }
+    }
+    async #translateFragment(fragment, rawFramesToUIFrames) {
+        if (!fragment.node) {
+            return;
+        }
+        const rawFrames = fragment.node.getCallStack().map(node => node.rawFrame).toArray();
+        const uiFrames = await rawFramesToUIFrames(rawFrames, this.target());
+        console.assert(rawFrames.length === uiFrames.length, 'Broken rawFramesToUIFrames implementation');
+        const evalOriginPromises = [];
+        for (const node of fragment.node.getCallStack()) {
+            if (node.parsedFrameInfo?.evalOrigin) {
+                // Evaluate each eval origin individually, as they are not a contiguous stack trace.
+                evalOriginPromises.push(translateEvalOrigin(node.parsedFrameInfo.evalOrigin, rawFramesToUIFrames, this.target()));
+            }
+        }
+        const evalOrigins = await Promise.all(evalOriginPromises);
+        let i = 0;
+        let evalI = 0;
+        for (const node of fragment.node.getCallStack()) {
+            const group = uiFrames[i++];
+            node.frames =
+                group.map((frame, index) => new FrameImpl(frame.url, frame.uiSourceCode, frame.name, frame.line, frame.column, frame.missingDebugInfo, node.rawFrame.functionName, node.rawFrame.isWasm, index < group.length - 1));
+            if (node.parsedFrameInfo?.evalOrigin) {
+                node.evalOrigin = evalOrigins[evalI++];
+            }
+        }
+    }
+    #affectedFragments(script) {
+        // 1. Collect branches with the matching script.
+        const affectedBranches = new Set();
+        this.#trie.walk(null, node => {
+            // scriptId has precedence, but if the frame does not have one, check the URL.
+            if (node.rawFrame.scriptId === script.scriptId ||
+                (!node.rawFrame.scriptId && node.rawFrame.url === script.sourceURL)) {
+                affectedBranches.add(node);
+                return false;
+            }
+            return true;
+        });
+        // 2. For each branch collect all the fragments.
+        const fragments = new Set();
+        for (const branch of affectedBranches) {
+            this.#trie.walk(branch, node => {
+                if (node.fragment) {
+                    fragments.add(node.fragment);
+                }
+                return true;
+            });
+        }
+        return fragments;
+    }
+}
+_a = StackTraceModel;
+async function translateEvalOrigin(rawFrame, rawFramesToUIFrames, target) {
+    const uiFrames = await rawFramesToUIFrames([rawFrame], target);
+    const group = uiFrames[0];
+    const frames = group.map((frame, index) => new FrameImpl(frame.url, frame.uiSourceCode, frame.name, frame.line, frame.column, frame.missingDebugInfo, rawFrame.functionName, rawFrame.isWasm, index < group.length - 1));
+    let parentEvalOrigin;
+    if (rawFrame.parsedFrameInfo?.evalOrigin) {
+        parentEvalOrigin = await translateEvalOrigin(rawFrame.parsedFrameInfo.evalOrigin, rawFramesToUIFrames, target);
+    }
+    return new EvalOrigin(frames, parentEvalOrigin);
+}
+function parseOrScriptMatch(debuggerModel, url) {
+    if (!url) {
+        return null;
+    }
+    if (Common.ParsedURL.ParsedURL.isValidUrlString(url)) {
+        return url;
+    }
+    if (debuggerModel.scriptsForSourceURL(url).length) {
+        return url;
+    }
+    // nodejs stack traces contain (absolute) file paths, but v8 reports them as file: urls.
+    try {
+        const fileUrl = new URL(url, 'file://');
+        if (debuggerModel.scriptsForSourceURL(fileUrl.href).length) {
+            return fileUrl.href;
+        }
+    }
+    catch {
+    }
+    return null;
+}
+SDK.SDKModel.SDKModel.register(StackTraceModel, { capabilities: 0 /* SDK.Target.Capability.NONE */, autostart: false });
+//# sourceMappingURL=StackTraceModel.js.map
