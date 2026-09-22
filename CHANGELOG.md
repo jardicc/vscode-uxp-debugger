@@ -1,5 +1,11 @@
 # Changelog
 
+## [0.2.1] – 2026-04-02
+
+### Improvements
+
+- Updates icon
+
 ## [0.2.0] – 2026-04-02
 
 ### New Features
