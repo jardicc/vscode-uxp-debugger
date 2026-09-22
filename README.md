@@ -153,6 +153,27 @@ limitations, CDP routing, lifecycle, and maintenance.
 
 ---
 
+## Source Maps & Breakpoints
+
+The extension has built-in support for source maps, so breakpoints set in your original TypeScript (or other) source files work out of the box — no extra configuration needed in most cases.
+
+### How it works
+
+UXP plugins typically serve bundled JavaScript files with **inline source maps** (embedded as a `data:application/json;base64,…` URL at the end of the file). The extension's CDP proxy intercepts these maps and rewrites their `sourceRoot` to point at your local plugin directory before passing them to VS Code's JS debugger. This lets the debugger resolve relative `sources` entries (e.g. `../src/index.ts`) back to real files on disk.
+
+### Requirements for breakpoints to work
+
+- Your bundler must **emit source maps**. For webpack, set `devtool: "inline-source-map"` (or any other inline variant). External `.map` files are **not** supported — the map must be embedded in the JS file itself.
+- The `sources` paths inside the map must be relative and resolve correctly from your output directory. Standard webpack/esbuild defaults work without changes.
+
+### Breakpoints in practice
+
+1. Set a breakpoint in any source file (TypeScript, JavaScript, etc.) in VS Code.
+2. Attach the debugger as usual.
+3. Trigger the code path in the host application — VS Code will pause at the correct source line.
+
+---
+
 ## Troubleshooting
 
 | Symptom | Cause | Fix |
