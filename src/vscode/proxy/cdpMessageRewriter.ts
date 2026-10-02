@@ -89,6 +89,16 @@ export class CdpMessageRewriter {
     /** Whether cached state has already been replayed for the current client. */
     private hasReplayedForCurrentClient = false;
 
+    /**
+   * Whether the target is paused and the *current* client was told so
+   * (`Debugger.paused` forwarded, no `Debugger.resumed` since). UXP treats
+   * `Runtime.runIfWaitingForDebugger` as a resume even while paused at a
+   * breakpoint — see `rewriteFromClient`. Reset for every new client: a
+   * client reattaching via Restart never saw an earlier pause, so its nudge
+   * keeps being forwarded exactly as before.
+   */
+    private targetPausedForClient = false;
+
     /** Rolling console/exception capture for LM tools (LANGUAGE-MODEL-TOOLS.md §4). */
     private readonly eventBuffer = new CdpEventBuffer();
 
@@ -216,6 +226,7 @@ export class CdpMessageRewriter {
         // breakpoints either.
         this.liveBreakpointIds.clear();
         this.pendingBreakpointRequestIds.clear();
+        this.targetPausedForClient = false;
     }
 
     /**
@@ -225,6 +236,7 @@ export class CdpMessageRewriter {
    */
     markNewClient(): void {
         this.hasReplayedForCurrentClient = false;
+        this.targetPausedForClient = false;
 
         if (this.liveBreakpointIds.size > 0) {
             this.log.appendLine(
@@ -298,6 +310,13 @@ export class CdpMessageRewriter {
             // Side-effecting tap for LM tools (console output / exceptions) — never
             // blocks or alters the forwarding decision made below.
             this.eventBuffer.captureFromTarget(msg);
+
+            if (msg.method === "Debugger.paused") {
+                this.targetPausedForClient = true;
+            }
+            else if (msg.method === "Debugger.resumed") {
+                this.targetPausedForClient = false;
+            }
 
             // Swallow responses to proxy-internal requests (e.g. Runtime.enable)
             if (msg.id !== undefined && this.internalIds.has(msg.id)) {
@@ -508,6 +527,21 @@ export class CdpMessageRewriter {
             if (msg.method === "NodeWorker.enable" && msg.id !== undefined) {
                 this.log.appendLine(
                     `[CDP] Swallowed unsupported method NodeWorker.enable (id=${String(msg.id)})`,
+                );
+                this.sendToClient(JSON.stringify({ id: msg.id, result: {} }));
+                return null;
+            }
+
+            // js-debug sends Runtime.runIfWaitingForDebugger once its (child)
+            // session finishes configuring — which, for a break-on-load plugin,
+            // can land after UXP already paused at a startup breakpoint. UXP then
+            // resumes the paused runtime, so the breakpoint only flashes in the
+            // UI. The proxy already sends its own nudge on every target connect
+            // (`sendResumeNudge` in cdpProxy.ts), so while paused this request is
+            // only harmful: answer it locally instead of forwarding it.
+            if (msg.method === "Runtime.runIfWaitingForDebugger" && msg.id !== undefined && this.targetPausedForClient) {
+                this.log.appendLine(
+                    `[CDP] Swallowed Runtime.runIfWaitingForDebugger (id=${String(msg.id)}) — target is paused.`,
                 );
                 this.sendToClient(JSON.stringify({ id: msg.id, result: {} }));
                 return null;

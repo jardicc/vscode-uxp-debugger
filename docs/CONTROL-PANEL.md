@@ -95,7 +95,7 @@ Registration validates the manifest and rejects duplicate paths.
 | **Load** | Uses the shared load flow, including host selection, app launch, developer-mode, timeout, and takeover dialogs. |
 | **Load (break on load)** | Loads the plugin paused and records each new session as waiting for its first debugger attach. |
 | **Unload** | Unloads every live session associated with the manifest. |
-| **Debug** | Uses the shared attach flow and can offer to load an unloaded plugin first. |
+| **Debug** | Uses the shared attach flow. An unloaded plugin is loaded automatically first, following **Break on load** (when checked, it loads paused and startup breakpoints hit once the debugger attaches). |
 | **Stop debugging** | Stops all attached VS Code debug sessions for the manifest. |
 | **Open HTML/CSS inspector** | Opens an inspector for the only live session, or asks which session to inspect when several exist. |
 | **Close inspector** | Closes inspectors belonging to all sessions for the manifest. |

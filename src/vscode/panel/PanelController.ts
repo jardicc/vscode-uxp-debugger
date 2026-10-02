@@ -302,6 +302,7 @@ export class PanelController implements vscode.Disposable {
                     this.debugManager,
                     this.output,
                     action.manifestPath,
+                    action.breakOnLoad,
                 );
             case "detachDebugger":
                 return this.detachDebugger(action.manifestPath);

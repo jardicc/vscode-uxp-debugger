@@ -22,7 +22,7 @@ export type PanelAction
         | { kind: "refreshPlugin"; manifestPath: string }
   /** Unload + Load sequence (full reset) with debugger/inspector auto-restore. */
         | { kind: "reloadPlugin"; manifestPath: string; breakOnLoad: boolean }
-        | { kind: "attachDebugger"; manifestPath: string }
+        | { kind: "attachDebugger"; manifestPath: string; breakOnLoad: boolean }
         | { kind: "detachDebugger"; manifestPath: string }
         | { kind: "openInspector"; manifestPath: string }
         | { kind: "closeInspector"; manifestPath: string }

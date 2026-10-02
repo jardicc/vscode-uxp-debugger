@@ -273,7 +273,9 @@ The proxy adapts UXP behavior expected neither by stock Chromium nor Node debugg
 Break on load uses a V8 instrumentation breakpoint
 `beforeScriptWithSourceMapExecution`, coordinated by the proxy and js-debug's
 `pauseForSourceMap`. The proxy arms it before resuming the UXP target, suppresses irrelevant early
-pauses, and lets js-debug reuse the armed breakpoint ID. The investigation and rejected approaches
+pauses, lets js-debug reuse the armed breakpoint ID, and keeps js-debug's late
+`Runtime.runIfWaitingForDebugger` from reaching a paused target (UXP would resume a breakpoint
+pause on it). The investigation and rejected approaches
 remain in [`BREAK-ON-START.md`](BREAK-ON-START.md).
 
 ### 5.2 HTML/CSS inspector

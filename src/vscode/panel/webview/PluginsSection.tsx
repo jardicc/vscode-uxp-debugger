@@ -189,7 +189,7 @@ function PluginRow({ plugin, state }: { plugin: PluginView; state: PanelState })
                                 emphasized={plugin.pendingBreakOnStart}
                                 disabled={busy || !!plugin.manifestError}
                                 disabledReason={plugin.manifestError}
-                                onClick={() => { dispatch({ kind: "attachDebugger", manifestPath: plugin.manifestPath }); }}
+                                onClick={() => { dispatch({ kind: "attachDebugger", manifestPath: plugin.manifestPath, breakOnLoad }); }}
                             />
                         )}
                 {plugin.inspectorOpen
