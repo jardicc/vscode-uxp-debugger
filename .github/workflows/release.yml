@@ -24,7 +24,7 @@ jobs:
       tag_name: ${{ steps.rp.outputs.tag_name }}
       sha: ${{ steps.rp.outputs.sha }}
     steps:
-      - uses: googleapis/release-please-action@v4
+      - uses: googleapis/release-please-action@v5
         id: rp
         with:
           # A PAT lets CI run on the release PR; github.token is the fallback.
@@ -38,17 +38,17 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 20
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         with:
           ref: ${{ needs.release-please.outputs.sha }}
           lfs: true
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v7
         with:
           node-version: 22
           cache: npm
       - run: npm ci
       - run: npm run build
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         with:
           name: vsix
           path: installers/*.vsix
@@ -61,7 +61,7 @@ jobs:
     permissions:
       contents: write
     steps:
-      - uses: actions/download-artifact@v4
+      - uses: actions/download-artifact@v8
         with:
           name: vsix
           path: installers
@@ -80,11 +80,11 @@ jobs:
   #     contents: read
   #     id-token: write
   #   steps:
-  #     - uses: actions/download-artifact@v4
+  #     - uses: actions/download-artifact@v8
   #       with:
   #         name: vsix
   #         path: installers
-  #     - uses: actions/setup-node@v4
+  #     - uses: actions/setup-node@v7
   #       with:
   #         node-version: 22
   #     # Option A (GitHub OIDC trusted publishing).
