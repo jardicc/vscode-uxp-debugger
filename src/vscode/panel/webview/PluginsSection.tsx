@@ -15,6 +15,7 @@ import {
     PathLabel,
     Spinner,
 } from "./common";
+import { getUICodeByValue } from "../../../core/vulcan/hostAppCatalog";
 
 export function PluginsSection({ state }: { state: PanelState }): ReactNode {
     if (state.plugins.length === 0) {
@@ -126,6 +127,7 @@ function PluginRow({ plugin, state }: { plugin: PluginView; state: PanelState })
                         <HostBadge
                             key={appId}
                             appId={appId}
+                            uiCode={getUICodeByValue(appId)}
                             connected={connectedIds.has(appId)}
                             onLaunch={(id) => { dispatch({ kind: "launchHostApp", appId: id }); }}
                         />

@@ -236,10 +236,12 @@ export function SplitButton({
 
 export function HostBadge({
     appId,
+    uiCode,
     connected,
     onLaunch,
 }: {
     appId: string;
+    uiCode: string;
     connected: boolean;
     onLaunch: (appId: string) => void;
 }): ReactNode {
@@ -248,15 +250,15 @@ export function HostBadge({
             className={clsx("host-badge", { connected })}
             title={
                 connected
-                    ? `${appId} is connected — click to launch another version`
-                    : `${appId} — click to launch`
+                    ? `${uiCode} is connected — click to launch another version`
+                    : `${uiCode} — click to launch`
             }
             onClick={(e: MouseEvent) => {
                 e.stopPropagation();
                 onLaunch(appId);
             }}
         >
-            {appId}
+            {uiCode}
         </button>
     );
 }
