@@ -143,8 +143,9 @@ when **no host application at all** connected, then waits another `500 ms`. It d
 `false -> true` as a refresh mechanism.
 
 The same native module also exposes a separate `VulcanControlAdapter`, created lazily for installed
-application discovery and host-app launch. Photoshop, InDesign, and Premiere Pro are represented
-by the current host catalog. Both adapters follow a one-instance-per-process lifetime rule.
+application discovery and host-app launch. Photoshop, InDesign, Premiere Pro, and Media Encoder are
+represented by the current host catalog. Both adapters follow a one-instance-per-process lifetime
+rule.
 
 ## 3. Implemented protocol behavior
 

@@ -104,6 +104,7 @@ catalog contains:
 | Photoshop | `PS` | `PHSP`, `PHSPBETA` |
 | InDesign | `ID` | `IDSN`, `IDSNBETA` |
 | Premiere Pro | `premierepro` | `PPRO`, `PPROBETA` |
+| Media Encoder | `ame` | `AME`, `AMEBETA` |
 
 Adobe XD is not in the current catalog.
 

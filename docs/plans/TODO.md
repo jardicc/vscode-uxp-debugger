@@ -6,7 +6,7 @@
 - add new host apps support
 - feature to attach plugins without loading them via Debugger?
 - plugin detects installed host app version but does not make difference between supported and non-supported ones
-- when debugger starts Media Encoder it makes app stuck if broker is running
+- investigate Media Encoder launch hanging when the broker is already running
 
 ## DONE
 
