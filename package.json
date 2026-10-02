@@ -2,7 +2,7 @@
   "name": "uxpdebugger",
   "displayName": "UXP Debugger",
   "description": "Load, reload and debug Adobe UXP plugins and scripts (Photoshop, InDesign, …) directly from VS Code — no Adobe UXP Developer Tools required.",
-  "version": "2.0.1",
+  "version": "2.0.2",
   "author": "Jaroslav Bereza",
   "publisher": "JaroslavBereza",
   "pricing": "Free",

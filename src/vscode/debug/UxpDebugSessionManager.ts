@@ -229,6 +229,8 @@ export class UxpDebugSessionManager implements vscode.Disposable {
             type: "pwa-node",
             request: "attach",
             name: `UXP – ${label}`,
+            // js-debug defaults to "localhost", which may resolve to ::1; the proxy binds IPv4 only.
+            address: "127.0.0.1",
             port: proxyPort,
             webRoot: projectDir,
             sourceMaps: true,
