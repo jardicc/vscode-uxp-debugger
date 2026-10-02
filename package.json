@@ -823,7 +823,7 @@
     }
   },
   "scripts": {
-    "vscode:prepublish": "npm run prepare-native && npm run compile",
+    "vscode:prepublish": "npm run compile",
     "clean": "node -e \"require('node:fs').rmSync('dist',{recursive:true,force:true})\"",
     "precompile": "npm run clean",
     "compile": "esbuild src/vscode/extension.ts --bundle --outfile=dist/extension.js --external:vscode --format=cjs --platform=node --minify && npm run compile:inspector && npm run compile:panel && npm run compile:devtools",

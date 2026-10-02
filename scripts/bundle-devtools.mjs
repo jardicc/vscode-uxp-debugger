@@ -48,6 +48,15 @@ await build({
   },
   plugins: [
     {
+      // Some files in devtools-frontend-dist contain Windows-style backslashes in relative import specifiers.
+      name: "normalize-backslash-imports",
+      setup(buildApi) {
+        buildApi.onResolve({ filter: /^\.\.?[\\/].*\\/ }, (args) => ({
+          path: path.resolve(args.resolveDir, args.path.replaceAll("\\", "/")),
+        }));
+      },
+    },
+    {
       name: "preserve-runtime-asset-paths",
       setup(buildApi) {
         buildApi.onLoad({ filter: /\.js$/ }, async (args) => {
