@@ -1,0 +1,91 @@
+name: Release
+
+on:
+  push:
+    branches: [main]
+
+concurrency:
+  group: release
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  release-please:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: write
+      pull-requests: write
+      issues: write
+    outputs:
+      release_created: ${{ steps.rp.outputs.release_created }}
+      tag_name: ${{ steps.rp.outputs.tag_name }}
+      sha: ${{ steps.rp.outputs.sha }}
+    steps:
+      - uses: googleapis/release-please-action@v4
+        id: rp
+        with:
+          # A PAT lets CI run on the release PR; github.token is the fallback.
+          token: ${{ secrets.RELEASE_PLEASE_TOKEN || github.token }}
+          config-file: release-please-config.json
+          manifest-file: .release-please-manifest.json
+
+  build:
+    needs: release-please
+    if: needs.release-please.outputs.release_created == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ needs.release-please.outputs.sha }}
+          lfs: true
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: npm run build
+      - uses: actions/upload-artifact@v4
+        with:
+          name: vsix
+          path: installers/*.vsix
+          if-no-files-found: error
+
+  attach:
+    needs: [release-please, build]
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: vsix
+          path: installers
+      - run: gh release upload "$TAG" installers/*.vsix --clobber --repo "$GITHUB_REPOSITORY"
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ needs.release-please.outputs.tag_name }}
+
+  # Marketplace publishing is manual for now. Uncomment to enable (auth options: docs/plans/RELEASE-PIPELINE-PLAN.md 4.1).
+  # publish:
+  #   needs: [release-please, build]
+  #   runs-on: ubuntu-latest
+  #   timeout-minutes: 15
+  #   environment: marketplace
+  #   permissions:
+  #     contents: read
+  #     id-token: write
+  #   steps:
+  #     - uses: actions/download-artifact@v4
+  #       with:
+  #         name: vsix
+  #         path: installers
+  #     - uses: actions/setup-node@v4
+  #       with:
+  #         node-version: 22
+  #     # Option A (GitHub OIDC trusted publishing).
+  #     - run: npx --yes @vscode/vsce@4 publish --oidc --skip-duplicate --packagePath installers/*.vsix
