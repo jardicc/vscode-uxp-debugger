@@ -887,13 +887,12 @@ export class PanelController implements vscode.Disposable {
         const picked = await vscode.window.showOpenDialog({
             canSelectFiles: true,
             canSelectFolders: false,
-            canSelectMany: false,
+            canSelectMany: true,
             filters: { "UXP scripts": ["ccjs", "psjs", "idjs", "js", "ts"] },
-            openLabel: "Add Script",
+            openLabel: "Add Scripts",
         });
-        const scriptPath = picked?.[0]?.fsPath;
-        if (scriptPath) {
-            await this.pluginRegistry.addScript(scriptPath);
+        for (const uri of picked ?? []) {
+            await this.pluginRegistry.addScript(uri.fsPath);
         }
     }
 

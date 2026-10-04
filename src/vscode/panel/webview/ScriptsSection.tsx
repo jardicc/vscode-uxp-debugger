@@ -59,7 +59,7 @@ export function AddScriptButton({ state }: { state: PanelState }): ReactNode {
             label="Add script…"
             items={[
                 {
-                    label: "Browse for script…",
+                    label: "Browse for scripts…",
                     onClick: () => { dispatch({ kind: "addScriptPick" }); },
                 },
                 {
