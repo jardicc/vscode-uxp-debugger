@@ -231,35 +231,23 @@ export function SplitButton({
 }
 
 // ---------------------------------------------------------------------------
-// HostBadge — click launches the host app (CONTROL-PANEL.md §2.3 #5)
+// HostBadge — static, non-interactive host-app label
 // ---------------------------------------------------------------------------
 
 export function HostBadge({
-    appId,
     uiCode,
     connected,
-    onLaunch,
 }: {
-    appId: string;
     uiCode: string;
     connected: boolean;
-    onLaunch: (appId: string) => void;
 }): ReactNode {
     return (
-        <button
+        <span
             className={clsx("host-badge", { connected })}
-            title={
-                connected
-                    ? `${uiCode} is connected — click to launch another version`
-                    : `${uiCode} — click to launch`
-            }
-            onClick={(e: MouseEvent) => {
-                e.stopPropagation();
-                onLaunch(appId);
-            }}
+            title={connected ? `${uiCode} is connected` : uiCode}
         >
             {uiCode}
-        </button>
+        </span>
     );
 }
 

@@ -142,7 +142,7 @@ function ScriptRow({ script }: { script: ScriptView }): ReactNode {
             <div className="row-text">
                 <div className="row-line">
                     <span className="row-title">{script.name}</span>
-                    <span className="host-badge static" title="Host app implied by the file extension">
+                    <span className="host-badge" title="Host app implied by the file extension">
                         {script.hostApp}
                     </span>
                 </div>

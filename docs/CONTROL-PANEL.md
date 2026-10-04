@@ -60,8 +60,8 @@ installed-version picker and remains busy until that app connects or the connect
 times out. When installation detection is unavailable, the panel leaves Start enabled
 instead of assuming that no application is installed.
 
-Plugin host badges use the same launch flow. A connected badge remains clickable so that
-another installed version can be launched.
+Plugin host badges are static labels; clicking them does nothing. Launching is done only
+from the Apps section.
 
 ### 2.1 Broker states
 

@@ -38,7 +38,7 @@ export type PanelAction
             mode?: "reveal" | "addToWorkspace" | "newWindow";
         }
         | { kind: "openManifestFile"; manifestPath: string }
-  /** Host badge click → installed-version QuickPick + launch (host side). */
+  /** Apps-section Start click → installed-version QuickPick + launch (host side). */
         | { kind: "launchHostApp"; appId: string }
         | { kind: "debugScript"; scriptPath: string }
         | { kind: "stopScript"; scriptPath: string }

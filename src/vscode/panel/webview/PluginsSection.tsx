@@ -126,10 +126,8 @@ function PluginRow({ plugin, state }: { plugin: PluginView; state: PanelState })
                     {plugin.hostApps.map((appId) => (
                         <HostBadge
                             key={appId}
-                            appId={appId}
                             uiCode={getUICodeByValue(appId)}
                             connected={connectedIds.has(appId)}
-                            onLaunch={(id) => { dispatch({ kind: "launchHostApp", appId: id }); }}
                         />
                     ))}
                     {plugin.matchedFolderLength !== undefined && (

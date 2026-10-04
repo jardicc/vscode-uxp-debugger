@@ -50,7 +50,7 @@ export async function resolveHostAppNotRunning(
 }
 
 /**
- * Control-panel host-badge / Apps-section click (CONTROL-PANEL.md §2.3 #5):
+ * Control-panel Apps-section click:
  * QuickPick over every installed version of the app, launch the chosen one.
  * Returns whether a launch was actually kicked off — the caller (panel) uses
  * that to decide whether to keep showing a "starting…" spinner while waiting
