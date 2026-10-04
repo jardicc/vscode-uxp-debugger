@@ -5,6 +5,7 @@
 
 import clsx from "clsx";
 import type { ChangeEvent, ReactNode } from "react";
+import { getUICodeByValue } from "../../../core/vulcan/hostAppCatalog";
 import type { PanelState, ScriptView } from "../panelProtocol";
 import { dispatch } from "./vscodeApi";
 import { IconButton, OverflowMenu, PathLabel, Spinner } from "./common";
@@ -81,24 +82,24 @@ export function ScriptTargetSelect({ state }: { state: PanelState }): ReactNode 
             onClick={(e) => { e.stopPropagation(); }}
             onChange={(e: ChangeEvent<HTMLSelectElement>) => { dispatch({ kind: "setScriptTargetApp", appId: e.target.value || undefined }); }}
         >
-            <option value="">Any host app</option>
+            <option value="">Auto</option>
             {state.connectedApps.map((app) => (
                 <option
                     key={app.appId}
                     value={app.appId}
                     disabled={!app.supportsScripts}
-                    title={app.supportsScripts ? undefined : "This app does not report script-debugging support"}
+                    title={app.supportsScripts ? `${app.name} ${app.version}` : `${app.name} ${app.version} does not report script-debugging support`}
                 >
-                    {app.name}
-                    {" "}
-                    {app.version}
-                    {!app.supportsScripts && " (no script support)"}
+                    {getUICodeByValue(app.appId) || app.name}
+                    {!app.supportsScripts && " (scripts n/a)"}
                 </option>
             ))}
             {state.scriptTargetApp
                 && !state.connectedApps.some((a) => a.appId === state.scriptTargetApp) && (
-                <option value={state.scriptTargetApp}>
-                    {state.scriptTargetApp}
+                <option
+                    value={state.scriptTargetApp}
+                >
+                    {getUICodeByValue(state.scriptTargetApp) || state.scriptTargetApp}
                     {" "}
                     (not connected)
                 </option>

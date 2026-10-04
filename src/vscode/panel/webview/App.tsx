@@ -96,6 +96,7 @@ export function App(): ReactNode {
                         collapsed={collapsed.scripts}
                         onToggle={() => { toggleSection("scripts"); }}
                     >
+                        <span className="section-label">Target:</span>
                         <ScriptTargetSelect state={state} />
                         <AddScriptButton state={state} />
                     </SectionHeader>
