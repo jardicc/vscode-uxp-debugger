@@ -58,21 +58,13 @@ export function AddScriptButton({ state }: { state: PanelState }): ReactNode {
             label="Add script…"
             items={[
                 {
-                    icon: "search",
-                    label: "Add script (pick)…",
+                    label: "Browse for script…",
                     onClick: () => { dispatch({ kind: "addScriptPick" }); },
                 },
                 {
-                    icon: "debug-alt",
-                    label: "Add active file & debug",
+                    label: "Currently opened script",
                     disabled: !hasScript,
-                    onClick: () => { dispatch({ kind: "addActiveScript", andDebug: true }); },
-                },
-                {
-                    icon: "file-code",
-                    label: "Add active file",
-                    disabled: !hasScript,
-                    onClick: () => { dispatch({ kind: "addActiveScript", andDebug: false }); },
+                    onClick: () => { dispatch({ kind: "addActiveScript" }); },
                 },
             ]}
         />

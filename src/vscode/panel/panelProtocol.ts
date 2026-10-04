@@ -48,7 +48,7 @@ export type PanelAction
         | { kind: "editScriptArgs"; scriptPath: string }
         | { kind: "openScriptFile"; scriptPath: string }
         | { kind: "addScriptPick" }
-        | { kind: "addActiveScript"; andDebug: boolean }
+        | { kind: "addActiveScript" }
         | { kind: "removeScript"; scriptPath: string }
         | { kind: "setBreakOnLoad"; scope: "plugins" | "scripts"; value: boolean }
         | { kind: "setScriptTargetApp"; appId: string | undefined }

@@ -348,7 +348,7 @@ export class PanelController implements vscode.Disposable {
             case "addScriptPick":
                 return this.addScriptPick();
             case "addActiveScript":
-                return this.addActiveScript(action.andDebug);
+                return this.addActiveScript();
             case "removeScript":
                 return this.removeScriptWithUndo(action.scriptPath);
             case "setBreakOnLoad":
@@ -897,7 +897,7 @@ export class PanelController implements vscode.Disposable {
         }
     }
 
-    private async addActiveScript(andDebug: boolean): Promise<void> {
+    private async addActiveScript(): Promise<void> {
         const active = vscode.window.activeTextEditor?.document;
         if (active?.uri.scheme !== "file") {
             void vscode.window.showErrorMessage("UXP: Open a UXP script file in the editor first.");
@@ -914,9 +914,6 @@ export class PanelController implements vscode.Disposable {
             await active.save();
         }
         await this.pluginRegistry.addScript(scriptPath);
-        if (andDebug) {
-            await this.debugScript(scriptPath);
-        }
     }
 
     dispose(): void {

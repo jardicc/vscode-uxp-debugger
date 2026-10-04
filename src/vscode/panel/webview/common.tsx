@@ -51,7 +51,7 @@ export function IconButton(props: IconButtonProps): ReactNode {
 // ---------------------------------------------------------------------------
 
 export interface MenuItem {
-    icon: string;
+    icon?: string;
     label: string;
     onClick: () => void;
     disabled?: boolean;
@@ -124,7 +124,7 @@ export function OverflowMenu({
                                 item.onClick();
                             }}
                         >
-                            <span className={`codicon codicon-${item.icon}`} />
+                            {item.icon && <span className={`codicon codicon-${item.icon}`} />}
                             <span>{item.label}</span>
                         </button>
                     ))}
@@ -220,7 +220,7 @@ export function SplitButton({
                                 item.onClick();
                             }}
                         >
-                            <span className={`codicon codicon-${item.icon}`} />
+                            {item.icon && <span className={`codicon codicon-${item.icon}`} />}
                             <span>{item.label}</span>
                         </button>
                     ))}
