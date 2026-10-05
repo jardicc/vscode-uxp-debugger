@@ -1,5 +1,29 @@
 # Changelog
 
+## [2.1.0](https://github.com/jardicc/vscode-uxp-debugger/compare/v2.0.2...v2.1.0) (2026-10-05)
+
+
+### New Features
+
+* Adds support for Media Encoder. Improves app code in UI. ([288b818](https://github.com/jardicc/vscode-uxp-debugger/commit/288b818eb2e1fd1f893627c7c4f3c964d751b9c1))
+* Allows InDesign server ([597c068](https://github.com/jardicc/vscode-uxp-debugger/commit/597c0688c45767e796c77ee8a1b642686782d1c6))
+* allows to add multiple script files at once ([f8a4818](https://github.com/jardicc/vscode-uxp-debugger/commit/f8a481845e6cb94104dba20eff83102b5409a457))
+* support more apps, improve app detection, UI cleanup ([da5c422](https://github.com/jardicc/vscode-uxp-debugger/commit/da5c42234bb3817600e466bb3d201c65c0662726))
+
+
+### Bug Fixes
+
+* can recognize UXP supported and non-supported Adobe apps ([b5615d3](https://github.com/jardicc/vscode-uxp-debugger/commit/b5615d39dec0e032ab59a17ad76f67eb5b84df63))
+* Cleanup in dropdown menus for adding scripts and plugins ([f4fd1c7](https://github.com/jardicc/vscode-uxp-debugger/commit/f4fd1c7c3e0c238f3582b9297833ccd80a77918b))
+* debug button did not work when plugin had "breakOnLoad:true" ([05427e4](https://github.com/jardicc/vscode-uxp-debugger/commit/05427e409ecec772cb3a984c73e0ca95e7dc3509))
+* improve appearance of target select in UI where script targets specific host app ([d653b7c](https://github.com/jardicc/vscode-uxp-debugger/commit/d653b7cbd0c8ef0ec39ebcbcf78c3699226ea862))
+
+
+### Documentation
+
+* Add Media Encoder support to documentation and update host application requirements ([4e02124](https://github.com/jardicc/vscode-uxp-debugger/commit/4e021246816b43060c592e16e53ea627ff6f90f4))
+* adds known issue to readme ([e2be188](https://github.com/jardicc/vscode-uxp-debugger/commit/e2be18806a9cfc23fb8f53de46980bd9ef064a83))
+
 ## [2.0.0]
 
 ### Changed
