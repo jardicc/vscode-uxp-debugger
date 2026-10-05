@@ -188,6 +188,19 @@ UXP plugins typically serve bundled JavaScript files with **inline source maps**
 
 The **UXP Debugger** output channel contains detailed diagnostics; each host app also gets its own `UXP – <App> <version>` log channel.
 
+## Known issues
+
+### Host app startup can hang while the broker is running
+
+Starting an Adobe host application (e.g. Photoshop) while the broker is already running — whether launched from the control panel or manually — can leave the app stuck on its startup screen. The control panel still shows the app as connected (the `App/info` handshake completes), but the app never finishes loading. Stopping the broker lets the startup finish; the broker can be started again right after and everything works normally.
+
+This is host-side behavior: a UXP app that finds a developer-tools service announced during its own startup connects to it and blocks on that connection. Adobe's own UXP Developer Tools trigger the exact same hang when left running, so there is nothing the extension sends (or could stop sending) to avoid it.
+
+Workarounds:
+
+- Start the host app **before** starting the broker (or before opening the workspace that auto-starts it), then load the plugin.
+- If the app is already stuck, run **UXP: Stop UXP Devtools** (also available from the control panel title bar), wait for the app to finish loading, then run **UXP: Start UXP Devtools** again. Or click button in UI to disable/enable devtools.
+
 ## Feedback & issues
 
 Source code, bug reports and feature requests:
