@@ -62,6 +62,18 @@ export class HostAppNotRunningError extends UxpError {
 }
 
 /**
+ * Matching apps are connected — or running but unable to connect (e.g.
+ * pre-UXP) — and all of them are older than the catalog's binding
+ * `minVersion`; UXP debugging is refused for them. The user must close the
+ * old version and start a supported one themselves.
+ */
+export class HostAppVersionUnsupportedError extends UxpError {
+    constructor(public readonly reasons: string[]) {
+        super(reasons.join(" "));
+    }
+}
+
+/**
  * More than one connected app matches the plugin's `manifest.host` entries
  * and the caller did not pin a target app — load into exactly one at a time
  * instead of silently fanning out to all of them; the caller must ask the

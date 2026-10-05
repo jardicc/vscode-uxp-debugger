@@ -18,6 +18,7 @@ import type { PluginSession } from "../../core/broker/SessionRegistry";
 import { HostReplyError, NonErasableTypeScriptError } from "../../core/errors";
 import { normalizeUserArgs, parseArgsText } from "../../core/protocol/messages";
 import { stripTypeScriptFile } from "../../core/stripTypeScript";
+import { connectedAppUnsupportedReason } from "../../core/vulcan/hostAppCatalog";
 import type { UxpService } from "../UxpService";
 import {
     getStampedUxpClientSessionId,
@@ -225,6 +226,8 @@ async function pickScriptTargetApp(
         }
         return apps;
     };
+    const isDebuggable = (app: ConnectedApp): boolean =>
+        connectedAppUnsupportedReason(app.info.appId, app.info.appVersion) === undefined;
 
     for (;;) {
         let apps = filterApps();
@@ -236,6 +239,23 @@ async function pickScriptTargetApp(
             apps = filterApps();
         }
 
+        if (apps.length === 0) {
+            // Running but too old to ever connect (e.g. pre-UXP) — same message as a connected old app.
+            const reasons = service.runningUnsupportedReasons(appIdFilter ? [appIdFilter] : allowedIds);
+            if (reasons.length > 0) {
+                void vscode.window.showErrorMessage(`UXP: ${reasons.join(" ")}`);
+                return undefined;
+            }
+        }
+
+        if (apps.length > 0 && !apps.some(isDebuggable)) {
+            const reasons = apps.flatMap(
+                (app) => connectedAppUnsupportedReason(app.info.appId, app.info.appVersion) ?? [],
+            );
+            void vscode.window.showErrorMessage(`UXP: ${reasons.join(" ")}`);
+            return undefined;
+        }
+        apps = apps.filter(isDebuggable);
         if (apps.length === 0) {
             const required = appIdFilter ? [appIdFilter] : allowedIds ?? ["any UXP host app"];
             if (!promptToRetry) {

@@ -4,6 +4,8 @@
  * and no runtime dependencies, so the browser bundle can import it too.
  */
 
+import type { RunningApp } from "../../core/vulcan/hostAppCatalog";
+
 // ---------------------------------------------------------------------------
 // Persisted per-entry settings (CONTROL-PANEL.md §5.2)
 // ---------------------------------------------------------------------------
@@ -90,6 +92,8 @@ export interface ConnectedAppView {
     uxpVersion: string;
     /** From `App/info.supportedFeatures.debugScripts` — false/undefined on older UXP runtimes. */
     supportsScripts: boolean;
+    /** Why this connected app can't be debugged (e.g. version below catalog `minVersion`); undefined when supported. */
+    unsupportedReason?: string;
 }
 
 export interface PluginView {
@@ -143,6 +147,12 @@ export interface PanelState {
     connectedApps: ConnectedAppView[];
     /** App ids launched but not yet connected — Apps section shows a spinner. */
     launchingApps: string[];
+    /**
+   * Running catalog app instances, connected or not (from Vulcan's app
+   * registry, polled while the panel is visible) — pre-UXP versions never
+   * connect, so they'd be invisible otherwise.
+   */
+    runningApps: RunningApp[];
     /**
    * Catalog app ids confirmed installed on this machine, or `undefined` when
    * detection isn't available (e.g. unsupported platform) — the Apps

@@ -5,6 +5,7 @@
  */
 
 import * as path from "path";
+import type { RunningApp } from "../../core/vulcan/hostAppCatalog";
 import { type RegistryData, pathKey } from "./PluginRegistry";
 import type {
     BrokerStatus,
@@ -46,6 +47,8 @@ export interface SnapshotInputs {
     /** Message for the `error` broker status, if any. */
     brokerError?: string;
     connectedApps: ConnectedAppView[];
+    /** See `PanelState.runningApps`; defaults to none. */
+    runningApps?: RunningApp[];
     /** Catalog app ids confirmed installed, or undefined when unknown (see `PanelState`). */
     installedApps?: string[];
     sessions: SessionFact[];
@@ -248,6 +251,7 @@ export function buildPanelState(inputs: SnapshotInputs): PanelState {
         brokerError: inputs.brokerError,
         connectedApps: inputs.connectedApps,
         launchingApps,
+        runningApps: inputs.runningApps ?? [],
         installedApps: inputs.installedApps,
         breakOnLoad: inputs.registry.breakOnLoad,
         scriptTargetApp: inputs.registry.scriptTargetApp,

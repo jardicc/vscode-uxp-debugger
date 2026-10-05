@@ -13,7 +13,7 @@
  * never touches native code.
  */
 
-import type { HostAppDescriptor } from "./hostAppCatalog";
+import { type HostAppDescriptor, satisfiesMinVersion } from "./hostAppCatalog";
 import type { IHostAppController, LaunchResult } from "./IHostAppController";
 import { loadAddon, type VulcanControlAdapterNative } from "./addonLoader";
 import { compareVersions } from "../manifest/appMatching";
@@ -94,9 +94,10 @@ export class VulcanHostAppController implements IHostAppController {
             };
         }
 
-        // Newest installed candidate wins, regardless of stable vs. beta channel.
-        const newest = candidates[0];
-        const success = await this.launchSapCode(newest.sapCode);
+        // Newest debuggable candidate wins, regardless of stable vs. beta channel.
+        // Launched by `<sapCode>-<version>` — a bare SAP code starts Vulcan's default version.
+        const newest = candidates.find((c) => satisfiesMinVersion(c.version, app.minVersion)) ?? candidates[0];
+        const success = await this.launchSapCode(`${newest.sapCode}-${newest.version}`);
         if (!success) {
             return { status: "launchFailed", sapCode: newest.sapCode };
         }
@@ -156,22 +157,7 @@ export class VulcanHostAppController implements IHostAppController {
     }
 }
 
-/**
- * Pure version comparison, ported from UDT 2.2.1's `_checkMinHostAppVersion`
- * (ARCHITECTURE-UDT2-DIFF.md §6.4). Returns the first non-zero per-segment
- * difference; missing segments in `minVersion` count as 0. A non-numeric
- * segment at or after the first equal prefix poisons the result to NaN
- * (`NaN >= 0` is `false`) — replicated intentionally, not a bug.
- */
-export function satisfiesMinVersion(installed: string, minVersion: string): boolean {
-    const min = minVersion.split(".").map(Number);
-    return (
-        installed
-            .split(".")
-            .map(Number)
-            .reduce<number>((acc, part, i) => acc || part - (min[i] ?? 0), 0) >= 0
-    );
-}
+export { satisfiesMinVersion };
 
 /** Test hook: clear the process-wide double-instantiation guard. */
 export function resetControlAdapterGuardForTests(): void {

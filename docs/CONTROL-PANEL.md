@@ -51,11 +51,15 @@ The Apps section renders the static host catalog from
 [`hostAppCatalog.ts`](../src/core/vulcan/hostAppCatalog.ts). Each row reports one of:
 
 - connected, including app version and UXP runtime version;
+- unsupported version, connected or merely running (e.g. a pre-UXP Photoshop), shown with a
+  warning icon that stays visible in compact view;
 - starting;
+- running but not connected (from Vulcan's running-app registry);
 - not connected;
 - not installed, when native installation detection is available.
 
-The **Start...** action is available for a non-connected app. It reuses the native
+The **Start...** action is available only for an app that is neither connected nor known to
+be running (any version, incl. an unsupported one). It reuses the native
 installed-version picker and remains busy until that app connects or the connection wait
 times out. When installation detection is unavailable, the panel leaves Start enabled
 instead of assuming that no application is installed.

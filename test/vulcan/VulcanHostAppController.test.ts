@@ -28,6 +28,7 @@ const setLibraryPathMock = vi.fn();
 const PS: HostAppDescriptor = {
     name: "Photoshop",
     value: "PS",
+    uiCode: "PS",
     sapCodes: ["PHSP", "PHSPBETA"],
     minVersion: "23.2.0",
 };
@@ -170,7 +171,7 @@ describe("VulcanHostAppController", () => {
         const ctl = new VulcanHostAppController("/native");
         const result = await ctl.launch(PS);
         expect(result).toEqual({ status: "launched" });
-        expect(launchAppMock).toHaveBeenCalledWith("PHSPBETA", true, "", expect.any(Function));
+        expect(launchAppMock).toHaveBeenCalledWith("PHSPBETA-27.10.0", true, "", expect.any(Function));
     });
 
     it("launch() returns launchFailed when the native callback reports failure", async () => {

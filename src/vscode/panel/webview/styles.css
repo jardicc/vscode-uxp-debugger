@@ -459,6 +459,11 @@ body {
   color: var(--vscode-errorForeground);
 }
 
+/* Connected host app below the catalog minVersion — icon swap + color keeps it visible in compact view. */
+.status-icon.unsupported {
+  color: var(--vscode-problemsWarningIcon-foreground, var(--vscode-editorWarning-foreground));
+}
+
 .status-icon.not-installed {
   opacity: 0.4;
 }

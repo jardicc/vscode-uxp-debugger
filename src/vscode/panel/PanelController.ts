@@ -12,7 +12,7 @@ import { NativeAddonUnavailableError, RequestTimeoutError } from "../../core/err
 import { parseManifestContent } from "../../core/manifest/manifest";
 import { parseArgsText } from "../../core/protocol/messages";
 import type { PluginSession } from "../../core/broker/SessionRegistry";
-import { HOST_APPS } from "../../core/vulcan/hostAppCatalog";
+import { connectedAppUnsupportedReason, HOST_APPS, parseRunningApps, type RunningApp } from "../../core/vulcan/hostAppCatalog";
 import type { UxpService } from "../UxpService";
 import { attachDebuggerCommand } from "../commands/attachDebugger";
 import { debugScriptCommand } from "../commands/debugScript";
@@ -39,6 +39,8 @@ const SCRIPT_EXTENSIONS = [".js", ".ts", ".ccjs", ".psjs", ".idjs"];
 
 /** Safety net against pathological loops (symlink cycles, etc.) — see CONTROL-PANEL.md §3.3. */
 const MAX_ANCESTOR_DEPTH = 50;
+
+const RUNNING_APPS_POLL_MS = 3_000;
 
 /**
  * Ancestor directories from the manifest's own folder up to (and including)
@@ -88,6 +90,9 @@ export class PanelController implements vscode.Disposable {
     private postScheduled = false;
     /** Cache for {@link getInstalledAppIds} — see its doc comment. */
     private installedAppIds: string[] | undefined;
+    /** Last result of {@link pollRunningApps}. */
+    private runningApps: RunningApp[] = [];
+    private runningAppsTimer: ReturnType<typeof setInterval> | undefined;
 
     constructor(
         private readonly service: UxpService,
@@ -156,7 +161,9 @@ export class PanelController implements vscode.Disposable {
                 version: app.info.appVersion,
                 uxpVersion: app.info.uxpVersion,
                 supportsScripts: app.info.supportedFeatures?.debugScripts === true,
+                unsupportedReason: connectedAppUnsupportedReason(app.info.appId, app.info.appVersion),
             })),
+            runningApps: this.runningApps,
             installedApps: this.getInstalledAppIds(),
             sessions: this.service.sessions.map((session) => ({
                 clientSessionId: session.clientSessionId,
@@ -781,13 +788,41 @@ export class PanelController implements vscode.Disposable {
     // -------------------------------------------------------------------------
 
     /**
+   * Polls Vulcan's running-app registry only while the panel is visible — no
+   * event fires when a (pre-UXP) host app starts. `getAppsList()` is a cheap
+   * in-memory lookup, unlike per-version `isAppRunning` (~55 ms each).
+   */
+    setVisible(visible: boolean): void {
+        if (!visible) {
+            if (this.runningAppsTimer) {
+                clearInterval(this.runningAppsTimer);
+                this.runningAppsTimer = undefined;
+            }
+            return;
+        }
+        this.pollRunningApps();
+        this.runningAppsTimer ??= setInterval(() => {
+            this.pollRunningApps();
+        }, RUNNING_APPS_POLL_MS);
+    }
+
+    private pollRunningApps(): void {
+        const next = parseRunningApps(this.service.getVulcanRunningApps() ?? []);
+        if (JSON.stringify(next) !== JSON.stringify(this.runningApps)) {
+            this.runningApps = next;
+            this.postState();
+        }
+    }
+
+    /**
    * Keeps the row busy (Apps-section spinner) until the launched app either
    * connects or the connect timeout elapses, instead of only for the
    * QuickPick + launch call itself.
    */
     private async launchHostApp(appId: string): Promise<void> {
         const launched = await launchHostAppByValue(this.service, this.output, appId);
-        if (!launched) {
+        // Old versions never connect to the broker — don't spin for the full timeout.
+        if (!launched?.debuggable) {
             return;
         }
         await this.service.waitForConnection(
@@ -916,6 +951,7 @@ export class PanelController implements vscode.Disposable {
     }
 
     dispose(): void {
+        this.setVisible(false);
         for (const disposable of this.disposables) {
             disposable.dispose();
         }

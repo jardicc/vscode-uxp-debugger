@@ -4,11 +4,11 @@
 - multiple sessions for same plugin (needs rework UI, some buttons apply only for bundle)
 - add new host apps support
 - feature to attach plugins without loading them via Debugger?
-- plugin detects installed host app version but does not make difference between supported and non-supported ones
 - investigate Media Encoder launch hanging when the broker is already running
 
 ## DONE
 
+- debugging gated by catalog minVersion (launch anything, debug only supported versions)
 - debug auto-loads the plugin and respects the break on load checkbox
 - test MacOS
 - find out why I don't see error in console log

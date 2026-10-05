@@ -6,7 +6,7 @@
  * identically, just wrapped in a status code here for REST callers.
  */
 
-import { HostAppNotRunningError, MultipleAppsMatchError, RequestTimeoutError } from "../../core/errors";
+import { HostAppNotRunningError, HostAppVersionUnsupportedError, MultipleAppsMatchError, RequestTimeoutError } from "../../core/errors";
 import type { HookResult } from "./hooksHttp";
 
 /** Shared 404 for hooks that refuse manifests not registered in the panel's plugin list. */
@@ -26,6 +26,9 @@ export function loadErrorStatus(err: unknown): number {
     }
     if (err instanceof HostAppNotRunningError) {
         return 503; // nothing to act on yet
+    }
+    if (err instanceof HostAppVersionUnsupportedError) {
+        return 422; // only versions below the debugger's minimum are connected/running
     }
     if (err instanceof RequestTimeoutError) {
         return 504;

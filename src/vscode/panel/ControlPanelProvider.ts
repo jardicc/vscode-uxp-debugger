@@ -25,13 +25,16 @@ export class ControlPanelProvider implements vscode.WebviewViewProvider {
 
         const attachment = this.controller.attachWebview(view.webview);
         view.onDidDispose(() => {
+            this.controller.setVisible(false);
             attachment.dispose();
         });
         view.onDidChangeVisibility(() => {
+            this.controller.setVisible(view.visible);
             if (view.visible) {
                 this.controller.postState();
             }
         });
+        this.controller.setVisible(view.visible);
         this.controller.postState();
     }
 

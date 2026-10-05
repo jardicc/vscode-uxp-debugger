@@ -6,9 +6,12 @@
 
 import * as vscode from "vscode";
 import { NativeAddonUnavailableError } from "../../core/errors";
-import { type HostAppDescriptor, HOST_APPS } from "../../core/vulcan/hostAppCatalog";
+import { type HostAppDescriptor, HOST_APPS, isDebuggableVersion } from "../../core/vulcan/hostAppCatalog";
+import type { IHostAppController } from "../../core/vulcan/IHostAppController";
 import type { UxpService } from "../UxpService";
 import { hostAppNotRunningDialog, offerLaunchHostAppDialog } from "../ui/dialogs";
+
+interface InstalledCandidate { sapCode: string; version: string; locales: string[] }
 
 /** Adobe apps can take a while to cold-start (ARCHITECTURE-UDT2-DIFF.md §6.5 caveat #4). */
 export const CONNECT_TIMEOUT_MS = 120_000;
@@ -50,27 +53,29 @@ export async function resolveHostAppNotRunning(
 }
 
 /**
- * Control-panel Apps-section click:
- * QuickPick over every installed version of the app, launch the chosen one.
- * Returns whether a launch was actually kicked off — the caller (panel) uses
- * that to decide whether to keep showing a "starting…" spinner while waiting
- * for the connection; this function itself never waits for it.
+ * Control-panel Apps-section click: QuickPick over every installed version
+ * of the app (debuggable ones first, each marked), launch the chosen one.
+ * Any installed version may be launched — the catalog `minVersion` only
+ * gates debugging. Returns `undefined` when nothing was launched; otherwise
+ * whether the launched version is debuggable, so the caller (panel) knows
+ * whether to wait for a broker connection that an old version will never
+ * make. This function itself never waits for the connection.
  */
 export async function launchHostAppByValue(
     service: UxpService,
     output: vscode.OutputChannel,
     appValue: string,
-): Promise<boolean> {
+): Promise<{ debuggable: boolean } | undefined> {
     const app = HOST_APPS.find((candidate) => candidate.value === appValue);
     if (!app) {
         void vscode.window.showInformationMessage(
             `UXP: "${appValue}" is not a launchable host application.`,
         );
-        return false;
+        return undefined;
     }
 
     const controller = service.getHostAppController();
-    let candidates: { sapCode: string; version: string; locales: string[] }[];
+    let candidates: InstalledCandidate[];
     try {
         candidates = controller.getInstalledCandidates(app);
     }
@@ -79,7 +84,7 @@ export async function launchHostAppByValue(
             void vscode.window.showErrorMessage(
                 "UXP: Host app detection is not available on this platform.",
             );
-            return false;
+            return undefined;
         }
         throw err;
     }
@@ -88,22 +93,26 @@ export async function launchHostAppByValue(
         void vscode.window.showErrorMessage(
             `UXP: ${app.name} does not appear to be installed on this machine.`,
         );
-        return false;
+        return undefined;
     }
 
-    const picked = await pickVersion(app, candidates);
+    const picked = await pickVersion(app, candidates, true);
     if (!picked) {
-        return false;
+        return undefined;
     }
 
     output.appendLine(`[hostapp] launching ${picked.sapCode}-${picked.version}`);
-    const launched = await controller.launchSapCode(picked.sapCode);
+    const launched = await launchCandidate(controller, picked);
     if (!launched) {
-        void vscode.window.showErrorMessage(`UXP: Failed to launch ${app.name}.`);
-        return false;
+        void vscode.window.showErrorMessage(`UXP: Failed to launch ${app.name} ${picked.version}.`);
+        return undefined;
     }
-    void vscode.window.showInformationMessage(`UXP: Launching ${app.name} ${picked.version}...`);
-    return true;
+    const debuggable = isDebuggableVersion(app, picked.version);
+    void vscode.window.showInformationMessage(
+        `UXP: Launching ${app.name} ${picked.version}...`
+        + (debuggable ? "" : ` Debugging is unavailable for this version (requires ${app.minVersion} or newer).`),
+    );
+    return { debuggable };
 }
 
 async function pickAppToLaunch(
@@ -124,7 +133,7 @@ async function launchAndWaitFor(
 ): Promise<boolean> {
     const controller = service.getHostAppController();
 
-    let candidates: { sapCode: string; version: string; locales: string[] }[];
+    let candidates: InstalledCandidate[];
     try {
         candidates = controller.getInstalledCandidates(app);
     }
@@ -142,7 +151,19 @@ async function launchAndWaitFor(
         return hostAppNotRunningDialog(requiredApps);
     }
 
-    if (app.sapCodes.some((sapCode) => controller.isRunning(sapCode))) {
+    // The launch is requested for debugging, so only debuggable versions are offered.
+    const debuggable = candidates.filter((candidate) => isDebuggableVersion(app, candidate.version));
+    if (debuggable.length === 0) {
+        void vscode.window.showErrorMessage(
+            `UXP: ${app.name} is installed (${candidates.map((c) => c.version).join(", ")}), `
+            + `but UXP debugging requires ${app.minVersion} or newer.`,
+        );
+        return false;
+    }
+
+    // A bare SAP code only matches Vulcan's default version, so each debuggable
+    // version is checked; a running pre-UXP version must not block the launch.
+    if (debuggable.some((candidate) => controller.isRunning(`${candidate.sapCode}-${candidate.version}`))) {
     // Already running (just not connected to the broker yet) — nothing to
     // launch; fall back to the plain Retry dialog.
         return hostAppNotRunningDialog(requiredApps);
@@ -152,38 +173,77 @@ async function launchAndWaitFor(
         return false;
     }
 
-    const picked = await pickVersion(app, candidates);
+    // Exactly one debuggable version is launched without asking; two or more are offered.
+    const picked = await pickVersion(app, debuggable, false);
     if (!picked) {
         return false;
     }
 
     output.appendLine(`[hostapp] launching ${picked.sapCode}-${picked.version}`);
-    const launched = await controller.launchSapCode(picked.sapCode);
+    const launched = await launchCandidate(controller, picked);
     if (!launched) {
-        void vscode.window.showErrorMessage(`UXP: Failed to launch ${app.name}.`);
+        void vscode.window.showErrorMessage(`UXP: Failed to launch ${app.name} ${picked.version}.`);
         return false;
     }
 
     return waitForConnection(service, output, app, requiredApps);
 }
 
+const LAUNCH_VERIFY_TIMEOUT_MS = 15_000;
+
+/**
+ * Launches one specific installed version. A bare SAP code makes Vulcan start
+ * the default (newest) version, so the `<sapCode>-<version>` specifier is
+ * used. Vulcan reports success even when nothing started (seen with very old
+ * versions), hence the check that the exact version really is running.
+ */
+async function launchCandidate(
+    controller: IHostAppController,
+    candidate: InstalledCandidate,
+): Promise<boolean> {
+    const specifier = `${candidate.sapCode}-${candidate.version}`;
+    if (!(await controller.launchSapCode(specifier))) {
+        return false;
+    }
+    const deadline = Date.now() + LAUNCH_VERIFY_TIMEOUT_MS;
+    while (!controller.isRunning(specifier)) {
+        if (Date.now() >= deadline) {
+            return false;
+        }
+        await new Promise((resolve) => setTimeout(resolve, 500));
+    }
+    return true;
+}
+
+/**
+ * Single candidate: returned as is. Otherwise a QuickPick — debuggable
+ * versions first (newest first, so Enter picks the best default), and with
+ * `markSupport` each entry is flagged as debuggable or launch-only.
+ */
 async function pickVersion(
     app: HostAppDescriptor,
-    candidates: { sapCode: string; version: string; locales: string[] }[],
-): Promise<{ sapCode: string; version: string; locales: string[] } | undefined> {
+    candidates: InstalledCandidate[],
+    markSupport: boolean,
+): Promise<InstalledCandidate | undefined> {
     if (candidates.length === 1) {
         return candidates[0];
     }
-    // Sorted newest-first by the caller — first item is naturally the
-    // default when the user just hits Enter.
+    const supported = candidates.filter((candidate) => isDebuggableVersion(app, candidate.version));
+    const unsupported = candidates.filter((candidate) => !isDebuggableVersion(app, candidate.version));
     const pick = await vscode.window.showQuickPick(
-        candidates.map((candidate, index) => ({
-            label:
-        `${app.name} ${candidate.version}`
-        + (candidate.locales.length > 0 ? ` (${candidate.locales.join(", ")})` : ""),
-            description: index === 0 ? `${candidate.sapCode} · newest` : candidate.sapCode,
-            candidate,
-        })),
+        [...supported, ...unsupported].map((candidate) => {
+            const debuggable = isDebuggableVersion(app, candidate.version);
+            const locales = candidate.locales.length > 0 ? ` (${candidate.locales.join(", ")})` : "";
+            return {
+                label: `${markSupport ? (debuggable ? "$(check) " : "$(warning) ") : ""}${app.name} ${candidate.version}${locales}`,
+                description: !markSupport
+                    ? candidate.sapCode
+                    : debuggable
+                        ? `${candidate.sapCode} · debuggable`
+                        : `${candidate.sapCode} · launch only — debugging requires ${app.minVersion}+`,
+                candidate,
+            };
+        }),
         { placeHolder: `Select the ${app.name} version to launch` },
     );
     return pick?.candidate;

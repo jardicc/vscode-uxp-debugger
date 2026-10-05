@@ -108,14 +108,25 @@ catalog contains:
 
 Adobe XD is not in the current catalog.
 
-`PanelController.buildState()` passes three independent app facts to the
+`PanelController.buildState()` passes four independent app facts to the
 webview:
 
 - `connectedApps`: live broker connections, including host version, UXP
-  version, and script-debugging support;
+  version, script-debugging support, and an `unsupportedReason` when the
+  version is below the catalog `minVersion`;
 - `installedApps`: catalog app ids with at least one detected installed
   candidate;
-- `launchingApps`: app ids whose panel launch action is still busy.
+- `launchingApps`: app ids whose panel launch action is still busy;
+- `runningApps`: running catalog app instances, connected or not, from
+  Vulcan's `getAppsList()` registry (e.g. `PS,17.0.2,Adobe Photoshop`),
+  each with an `unsupportedReason` when below `minVersion`. Pre-UXP versions
+  never connect to the broker, so this is the only way to see them. The list
+  is polled every 3 s only while the panel is visible, and only once this
+  window has created its Vulcan announcer (no extra native adapter is
+  instantiated). Per-version `isAppRunning("<sap>-<version>")` is not used
+  for polling: it costs ~55 ms per call, and a bare SAP code only matches
+  Vulcan's default version. Apps that don't register with Vulcan (Media
+  Encoder Beta was not listed in testing) aren't detected this way.
 
 Installed-app detection calls `getInstalledCandidates()` once per catalog
 entry and caches the resulting ids for the lifetime of the VS Code window.
@@ -127,6 +138,8 @@ Each app row displays one of these states:
 | State | Display and action |
 | --- | --- |
 | Connected | Connected app name, app version, and UXP version; no Start button. |
+| Unsupported version (connected or running) | Yellow warning icon (visible in compact view too), "unsupported version" in the detail line, and the reason as row tooltip; no Start button. |
+| Running, not connected | Running-VM icon and `<version> running — not connected`; no Start button. |
 | Launching | Spinner and "starting..."; no Start button. |
 | Known not installed | "not installed"; Start is disabled with a tooltip. |
 | Not connected | "not connected" and an enabled **Start...** button. |
@@ -199,8 +212,27 @@ sequenceDiagram
 The plugin-load recovery flow is related but intentionally different.
 `resolveHostAppNotRunning()` can offer a launch, displays cancellable
 notification progress while waiting, and waits an additional three seconds
-after connection before retrying `Plugin/load`. If an app process is already
-running but has not connected, that flow falls back to its Retry dialog.
+after connection before retrying `Plugin/load`. If a debuggable version is
+already running but has not connected, that flow falls back to its Retry
+dialog. Each debuggable version is checked as `<sapCode>-<version>`, because a
+bare SAP code only matches Vulcan's default version.
+
+### 4.1 Unsupported version running
+
+When no matching app is connected but Vulcan's running-app registry shows only
+versions below `minVersion` (e.g. a pre-UXP Photoshop 17.0.2), plugin load
+(`UxpService.loadPlugin` → `HostAppVersionUnsupportedError`, HTTP 422 for
+hooks) and script debugging (`pickScriptTargetApp`) stop with the same error a
+connected old version produces, instead of the not-running dialog or a launch
+offer:
+
+> UXP: Photoshop 17.0.2 is not supported for UXP debugging — Photoshop 23.2.0
+> or newer is required. Close Photoshop 17.0.2 and start a supported version.
+
+The text comes from `unsupportedVersionReason()` and is shared by every
+surface, including the Apps-row tooltip. The extension never closes or starts
+an app on the user's behalf here. When a supported version of the same app
+is running too, nothing is reported (it may simply not have connected yet).
 
 ## 5. Multi-window behavior
 
