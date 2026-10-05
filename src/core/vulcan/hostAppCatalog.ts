@@ -26,7 +26,10 @@ export interface HostAppDescriptor {
 
 export const HOST_APPS: readonly HostAppDescriptor[] = [
     { name: "Photoshop", value: "PS", uiCode: "PS", sapCodes: ["PHSP", "PHSPBETA"], minVersion: "23.2.0" },
+    // For InDesign - scripts are supported from 18.0 and plugins from 18.5 but old matrix support pages shows support back to 17.0 but that could be behind experimental flag
     { name: "InDesign", value: "ID", uiCode: "ID", sapCodes: ["IDSN", "IDSNBETA"], minVersion: "18.5.0" },
+    // TODO: verify — `AIS` confirmed from the SAPCode (issue #5), `AISBETA` is an unverified guess; minVersion and uiCode are assumed (live broker reported appId "IDS", version 21.3.0).
+    { name: "InDesign Server", value: "IDS", uiCode: "IDS", sapCodes: ["AIS", "AISBETA"], minVersion: "18.5.0" },
     { name: "Premiere Pro", value: "premierepro", uiCode: "PR", sapCodes: ["PPRO", "PPROBETA"], minVersion: "25.6.0" },
     { name: "Media Encoder", value: "ame", uiCode: "ME", sapCodes: ["AME", "AMEBETA"], minVersion: "27.0.0" },
 
