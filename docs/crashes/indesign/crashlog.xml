@@ -1,0 +1,586 @@
+<?xml version="1.0"?>
+<!DOCTYPE AdobeCrashReport SYSTEM "AdobeCrashReporter.dtd">
+<crashreport serviceVersion="29.4.0.202602031314_aba04a1" clientVersion="29.4.0.202602031314_aba04a1" applicationName="InDesign" applicationVersion="21.5.1" build="21.5.1.73" source="Windows-Client" crashType="n/a">
+<time year="2026" month="10" day="3" hour="10" minute="7" second="15" timeoffset="60" timezone="Central Europe Daylight Time" crsessionduration="149"/>
+<user guid="removed"/>
+<system platform="Windows 11 Pro for Workstations" osversion="11.0" osbuild="26200" applicationlanguage="en-us" userlanguage="cs-CZ" oslanguage="en-US" ram="98219" machine="Intel(R) Core(TM) i9-9900KF CPU @ 3.60GHz" model="Intel64 Family 6 Model 158 Stepping 12" cpuCount="16" cpuType="8664" cpuFreq="3600 MHz" processorArchitecture="9"/>
+<gpu>
+<gpuinfo availability="Running/Full Power" adapterCompatibility="NVIDIA" adapterRAM="23.8 GB" caption="NVIDIA GeForce RTX 3090" description="NVIDIA GeForce RTX 3090" driverDate="20260317000000.000000-000" driverVersion="32.0.15.9597" videoModeDescription="1920 x 1200 x 4294967296 colors" pnpDeviceID="PCI&#92;VEN_10DE&#38;DEV_2204&#38;SUBSYS_38841462&#38;REV_A1&#92;4&#38;5102704&#38;0&#38;0009" installedDisplayDrivers="nvldumdx.dll"/>
+</gpu>
+<crash exception="EXCEPTION_ACCESS_VIOLATION" exceptionCode="0xc0000005" instruction="0x00007FFFA9EA68C6">
+<backtrace crashedThread="0">
+<thread index="0">
+<stackStatement index="0" address="0x00007FFFA9EA68C6" symbolname="torq::seal_napi::Context::protect"/>
+<stackStatement index="1" address="0x00007FFFA2F7233F" symbolname="GetPlugIn"/>
+<stackStatement index="2" address="0x00007FFFA2F769C0" symbolname="GetPlugIn"/>
+<stackStatement index="3" address="0x00007FFFA2F79224" symbolname="GetPlugIn"/>
+<stackStatement index="4" address="0x00007FFFABB56507" symbolname="torq::seal_napi::Context::protect"/>
+<stackStatement index="5" address="0x00007FFFABB5C218" symbolname="torq::seal_napi::Context::protect"/>
+<stackStatement index="6" address="0x00007FFFA7EE2092" symbolname="napi_unwrap"/>
+<stackStatement index="7" address="0x00007FFFA8378D77" symbolname="napi_unwrap"/>
+<stackStatement index="8" address="0x00007FFFA837883C" symbolname="napi_unwrap"/>
+<stackStatement index="9" address="0x00007FFFA83794E0" symbolname="napi_unwrap"/>
+<stackStatement index="10" address="0x00007FFFA8031437" symbolname="napi_unwrap"/>
+<stackStatement index="11" address="0x00007FFFA8030E04" symbolname="napi_unwrap"/>
+<stackStatement index="12" address="0x00007FFFA8074E82" symbolname="napi_unwrap"/>
+<stackStatement index="13" address="0x00007FFFA8074808" symbolname="napi_unwrap"/>
+<stackStatement index="14" address="0x00007FFFA88C43D5" symbolname="napi_unwrap"/>
+<stackStatement index="15" address="0x00007FFFA88C3A1F" symbolname="napi_unwrap"/>
+<stackStatement index="16" address="0x00007FFFA88C722C" symbolname="napi_unwrap"/>
+<stackStatement index="17" address="0x000001C3CF06343A" symbolname="unknown"/>
+<stackStatement index="18" address="0x00007FFFA7E81272" symbolname="napi_release_env"/>
+<stackStatement index="19" address="0x000000A6A04FC4E0" symbolname="unknown"/>
+<stackStatement index="20" address="0x000001C3CF03F592" symbolname="unknown"/>
+<stackStatement index="21" address="0x00000052CB08D1E1" symbolname="unknown"/>
+<stackStatement index="22" address="0x00000298F5141A01" symbolname="unknown"/>
+<stackStatement index="23" address="0x000000A6A04FC470" symbolname="unknown"/>
+<stackStatement index="24" address="0x0000000000000006" symbolname="unknown"/>
+<stackStatement index="25" address="0x000000A6A04FC4F8" symbolname="unknown"/>
+<stackStatement index="26" address="0x000001C3CF13932E" symbolname="unknown"/>
+<stackStatement index="27" address="0x00000052CB08D1E1" symbolname="unknown"/>
+<stackStatement index="28" address="0x0000000000000050" symbolname="unknown"/>
+<stackStatement index="29" address="0x000002C603F6B099" symbolname="unknown"/>
+<stackStatement index="30" address="0x000003B958855DF9" symbolname="unknown"/>
+<stackStatement index="31" address="0x0000000000000111" symbolname="unknown"/>
+<stackStatement index="32" address="0x000000A6A04FC618" symbolname="unknown"/>
+<stackStatement index="33" address="0x000001C32982EE20" symbolname="unknown"/>
+<stackStatement index="34" address="0x0000000000000022" symbolname="unknown"/>
+<stackStatement index="35" address="0x000000A6A04FC618" symbolname="unknown"/>
+<stackStatement index="36" address="0x000001C3CEFCD358" symbolname="unknown"/>
+<stackStatement index="37" address="0x0000034CDDAB8609" symbolname="unknown"/>
+<stackStatement index="38" address="0x0000034CDDAB85D1" symbolname="unknown"/>
+<stackStatement index="39" address="0x00000298F51403E1" symbolname="unknown"/>
+<stackStatement index="40" address="0x0000035C282CB8F1" symbolname="unknown"/>
+<stackStatement index="41" address="0x00000298F5148921" symbolname="unknown"/>
+<stackStatement index="42" address="0x0000034CDDAB8599" symbolname="unknown"/>
+<stackStatement index="43" address="0x0000035C282C24E9" symbolname="unknown"/>
+<stackStatement index="44" EndlessStack="TRUE"/>
+</thread>
+</backtrace>
+<registerSet>
+<register name="RAX" value="0x69746163696C7070"/>
+<register name="RBX" value="0x000001C32EEF3190"/>
+<register name="RCX" value="0x000002C603F62699"/>
+<register name="RDX" value="0x000000A6A04FB7D0"/>
+<register name="RSI" value="0x0000000000000000"/>
+<register name="RDI" value="0x0000000000000000"/>
+<register name="RSP" value="0x000000A6A04FB780"/>
+<register name="RBP" value="0x000001C362B71318"/>
+<register name="RIP" value="0x00007FFFA9EA68C6"/>
+<register name="EFL" value="0x0000000000010202"/>
+<register name="LastExceptionToRip" value="0x0000000000000000"/>
+<register name="LastExceptionFromRip" value="0x0000000000000000"/>
+</registerSet>
+
+<binaryImageSet>
+<binaryImage start="0x00007FF628A90000" end="0x00007FF6294A1000" path="adobe\InDesign.exe" version="21.5.1.73"/>
+<binaryImage start="0x00007FF917160000" end="0x00007FF9173C7000" path="ntdll.dll" version="6.2.26100.9444"/>
+<binaryImage start="0x00007FF915B50000" end="0x00007FF915C1B000" path="kernel32.dll" version="6.2.26100.9444"/>
+<binaryImage start="0x00007FF914940000" end="0x00007FF914D42000" path="KERNELBASE.dll" version="6.2.26100.9444"/>
+<binaryImage start="0x00007FF8D6730000" end="0x00007FF8D680B000" path="bdhkm64.dll" version="1.13.238.0"/>
+<binaryImage start="0x00007FF8D6540000" end="0x00007FF8D672E000" path="atcuf64.dll" version="1.86.445.0"/>
+<binaryImage start="0x00007FF910E40000" end="0x00007FF910EDF000" path="apphelp.dll" version="6.2.26100.9444"/>
+<binaryImage start="0x00007FF914560000" end="0x00007FF9146AC000" path="ucrtbase.dll" version="6.2.26100.9444"/>
+<binaryImage start="0x00007FF8DE5A0000" end="0x00007FF8DE5B2000" path="adobe\ASKLib.dll"/>
+<binaryImage start="0x00007FF914F70000" end="0x00007FF91513F000" path="user32.dll" version="6.2.26100.9444"/>
+<binaryImage start="0x00007FF914780000" end="0x00007FF9147A7000" path="win32u.dll" version="6.2.26100.9444"/>
+<binaryImage start="0x00007FF916440000" end="0x00007FF91646B000" path="gdi32.dll" version="6.2.26100.8328"/>
+<binaryImage start="0x00007FF914D50000" end="0x00007FF914E79000" path="gdi32full.dll" version="6.2.26100.9444"/>
+<binaryImage start="0x00007FF9144B0000" end="0x00007FF914553000" path="msvcp_win.dll" version="6.2.26100.9444"/>
+<binaryImage start="0x00007FF915150000" end="0x00007FF9151B6000" path="shlwapi.dll" version="6.2.26100.9444"/>
+<binaryImage start="0x00007FF9152A0000" end="0x00007FF915A38000" path="shell32.dll" version="6.2.26100.9278"/>
+<binaryImage start="0x00007FF86CAF0000" end="0x00007FF86D065000" path="adobe\dvacore.dll" version="25.3.2.1"/>
+<binaryImage start="0x00007FF915FB0000" end="0x00007FF91606C000" path="advapi32.dll" version="6.2.26100.9278"/>
+<binaryImage start="0x00007FF916220000" end="0x00007FF9162C9000" path="msvcrt.dll" version="7.0.26100.9444"/>
+<binaryImage start="0x00007FF916760000" end="0x00007FF916809000" path="sechost.dll" version="6.2.26100.9444"/>
+<binaryImage start="0x00007FF917000000" end="0x00007FF917118000" path="rpcrt4.dll" version="6.2.26100.9444"/>
+<binaryImage start="0x00007FF916080000" end="0x00007FF91621A000" path="ole32.dll" version="6.2.26100.9444"/>
+<binaryImage start="0x00007FF915C20000" end="0x00007FF915FA5000" path="combase.dll" version="6.2.26100.9444"/>
+<binaryImage start="0x00007FF9162D0000" end="0x00007FF9163A9000" path="oleaut32.dll" version="6.2.26100.9278"/>
+<binaryImage start="0x00007FF916B30000" end="0x00007FF916FB7000" path="setupapi.dll" version="6.2.26100.9444"/>
+<binaryImage start="0x00007FF915A60000" end="0x00007FF915AE0000" path="ws2_32.dll" version="6.2.26100.9444"/>
+<binaryImage start="0x00007FF8F0580000" end="0x00007FF8F075B000" path="GdiPlus.dll" version="6.2.26100.9444"/>
+<binaryImage start="0x00007FF87A420000" end="0x00007FF87A49F000" path="adobe\ObjectModel.dll" version="21.5.1.73"/>
+<binaryImage start="0x00007FF9147B0000" end="0x00007FF91492E000" path="crypt32.dll" version="6.2.26100.9278"/>
+<binaryImage start="0x00007FF914360000" end="0x00007FF9143E2000" path="wintrust.dll" version="6.2.26100.9444"/>
+<binaryImage start="0x00007FF834A90000" end="0x00007FF835A86000" path="adobe\Public.dll" version="21.5.1.73"/>
+<binaryImage start="0x00007FF916810000" end="0x00007FF916905000" path="comdlg32.dll" version="6.2.26100.9278"/>
+<binaryImage start="0x00007FF916650000" end="0x00007FF91674B000" path="SHCore.dll" version="6.2.26100.9444"/>
+<binaryImage start="0x00007FF8DE580000" end="0x00007FF8DE596000" path="adobe\PMRuntime.dll" version="21.5.1.73"/>
+<binaryImage start="0x0000000180000000" end="0x00000001801B7000" path="adobe\DV_WidgetBin.dll" version="21.5.1.73"/>
+<binaryImage start="0x00007FF86D500000" end="0x00007FF86D6C0000" path="adobe\WidgetBin.dll" version="21.5.1.73"/>
+<binaryImage start="0x00007FF8F0440000" end="0x00007FF8F04DD000" path="msvcp140.dll" version="14.51.36247.0"/>
+<binaryImage start="0x00007FF8F16C0000" end="0x00007FF8F16EC000" path="VCRUNTIME140.dll" version="14.51.36247.0"/>
+<binaryImage start="0x00007FF8F04E0000" end="0x00007FF8F04EC000" path="VCRUNTIME140_1.dll" version="14.51.36247.0"/>
+<binaryImage start="0x00007FF8F0910000" end="0x00007FF8F0918000" path="msimg32.dll" version="6.2.26100.9444"/>
+<binaryImage start="0x00007FF914250000" end="0x00007FF91427A000" path="bcrypt.dll" version="6.2.26100.9444"/>
+<binaryImage start="0x00007FF90CD50000" end="0x00007FF90CD5B000" path="version.dll" version="6.2.26100.1150"/>
+<binaryImage start="0x00007FF911B30000" end="0x00007FF911D7C000" path="dbghelp.dll" version="6.2.26100.9444"/>
+<binaryImage start="0x00007FF8BC1C0000" end="0x00007FF8BC1E9000" path="adobe\libzip.dll"/>
+<binaryImage start="0x00007FF905BB0000" end="0x00007FF905BD1000" path="mpr.dll" version="6.2.26100.7019"/>
+<binaryImage start="0x000001C3710E0000" end="0x000001C37110B000" path="adobe\AFL.dll" version="3.5.0.0"/>
+<binaryImage start="0x00007FF87A370000" end="0x00007FF87A414000" path="adobe\tbb12.dll"/>
+<binaryImage start="0x00007FF8DE560000" end="0x00007FF8DE57C000" path="adobe\boost_thread.dll"/>
+<binaryImage start="0x00007FF86D220000" end="0x00007FF86D4FE000" path="adobe\wrservices.dll" version="21.0.0.0"/>
+<binaryImage start="0x00007FF86C650000" end="0x00007FF86C901000" path="adobe\Database.dll" version="21.5.1.73"/>
+<binaryImage start="0x00007FF8F1F40000" end="0x00007FF8F21D0000" path="comctl32.dll" version="6.10.26100.9278"/>
+<binaryImage start="0x00007FF90C900000" end="0x00007FF90CA2A000" path="winhttp.dll" version="6.2.26100.9278"/>
+<binaryImage start="0x00007FF836940000" end="0x00007FF836A52000" path="adobe\boost_regex.dll"/>
+<binaryImage start="0x00007FF8809B0000" end="0x00007FF8809D3000" path="adobe\boost_filesystem.dll"/>
+<binaryImage start="0x00007FFFB14E0000" end="0x00007FFFB3345000" path="adobe\dvaui.dll" version="25.3.2.1"/>
+<binaryImage start="0x00007FF916AF0000" end="0x00007FF916B21000" path="imm32.dll" version="6.2.26100.9278"/>
+<binaryImage start="0x00007FF8365B0000" end="0x00007FF836933000" path="adobe\dvaappsupport.dll" version="25.3.2.1"/>
+<binaryImage start="0x00007FF836440000" end="0x00007FF8365A9000" path="adobe\dvanet.dll" version="25.3.2.1"/>
+<binaryImage start="0x00007FF836110000" end="0x00007FF836432000" path="adobe\dunamis-ingest.dll" version="1.49.0.0"/>
+<binaryImage start="0x00007FF8EFA20000" end="0x00007FF8EFCB3000" path="wininet.dll" version="11.0.26100.9444"/>
+<binaryImage start="0x00007FF834580000" end="0x00007FF834A88000" path="adobe\libcrypto-3-x64.dll" version="3.0.19.0"/>
+<binaryImage start="0x00007FFFEAC10000" end="0x00007FFFEAF4E000" path="adobe\ZXPSignLib-Minimal.dll"/>
+<binaryImage start="0x00007FF835C20000" end="0x00007FF835D73000" path="adobe\ACE.dll" version="7.0.0.59125"/>
+<binaryImage start="0x000001C3715C0000" end="0x000001C3715F3000" path="adobe\BIB.dll" version="5.0.0.59125"/>
+<binaryImage start="0x00007FF878F80000" end="0x00007FF878FDB000" path="adobe\AdobeSVGAGM.dll" version="4.0.0.59115"/>
+<binaryImage start="0x000001C371620000" end="0x000001C371A79000" path="adobe\CoolType.dll" version="11.0.0.59125"/>
+<binaryImage start="0x00007FFFE8EB0000" end="0x00007FFFE93BD000" path="adobe\MPS.dll" version="10.0.0.59113"/>
+<binaryImage start="0x00007FFFD8BC0000" end="0x00007FFFD94F1000" path="adobe\AGM.dll" version="8.0.0.59125"/>
+<binaryImage start="0x00007FF86C990000" end="0x00007FF86C9EF000" path="adobe\ARE.dll" version="5.0.0.59125"/>
+<binaryImage start="0x000001C371AC0000" end="0x000001C371AEB000" path="adobe\BIBUtils.dll" version="5.0.0.59125"/>
+<binaryImage start="0x00007FFFEA810000" end="0x00007FFFEAA16000" path="adobe\icuuc77.dll" version="77.1.0.0"/>
+<binaryImage start="0x00007FFFE8BA0000" end="0x00007FFFE8EAB000" path="adobe\icuin77.dll" version="77.1.0.0"/>
+<binaryImage start="0x00007FFFEA610000" end="0x00007FFFEA80C000" path="adobe\CRClient.dll" version="29.4.0.0"/>
+<binaryImage start="0x00007FFFAD990000" end="0x00007FFFB14D4000" path="adobe\AdobePie.dll" version="1.69.1.0"/>
+<binaryImage start="0x00007FF86C5C0000" end="0x00007FF86C650000" path="adobe\typekitC4.dll"/>
+<binaryImage start="0x00007FF8C97C0000" end="0x00007FF8C97DC000" path="adobe\ASLSupport.dll"/>
+<binaryImage start="0x00007FF910EF0000" end="0x00007FF910EFD000" path="secur32.dll" version="6.2.26100.7705"/>
+<binaryImage start="0x00007FF9129C0000" end="0x00007FF9129F3000" path="IPHLPAPI.DLL" version="6.2.26100.9278"/>
+<binaryImage start="0x00007FFFD8620000" end="0x00007FFFD8BB2000" path="adobe\PlugPlugOwl.dll" version="12.1.0.5"/>
+<binaryImage start="0x00007FFFD7F50000" end="0x00007FFFD861D000" path="adobe\exo.dll" version="25.3.2.1"/>
+<binaryImage start="0x00007FFFD7740000" end="0x00007FFFD7A2A000" path="adobe\dvaworkspace.dll" version="25.3.2.1"/>
+<binaryImage start="0x00007FFFD18F0000" end="0x00007FFFD1D44000" path="adobe\dvaadameve.dll" version="25.3.2.1"/>
+<binaryImage start="0x00007FFFD1390000" end="0x00007FFFD1735000" path="adobe\AdobeOwl.dll" version="5.5.0.0"/>
+<binaryImage start="0x00007FF90F8A0000" end="0x00007FF90FEDA000" path="d2d1.dll" version="6.2.26100.9444"/>
+<binaryImage start="0x00007FF910150000" end="0x00007FF9103BA000" path="DWrite.dll" version="6.2.26100.9444"/>
+<binaryImage start="0x00007FFFD3ED0000" end="0x00007FFFD3FDC000" path="opengl32.dll" version="6.2.26100.9278"/>
+<binaryImage start="0x00007FF8F07D0000" end="0x00007FF8F0845000" path="oleacc.dll" version="7.2.26100.9278"/>
+<binaryImage start="0x00007FFFD7C70000" end="0x00007FFFD7F45000" path="adobe\dvascripting.dll" version="25.3.2.1"/>
+<binaryImage start="0x00007FF911390000" end="0x00007FF9113BF000" path="dwmapi.dll" version="6.2.26100.9278"/>
+<binaryImage start="0x00007FF865050000" end="0x00007FF8650C0000" path="adobe\dvavulcansupport.dll" version="25.3.2.1"/>
+<binaryImage start="0x00007FF9135F0000" end="0x00007FF91365C000" path="mswsock.dll" version="6.2.26100.9278"/>
+<binaryImage start="0x00007FF8E0300000" end="0x00007FF8E0307000" path="MSVCP140_CODECVT_IDS.dll" version="14.51.36247.0"/>
+<binaryImage start="0x00007FFFD0B10000" end="0x00007FFFD0F31000" path="adobe\SVGRE.dll" version="9.3.0.59115"/>
+<binaryImage start="0x00007FFFCCFE0000" end="0x00007FFFCDB91000" path="adobe\AIDE.dll" version="7.0.1.58209"/>
+<binaryImage start="0x000001C371BE0000" end="0x000001C373F56000" path="adobe\icudt77.dll"/>
+<binaryImage start="0x00007FF9066E0000" end="0x00007FF9066F6000" path="MSVCP140_ATOMIC_WAIT.dll" version="14.51.36247.0"/>
+<binaryImage start="0x00007FF8373F0000" end="0x00007FF837491000" path="adobe\AdobePDFSettings.dll" version="1.7.0.1"/>
+<binaryImage start="0x00007FF835AD0000" end="0x00007FF835C11000" path="adobe\AdobeXMP.dll" version="10.0.0.57382"/>
+<binaryImage start="0x00007FF834090000" end="0x00007FF83422A000" path="adobe\AdobeXMPFiles.dll" version="10.0.0.57382"/>
+<binaryImage start="0x00007FF8FE6D0000" end="0x00007FF8FE8AC000" path="urlmon.dll" version="11.0.26100.9444"/>
+<binaryImage start="0x00007FF911230000" end="0x00007FF91136B000" path="dxgi.dll" version="6.2.26100.9444"/>
+<binaryImage start="0x00007FF835E30000" end="0x00007FF835EE8000" path="adobe\AXEDOMCore.dll" version="7.0.0.57387"/>
+<binaryImage start="0x00007FF880130000" end="0x00007FF88015B000" path="adobe\AXE8SharedExpat.dll" version="7.0.0.57387"/>
+<binaryImage start="0x00007FF8344D0000" end="0x00007FF834571000" path="adobe\JP2KLib.dll" version="5.0.0.57382"/>
+<binaryImage start="0x00007FFFCCC20000" end="0x00007FFFCCFDB000" path="adobe\VulcanControl.dll" version="7.2.1.38"/>
+<binaryImage start="0x00007FF831160000" end="0x00007FF831258000" path="adobe\VulcanMessage5.dll" version="7.2.1.38"/>
+<binaryImage start="0x00007FF9136A0000" end="0x00007FF9136D4000" path="userenv.dll" version="6.2.26100.9278"/>
+<binaryImage start="0x00007FF87A340000" end="0x00007FF87A361000" path="adobe\dvaevefactory.dll" version="25.3.2.1"/>
+<binaryImage start="0x00007FF9103C0000" end="0x00007FF9105E5000" path="dcomp.dll" version="6.2.26100.9278"/>
+<binaryImage start="0x00007FF90FEE0000" end="0x00007FF910140000" path="d3d11.dll" version="6.2.26100.9278"/>
+<binaryImage start="0x00007FF8B45B0000" end="0x00007FF8B45D3000" path="D3D12.dll" version="6.2.26100.9278"/>
+<binaryImage start="0x00007FF910F10000" end="0x00007FF910F3A000" path="wtsapi32.dll" version="6.2.26100.9278"/>
+<binaryImage start="0x00007FF8E9020000" end="0x00007FF8E905B000" path="dbgcore.dll" version="6.2.26100.9444"/>
+<binaryImage start="0x00007FF8C4560000" end="0x00007FF8C458D000" path="glu32.dll" version="6.2.26100.1150"/>
+<binaryImage start="0x00007FF90F110000" end="0x00007FF90F348000" path="WindowsCodecs.dll" version="6.2.26100.9457"/>
+<binaryImage start="0x00007FF8FE3D0000" end="0x00007FF8FE694000" path="iertutil.dll" version="11.0.26100.9444"/>
+<binaryImage start="0x00007FF911DC0000" end="0x00007FF91266E000" path="windows.storage.dll" version="6.2.26100.9444"/>
+<binaryImage start="0x00007FF9141C0000" end="0x00007FF91421E000" path="powrprof.dll" version="6.2.26100.3912"/>
+<binaryImage start="0x00007FF9138E0000" end="0x00007FF9138EC000" path="CRYPTBASE.DLL" version="6.2.26100.9444"/>
+<binaryImage start="0x00007FF8EEF80000" end="0x00007FF8EF2CC000" path="msi.dll" version="5.0.26100.9444"/>
+<binaryImage start="0x00007FF913000000" end="0x00007FF91301B000" path="kernel.appcore.dll" version="6.2.26100.9278"/>
+<binaryImage start="0x00007FF90F0F0000" end="0x00007FF90F10A000" path="Microsoft.Internal.WarpPal.dll"/>
+<binaryImage start="0x00007FF9132A0000" end="0x00007FF9132E9000" path="sspicli.dll" version="6.2.26100.9278"/>
+<binaryImage start="0x00007FF905B80000" end="0x00007FF905BA9000" path="srvcli.dll" version="6.2.26100.1150"/>
+<binaryImage start="0x00007FF9129A0000" end="0x00007FF9129AD000" path="netutils.dll" version="6.2.26100.1882"/>
+<binaryImage start="0x00007FF9111E0000" end="0x00007FF911224000" path="DXCore.dll" version="6.2.26100.9278"/>
+<binaryImage start="0x00007FF9143F0000" end="0x00007FF91449C000" path="bcryptPrimitives.dll" version="6.2.26100.9444"/>
+<binaryImage start="0x00007FF910FD0000" end="0x00007FF911078000" path="uxtheme.dll" version="6.2.26100.9444"/>
+<binaryImage start="0x00007FF8F9510000" end="0x00007FF8F955C000" path="ListaryHook64.dll" version="5.0.2334.0"/>
+<binaryImage start="0x00007FF85A760000" end="0x00007FF85A7BC000" path="adobe\tbbmalloc.dll"/>
+<binaryImage start="0x00007FF913EF0000" end="0x00007FF913EFA000" path="dpapi.dll" version="6.2.26100.8521"/>
+<binaryImage start="0x00007FF913A30000" end="0x00007FF913A43000" path="msasn1.dll" version="6.2.26100.9444"/>
+<binaryImage start="0x00007FF9141A0000" end="0x00007FF9141B5000" path="umpdc.dll" version="6.2.26100.8972"/>
+<binaryImage start="0x00007FF916910000" end="0x00007FF916A6B000" path="msctf.dll" version="6.2.26100.9278"/>
+<binaryImage start="0x00007FF913900000" end="0x00007FF91391B000" path="cryptsp.dll" version="6.2.26100.9444"/>
+<binaryImage start="0x00007FF912F60000" end="0x00007FF912F99000" path="rsaenh.dll" version="6.2.26100.7705"/>
+<binaryImage start="0x00007FF916FC0000" end="0x00007FF916FE0000" path="imagehlp.dll" version="6.2.26100.4202"/>
+<binaryImage start="0x00007FF913670000" end="0x00007FF913695000" path="gpapi.dll" version="6.2.26100.9444"/>
+<binaryImage start="0x00007FF90CC30000" end="0x00007FF90CC6B000" path="cryptnet.dll" version="6.2.26100.9278"/>
+<binaryImage start="0x00007FF914280000" end="0x00007FF9142A9000" path="profapi.dll" version="6.2.26100.9444"/>
+<binaryImage start="0x00007FF90EDB0000" end="0x00007FF90EDBE000" path="winnsi.dll" version="6.2.26100.9444"/>
+<binaryImage start="0x00007FF916FF0000" end="0x00007FF916FFA000" path="nsi.dll" version="6.2.26100.9444"/>
+<binaryImage start="0x00007FF9151E0000" end="0x00007FF91528E000" path="clbcatq.dll" version="2001.12.10941.16384"/>
+<binaryImage start="0x00007FF8F39C0000" end="0x00007FF8F39D2000" path="wbemprox.dll" version="6.2.26100.9278"/>
+<binaryImage start="0x00007FF8F34A0000" end="0x00007FF8F351A000" path="wbemcomn.dll" version="6.2.26100.7920"/>
+<binaryImage start="0x00007FF8F2D20000" end="0x00007FF8F2D35000" path="wbemsvc.dll" version="6.2.26100.9278"/>
+<binaryImage start="0x00007FF8F2D40000" end="0x00007FF8F2E35000" path="fastprox.dll" version="6.2.26100.9444"/>
+<binaryImage start="0x00007FF8F2B80000" end="0x00007FF8F2B9D000" path="amsi.dll" version="6.2.26100.7309"/>
+<binaryImage start="0x00007FF8F2840000" end="0x00007FF8F290B000" path="antimalware_provider64.dll" version="4.0.24.1"/>
+<binaryImage start="0x00007FF914E80000" end="0x00007FF914EFC000" path="coml2.dll" version="6.2.26100.9444"/>
+<binaryImage start="0x00007FF8D2C70000" end="0x00007FF8D2D34000" path="Windows.StateRepositoryPS.dll" version="6.2.26100.9444"/>
+<binaryImage start="0x00007FF913E30000" end="0x00007FF913E82000" path="cfgmgr32.dll" version="6.2.26100.9278"/>
+<binaryImage start="0x00007FF90C430000" end="0x00007FF90C44D000" path="dhcpcsvc6.DLL" version="6.2.26100.9444"/>
+<binaryImage start="0x00007FF90C3C0000" end="0x00007FF90C3E5000" path="dhcpcsvc.dll" version="6.2.26100.9444"/>
+<binaryImage start="0x00007FF90EE40000" end="0x00007FF90EF35000" path="propsys.dll" version="7.0.26100.9278"/>
+<binaryImage start="0x00007FF8DE080000" end="0x00007FF8DE097000" path="virtdisk.dll" version="6.2.26100.9278"/>
+<binaryImage start="0x00007FF8F3790000" end="0x00007FF8F3866000" path="webio.dll" version="6.2.26100.9278"/>
+<binaryImage start="0x00007FF912A50000" end="0x00007FF912BA8000" path="dnsapi.dll" version="6.2.26100.9444"/>
+<binaryImage start="0x00007FF9133D0000" end="0x00007FF9133DD000" path="dsparse.dll" version="6.2.26100.1"/>
+<binaryImage start="0x00007FF8D1F20000" end="0x00007FF8D1FE2000" path="Windows.FileExplorer.Common.dll" version="6.2.26100.9278"/>
+<binaryImage start="0x00007FF90DCC0000" end="0x00007FF90DE2A000" path="WinTypes.dll" version="6.2.26100.9444"/>
+<binaryImage start="0x00007FF905AF0000" end="0x00007FF905AFB000" path="rasadhlp.dll" version="6.2.26100.7920"/>
+<binaryImage start="0x00007FF90BAD0000" end="0x00007FF90BB56000" path="FWPUCLNT.DLL" version="6.2.26100.9444"/>
+<binaryImage start="0x00007FF912E30000" end="0x00007FF912EF6000" path="schannel.dll" version="6.2.26100.9444"/>
+<binaryImage start="0x00007FF913AA0000" end="0x00007FF913AD0000" path="ncrypt.dll" version="6.2.26100.9444"/>
+<binaryImage start="0x00007FF913A50000" end="0x00007FF913A8F000" path="ntasn1.dll" version="6.2.26100.1882"/>
+<binaryImage start="0x00007FF8DE5C0000" end="0x00007FF8DE608000" path="ncryptsslp.dll" version="6.2.26100.9444"/>
+<binaryImage start="0x00007FF8E6BC0000" end="0x00007FF8E6CBB000" path="TextShaping.dll" version="6.2.26100.9444"/>
+<binaryImage start="0x00007FF8E5080000" end="0x00007FF8E51C2000" path="textinputframework.dll" version="6.2.26100.9278"/>
+<binaryImage start="0x00007FF910BE0000" end="0x00007FF910D0B000" path="CoreMessaging.dll" version="6.2.26100.9444"/>
+<binaryImage start="0x00007FF90DE30000" end="0x00007FF90E114000" path="CoreUIComponents.dll" version="6.2.26100.9278"/>
+<binaryImage start="0x00007FF8DFA50000" end="0x00007FF8DFA59000" path="adobe\METADATA DATABASE FILTER.RPLN" version="21.5.1.73"/>
+<binaryImage start="0x00007FFFCC820000" end="0x00007FFFCCC16000" path="adobe\APPFRAMEWORK.RPLN" version="21.5.1.73"/>
+<binaryImage start="0x00007FFFCC300000" end="0x00007FFFCC817000" path="adobe\dvauxphost.dll" version="25.3.2.1"/>
+<binaryImage start="0x00007FFFA9D40000" end="0x00007FFFAD985000" path="adobe\dynamic-torqnative.dll" version="9.3.0.0"/>
+<binaryImage start="0x00007FF86C580000" end="0x00007FF86C5B4000" path="adobe\act_tracing.dll" version="1.0.68.0"/>
+<binaryImage start="0x00007FFFA7E40000" end="0x00007FFFA9D3D000" path="adobe\libdynamic-napi.dll"/>
+<binaryImage start="0x00007FFFCC010000" end="0x00007FFFCC2F3000" path="adobe\dvastorage.dll" version="25.3.2.1"/>
+<binaryImage start="0x00007FF8D6170000" end="0x00007FF8D618D000" path="credui.dll" version="6.2.26100.9278"/>
+<binaryImage start="0x00007FF90C460000" end="0x00007FF90C496000" path="winmm.dll" version="6.2.26100.9278"/>
+<binaryImage start="0x00007FFFE89C0000" end="0x00007FFFE8B9A000" path="adobe\TEXT WALKER.RPLN" version="21.5.1.73"/>
+<binaryImage start="0x00007FF8DF720000" end="0x00007FF8DF729000" path="adobe\GLOBAL PREFERENCES PANEL.RPLN" version="21.5.1.73"/>
+<binaryImage start="0x00007FF835DD0000" end="0x00007FF835E24000" path="adobe\LINGUISTICS.RPLN" version="21.5.1.73"/>
+<binaryImage start="0x00007FFFEA580000" end="0x00007FFFEA603000" path="adobe\TEXT PANEL.APLN" version="21.5.1.73"/>
+<binaryImage start="0x00007FF82F730000" end="0x00007FF82F783000" path="adobe\TextPanelLib.dll" version="21.5.1.73"/>
+<binaryImage start="0x00007FF8360C0000" end="0x00007FF836108000" path="adobe\SPELLING PANEL.APLN" version="21.5.1.73"/>
+<binaryImage start="0x00007FFFD75A0000" end="0x00007FFFD7734000" path="adobe\PACKAGE AND PREFLIGHT.APLN" version="21.5.1.73"/>
+<binaryImage start="0x00007FF86C960000" end="0x00007FF86C985000" path="adobe\IME.RPLN" version="21.5.1.73"/>
+<binaryImage start="0x00007FFFA7BD0000" end="0x00007FFFA7E33000" path="adobe\LAYOUT UI.RPLN" version="21.5.1.73"/>
+<binaryImage start="0x00007FFFDADB0000" end="0x00007FFFDAE81000" path="adobe\AdobeGesture.dll" version="1.0.1.1"/>
+<binaryImage start="0x00007FFFCBF10000" end="0x00007FFFCC005000" path="adobe\IMPORT EXPORT UI.RPLN" version="21.5.1.73"/>
+<binaryImage start="0x00007FFFD74D0000" end="0x00007FFFD7599000" path="adobe\HYPERLINKS.RPLN" version="21.5.1.73"/>
+<binaryImage start="0x00007FFFD1300000" end="0x00007FFFD1385000" path="adobe\MASTER PAGE.RPLN" version="21.5.1.73"/>
+<binaryImage start="0x00007FFFA7AE0000" end="0x00007FFFA7BCC000" path="adobe\TEXT EDITOR.RPLN" version="21.5.1.73"/>
+<binaryImage start="0x00007FF833F40000" end="0x00007FF833F8A000" path="adobe\UTILITIES.RPLN" version="21.5.1.73"/>
+<binaryImage start="0x00007FFFA7A00000" end="0x00007FFFA7ADB000" path="adobe\COLOR MANAGEMENT.RPLN" version="21.5.1.73"/>
+<binaryImage start="0x00007FFFA6DB0000" end="0x00007FFFA7A00000" path="adobe\CLOUDDOCS.RPLN" version="21.5.1.73"/>
+<binaryImage start="0x00007FFFA69B0000" end="0x00007FFFA6DA3000" path="adobe\CastleCore.dll"/>
+<binaryImage start="0x00007FFFA35D0000" end="0x00007FFFA69A8000" path="adobe\dvaclouddoc.dll"/>
+<binaryImage start="0x00007FFFE9A00000" end="0x00007FFFE9A5D000" path="adobe\ssleay32.dll" version="1.0.2.34"/>
+<binaryImage start="0x00000000743B0000" end="0x0000000074624000" path="adobe\libeay32.dll" version="1.0.2.34"/>
+<binaryImage start="0x00007FF8F9790000" end="0x00007FF8F979B000" path="SensApi.dll" version="6.2.26100.1"/>
+<binaryImage start="0x00007FFF9FE90000" end="0x00007FFFA0913000" path="adobe\APPLICATION UI.RPLN" version="21.5.1.73"/>
+<binaryImage start="0x00007FFFD0A60000" end="0x00007FFFD0B08000" path="adobe\ScCore.dll" version="4.5.6.4"/>
+<binaryImage start="0x00007FF905BE0000" end="0x00007FF905BFA000" path="netapi32.dll" version="6.2.26100.7019"/>
+<binaryImage start="0x00007FFF9FB80000" end="0x00007FFF9FE90000" path="adobe\dvauxpui.dll" version="25.3.2.1"/>
+<binaryImage start="0x00007FFF9F9F0000" end="0x00007FFF9FB78000" path="adobe\dvametadataui.dll" version="25.3.2.1"/>
+<binaryImage start="0x00007FF830F50000" end="0x00007FF830F9E000" path="adobe\AdamLib.dll"/>
+<binaryImage start="0x00007FFF9F7F0000" end="0x00007FFF9F9E5000" path="adobe\dvascriptui.dll"/>
+<binaryImage start="0x00007FFF9F740000" end="0x00007FFF9F7E8000" path="adobe\ExtendScript.dll" version="4.5.6.4"/>
+<binaryImage start="0x00007FFF9F610000" end="0x00007FFF9F740000" path="adobe\dvametadata.dll" version="25.3.2.1"/>
+<binaryImage start="0x00007FF913380000" end="0x00007FF9133C7000" path="logoncli.dll" version="6.2.26100.9444"/>
+<binaryImage start="0x00007FF912930000" end="0x00007FF91294C000" path="samcli.dll" version="6.2.26100.9278"/>
+<binaryImage start="0x00007FF90C310000" end="0x00007FF90C32B000" path="wkscli.dll" version="6.2.26100.7019"/>
+<binaryImage start="0x00007FFF9F590000" end="0x00007FFF9F604000" path="adobe\dvascriptingNAPI.DLL" version="25.3.2.1"/>
+<binaryImage start="0x00007FFF9F250000" end="0x00007FFF9F58B000" path="adobe\DOCUMENT FRAMEWORK.RPLN" version="21.5.1.73"/>
+<binaryImage start="0x00007FFF9F000000" end="0x00007FFF9F241000" path="adobe\EBOOKEXPORT.APLN" version="21.5.1.73"/>
+<binaryImage start="0x00007FFF9EF80000" end="0x00007FFF9EFF6000" path="adobe\ACTIONS.RPLN" version="21.5.1.73"/>
+<binaryImage start="0x00007FFF9ED90000" end="0x00007FFF9EF71000" path="adobe\CSXS.APLN" version="21.5.1.73"/>
+<binaryImage start="0x00007FFF9EC80000" end="0x00007FFF9ED8B000" path="adobe\ExperimentationSDK.dll"/>
+<binaryImage start="0x00007FFF9EB90000" end="0x00007FFF9EC77000" path="adobe\TRANSPARENCY.RPLN" version="21.5.1.73"/>
+<binaryImage start="0x00007FFFCBEA0000" end="0x00007FFFCBF05000" path="adobe\IMAGE FILTERS.RPLN" version="21.5.1.73"/>
+<binaryImage start="0x00007FFF9EA20000" end="0x00007FFF9EB8E000" path="adobe\DYNAMICDOCUMENTS.RPLN" version="21.5.1.73"/>
+<binaryImage start="0x00007FF82D350000" end="0x00007FF82D395000" path="adobe\AWSUI.RPLN" version="21.5.1.73"/>
+<binaryImage start="0x00007FFF9E9C0000" end="0x00007FFF9EA19000" path="adobe\AWS.RPLN" version="21.5.1.73"/>
+<binaryImage start="0x00007FFF9E780000" end="0x00007FFF9E9B9000" path="adobe\GENERIC PAGE ITEM.RPLN" version="21.5.1.73"/>
+<binaryImage start="0x00007FFF99430000" end="0x00007FFF9B787000" path="adobe\opencv_world452.dll" version="4.5.2.0"/>
+<binaryImage start="0x00007FFF9E720000" end="0x00007FFF9E779000" path="adobe\yoga.dll"/>
+<binaryImage start="0x00007FFF9DB20000" end="0x00007FFF9E715000" path="adobe\AutoCropCore.dll"/>
+<binaryImage start="0x00007FF894430000" end="0x00007FF89448A000" path="CONCRT140.dll" version="14.51.36247.0"/>
+<binaryImage start="0x00007FFF9DAB0000" end="0x00007FFF9DB1F000" path="adobe\SPREAD UI.RPLN" version="21.5.1.73"/>
+<binaryImage start="0x00007FFF9D940000" end="0x00007FFF9DAAF000" path="adobe\WIDGETS.RPLN" version="21.5.1.73"/>
+<binaryImage start="0x00007FFF9D7F0000" end="0x00007FFF9D939000" path="adobe\HTMLPGT.RPLN" version="21.5.1.73"/>
+<binaryImage start="0x00007FFF9D710000" end="0x00007FFF9D7E1000" path="adobe\PACKAGE AND PREFLIGHT UI.APLN" version="21.5.1.73"/>
+<binaryImage start="0x00007FFF9D650000" end="0x00007FFF9D706000" path="adobe\INDEXING.RPLN" version="21.5.1.73"/>
+<binaryImage start="0x00007FF86ACD0000" end="0x00007FF86ACE9000" path="adobe\SCRIPTS PANEL.APLN" version="21.5.1.73"/>
+<binaryImage start="0x00007FFF9D090000" end="0x00007FFF9D650000" path="adobe\TEXT.RPLN" version="21.5.1.73"/>
+<binaryImage start="0x00007FFF9D020000" end="0x00007FFF9D087000" path="adobe\COMPFONTMGR.RPLN" version="21.5.1.73"/>
+<binaryImage start="0x00007FFF9CE90000" end="0x00007FFF9D019000" path="adobe\FONT MANAGER.RPLN" version="21.5.1.73"/>
+<binaryImage start="0x00007FF85A430000" end="0x00007FF85A45C000" path="adobe\WORLDREADY.RPLN" version="21.5.1.73"/>
+<binaryImage start="0x00007FFF98FD0000" end="0x00007FFF9942C000" path="adobe\CHARACTER PANEL.APLN" version="21.5.1.73"/>
+<binaryImage start="0x00007FFF9CDF0000" end="0x00007FFF9CE8E000" path="adobe\EYEDROPPER TOOL.APLN" version="21.5.1.73"/>
+<binaryImage start="0x00007FFF9C9D0000" end="0x00007FFF9CB8B000" path="adobe\XML.RPLN" version="21.5.1.73"/>
+<binaryImage start="0x00007FFF98AA0000" end="0x00007FFF98FCB000" path="adobe\LINKS.RPLN" version="21.5.1.73"/>
+<binaryImage start="0x00007FFF9CD80000" end="0x00007FFF9CDE2000" path="adobe\ASSET PUBLIBRARY.APLN" version="21.5.1.73"/>
+<binaryImage start="0x00007FFF9CD20000" end="0x00007FFF9CD78000" path="adobe\ASSET LIBRARY PANEL.APLN" version="21.5.1.73"/>
+<binaryImage start="0x00007FF85A380000" end="0x00007FF85A3A8000" path="adobe\ARTICLE.RPLN" version="21.5.1.73"/>
+<binaryImage start="0x00007FF858850000" end="0x00007FF858881000" path="adobe\ARTICLEPANEL.APLN" version="21.5.1.73"/>
+<binaryImage start="0x00007FFFDAD60000" end="0x00007FFFDADAC000" path="adobe\TRANSFORM PANEL.APLN" version="21.5.1.73"/>
+<binaryImage start="0x00007FFF9C970000" end="0x00007FFF9C9C8000" path="adobe\DYNAMICDOCUMENTSUI.APLN" version="21.5.1.73"/>
+<binaryImage start="0x00007FF858770000" end="0x00007FF8587A5000" path="adobe\CONDITIONALTEXT UI.APLN" version="21.5.1.73"/>
+<binaryImage start="0x00007FFF9C8E0000" end="0x00007FFF9C96C000" path="adobe\TABLESTYLESUI.APLN" version="21.5.1.73"/>
+<binaryImage start="0x00007FF86ACB0000" end="0x00007FF86ACC7000" path="adobe\GENERIC STYLE EDITOR.APLN" version="21.5.1.73"/>
+<binaryImage start="0x00007FFF9C830000" end="0x00007FFF9C8DF000" path="adobe\PRINTUI.APLN" version="21.5.1.73"/>
+<binaryImage start="0x00007FFF9C790000" end="0x00007FFF9C829000" path="adobe\COLOR PICKER PANEL.APLN" version="21.5.1.73"/>
+<binaryImage start="0x00007FFF989C0000" end="0x00007FFF98A9C000" path="adobe\GRAPHICS.RPLN" version="21.5.1.73"/>
+<binaryImage start="0x00007FFF988E0000" end="0x00007FFF989BC000" path="adobe\SWATCHES PANEL.APLN" version="21.5.1.73"/>
+<binaryImage start="0x00007FFF98840000" end="0x00007FFF988D7000" path="adobe\TRANSPARENCY UI.APLN" version="21.5.1.73"/>
+<binaryImage start="0x00007FF800000000" end="0x00007FF800031000" path="adobe\TEXT STYLE PANEL.APLN" version="21.5.1.73"/>
+<binaryImage start="0x00007FFF98760000" end="0x00007FFF98840000" path="adobe\STYLE PANEL.APLN" version="21.5.1.73"/>
+<binaryImage start="0x00007FFF986B0000" end="0x00007FFF98759000" path="adobe\GRAPHIC PANELS.APLN" version="21.5.1.73"/>
+<binaryImage start="0x00007FFF98610000" end="0x00007FFF986A7000" path="adobe\OBJECTSTYLESUI.APLN" version="21.5.1.73"/>
+<binaryImage start="0x00007FF865030000" end="0x00007FF865049000" path="adobe\PS IMPORT UI.APLN" version="21.5.1.73"/>
+<binaryImage start="0x00007FFF98580000" end="0x00007FFF9860C000" path="adobe\DATAMERGE.APLN" version="21.5.1.73"/>
+<binaryImage start="0x00007FF8DF6C0000" end="0x00007FF8DF6CC000" path="adobe\USERNAME UI.APLN" version="21.5.1.73"/>
+<binaryImage start="0x00007FFF98500000" end="0x00007FFF98580000" path="adobe\INCOPYWORKFLOW.RPLN" version="21.5.1.73"/>
+<binaryImage start="0x00007FFF98420000" end="0x00007FFF984F1000" path="adobe\INCOPYSHARED.RPLN" version="21.5.1.73"/>
+<binaryImage start="0x00007FFFEABD0000" end="0x00007FFFEAC09000" path="adobe\INCOPY BRIDGE.APLN" version="21.5.1.73"/>
+<binaryImage start="0x00007FFF983B0000" end="0x00007FFF98411000" path="adobe\ASSIGNMENT UI.APLN" version="21.5.1.73"/>
+<binaryImage start="0x00007FF8583D0000" end="0x00007FF8583F4000" path="adobe\BOOKMARK PANEL.APLN" version="21.5.1.73"/>
+<binaryImage start="0x00007FFF98350000" end="0x00007FFF983AE000" path="adobe\BEHAVIOR.RPLN" version="21.5.1.73"/>
+<binaryImage start="0x00007FFF982A0000" end="0x00007FFF9834F000" path="adobe\FORMFIELD.RPLN" version="21.5.1.73"/>
+<binaryImage start="0x00007FFF98210000" end="0x00007FFF9829D000" path="adobe\BUTTONUI.APLN" version="21.5.1.73"/>
+<binaryImage start="0x00007FFF98180000" end="0x00007FFF9820E000" path="adobe\HYPERLINKS PANEL.APLN" version="21.5.1.73"/>
+<binaryImage start="0x00007FFF98080000" end="0x00007FFF9817C000" path="adobe\XMEDIA UI.APLN" version="21.5.1.73"/>
+<binaryImage start="0x00007FFF98010000" end="0x00007FFF98077000" path="adobe\INDEX PANEL.APLN" version="21.5.1.73"/>
+<binaryImage start="0x00007FF853010000" end="0x00007FF853025000" path="adobe\unihan.dll"/>
+<binaryImage start="0x00007FFF97FB0000" end="0x00007FFF98007000" path="adobe\OUTPUT PREVIEW.APLN" version="21.5.1.73"/>
+<binaryImage start="0x00007FFF97F50000" end="0x00007FFF97FA4000" path="adobe\TOC.RPLN" version="21.5.1.73"/>
+<binaryImage start="0x00007FFFE8980000" end="0x00007FFFE89BE000" path="adobe\TOC UI DIALOG.APLN" version="21.5.1.73"/>
+<binaryImage start="0x00007FF8393F0000" end="0x00007FF839410000" path="adobe\OUTPUTMISCUI.APLN" version="21.5.1.73"/>
+<binaryImage start="0x00007FF834070000" end="0x00007FF834084000" path="adobe\SECTIONS UI.APLN" version="21.5.1.73"/>
+<binaryImage start="0x00007FFF97EF0000" end="0x00007FFF97F47000" path="adobe\BOOK.RPLN" version="21.5.1.73"/>
+<binaryImage start="0x00007FFF97E90000" end="0x00007FFF97EE2000" path="adobe\BOOK PANEL.APLN" version="21.5.1.73"/>
+<binaryImage start="0x00007FFF97CB0000" end="0x00007FFF97E86000" path="adobe\TABLE MODEL.RPLN" version="21.5.1.73"/>
+<binaryImage start="0x00007FFF97B40000" end="0x00007FFF97CAD000" path="adobe\IMAGE.RPLN" version="21.5.1.73"/>
+<binaryImage start="0x00007FF8303F0000" end="0x00007FF830406000" path="adobe\GROUP.RPLN" version="21.5.1.73"/>
+<binaryImage start="0x00007FFF97820000" end="0x00007FFF979C3000" path="adobe\EPS PAGE ITEM.RPLN" version="21.5.1.73"/>
+<binaryImage start="0x00007FFFD12B0000" end="0x00007FFFD12FC000" path="adobe\LAYERS PANEL.APLN" version="21.5.1.73"/>
+<binaryImage start="0x00007FFF9CCD0000" end="0x00007FFF9CD18000" path="adobe\DICTIONARY EDITOR DIALOG.APLN" version="21.5.1.73"/>
+<binaryImage start="0x00007FFF97A70000" end="0x00007FFF97B3D000" path="adobe\PAGES PANEL.APLN" version="21.5.1.73"/>
+<binaryImage start="0x00007FFF9C750000" end="0x00007FFF9C78D000" path="adobe\COLOR MANAGEMENT UI.APLN" version="21.5.1.73"/>
+<binaryImage start="0x00007FF8F9E30000" end="0x00007FF8F9EEF000" path="mscms.dll" version="6.2.26100.9278"/>
+<binaryImage start="0x00007FF8F92B0000" end="0x00007FF8F92FB000" path="icm32.dll" version="6.2.26100.9168"/>
+<binaryImage start="0x00007FFFEA550000" end="0x00007FFFEA572000" path="adobe\SWATCH LIBRARY PANEL.APLN" version="21.5.1.73"/>
+<binaryImage start="0x00007FFF979F0000" end="0x00007FFF97A69000" path="adobe\SCRIPTING.RPLN" version="21.5.1.73"/>
+<binaryImage start="0x00007FFF977B0000" end="0x00007FFF97819000" path="adobe\GRADIENT FILL.RPLN" version="21.5.1.73"/>
+<binaryImage start="0x00007FFFD7300000" end="0x00007FFFD732A000" path="adobe\SECTIONS.RPLN" version="21.5.1.73"/>
+<binaryImage start="0x00007FFF97760000" end="0x00007FFF977AE000" path="adobe\SPLINE.RPLN" version="21.5.1.73"/>
+<binaryImage start="0x00007FFF972E0000" end="0x00007FFF97759000" path="adobe\PDF.RPLN" version="21.5.1.73"/>
+<binaryImage start="0x000001C305F00000" end="0x000001C306013000" path="adobe\pdfport.dll" version="6.0.0.59125"/>
+<binaryImage start="0x00007FFF95420000" end="0x00007FFF972DE000" path="adobe\adobe_c2pa.dll"/>
+<binaryImage start="0x00007FFF949D0000" end="0x00007FFF95413000" path="adobe\DirectML.dll" version="1.0.2005.1405"/>
+<binaryImage start="0x00007FF8F4750000" end="0x00007FF8F4759000" path="MSVCP140_1.dll" version="14.51.36247.0"/>
+<binaryImage start="0x00007FF8F9280000" end="0x00007FF8F92AA000" path="cabinet.dll" version="5.0.1.1"/>
+<binaryImage start="0x00007FFF94980000" end="0x00007FFF949C6000" path="adobe\BASIC TOOLS.RPLN" version="21.5.1.73"/>
+<binaryImage start="0x00007FFF94840000" end="0x00007FFF94971000" path="adobe\PRINT.RPLN" version="21.5.1.73"/>
+<binaryImage start="0x00007FFF947D0000" end="0x00007FFF9483E000" path="adobe\CJKGRID.RPLN" version="21.5.1.73"/>
+<binaryImage start="0x00007FFF946C0000" end="0x00007FFF947C4000" path="adobe\SPREAD.RPLN" version="21.5.1.73"/>
+<binaryImage start="0x00007FF8DF5F0000" end="0x00007FF8DF64C000" path="dataexchange.dll" version="6.2.26100.9278"/>
+<binaryImage start="0x00007FF905020000" end="0x00007FF905270000" path="twinapi.appcore.dll" version="6.2.26100.9444"/>
+<binaryImage start="0x00007FFFA34B0000" end="0x00007FFFA35C3000" path="adobe\GALLEYUI.RPLN" version="21.5.1.73"/>
+<binaryImage start="0x00007FFFA3460000" end="0x00007FFFA34B0000" path="adobe\NOTE.APLN" version="21.5.1.73"/>
+<binaryImage start="0x00007FFFA3380000" end="0x00007FFFA3452000" path="adobe\TABLES UI.APLN" version="21.5.1.73"/>
+<binaryImage start="0x00007FFFA3320000" end="0x00007FFFA3377000" path="adobe\GALLEY.RPLN" version="21.5.1.73"/>
+<binaryImage start="0x00007FFFA32A0000" end="0x00007FFFA3312000" path="adobe\TEXT WRAP.RPLN" version="21.5.1.73"/>
+<binaryImage start="0x00007FFFA3240000" end="0x00007FFFA3299000" path="adobe\STROKE AND FILL.RPLN" version="21.5.1.73"/>
+<binaryImage start="0x00007FFFA31D0000" end="0x00007FFFA3237000" path="adobe\TEXT ATTRIBUTES.RPLN" version="21.5.1.73"/>
+<binaryImage start="0x00007FFFA31A0000" end="0x00007FFFA31C9000" path="adobe\FIND CHANGE FORMAT PANEL.APLN" version="21.5.1.73"/>
+<binaryImage start="0x00007FFFA30B0000" end="0x00007FFFA3196000" path="adobe\FIND AND CHANGE PANEL.APLN" version="21.5.1.73"/>
+<binaryImage start="0x00007FFFA3050000" end="0x00007FFFA30A3000" path="adobe\MEDIA.RPLN" version="21.5.1.73"/>
+<binaryImage start="0x00007FF894860000" end="0x00007FF894A8E000" path="msxml3.dll" version="8.110.26100.9278"/>
+<binaryImage start="0x00007FFFA2F10000" end="0x00007FFFA3047000" path="adobe\SUPPORT FOR JAVASCRIPT.RPLN" version="21.5.1.73"/>
+<binaryImage start="0x00007FFFA2C10000" end="0x00007FFFA2F07000" path="adobe\AID.dll" version="5.2.0.1"/>
+<binaryImage start="0x00007FFFA2B40000" end="0x00007FFFA2C01000" path="adobe\INXCORE.RPLN" version="21.5.1.73"/>
+<binaryImage start="0x00007FFFA2AE0000" end="0x00007FFFA2B3B000" path="adobe\SNIPPET.APLN" version="21.5.1.73"/>
+<binaryImage start="0x00007FFFA2A50000" end="0x00007FFFA2ADD000" path="adobe\ASSIGNMENTS.RPLN" version="21.5.1.73"/>
+<binaryImage start="0x00007FFFD74B0000" end="0x00007FFFD74C5000" path="adobe\PERFORMANCEMETRICS.APLN" version="21.5.1.73"/>
+<binaryImage start="0x00007FFFA29C0000" end="0x00007FFFA2A42000" path="adobe\BNCORE.RPLN" version="21.5.1.73"/>
+<binaryImage start="0x00007FFFA2980000" end="0x00007FFFA29B6000" path="adobe\CELLSTYLES.RPLN" version="21.5.0.73"/>
+<binaryImage start="0x00007FFFA2900000" end="0x00007FFFA297A000" path="adobe\CJK TEXT ATTRIBUTES.RPLN" version="21.5.1.73"/>
+<binaryImage start="0x00007FFFA28A0000" end="0x00007FFFA28F3000" path="adobe\CONDITIONALTEXT.RPLN" version="21.5.1.73"/>
+<binaryImage start="0x00007FFFA2860000" end="0x00007FFFA289B000" path="adobe\CONTENTDROPPER.RPLN" version="21.5.1.73"/>
+<binaryImage start="0x00007FFFA2820000" end="0x00007FFFA2855000" path="adobe\DOCUMENT ACTIONS.RPLN" version="21.5.1.73"/>
+<binaryImage start="0x00007FFFD0A40000" end="0x00007FFFD0A53000" path="adobe\GENERICSETTINGS.RPLN" version="21.5.1.73"/>
+<binaryImage start="0x00007FFFA27F0000" end="0x00007FFFA2815000" path="adobe\GUIDES.RPLN" version="21.5.1.73"/>
+<binaryImage start="0x00007FFFA27D0000" end="0x00007FFFA27EB000" path="adobe\SING.APLN" version="21.5.1.73"/>
+<binaryImage start="0x00007FFFA2790000" end="0x00007FFFA27C1000" path="adobe\OPTICAL KERNING.APLN" version="21.5.1.73"/>
+<binaryImage start="0x00007FFFA2760000" end="0x00007FFFA278F000" path="adobe\LAYER.RPLN" version="21.5.1.73"/>
+<binaryImage start="0x00007FFFA2720000" end="0x00007FFFA2752000" path="adobe\LAYOUT.RPLN" version="21.5.1.73"/>
+<binaryImage start="0x00007FFFA26E0000" end="0x00007FFFA2711000" path="adobe\CREATE OUTLINES.APLN" version="21.5.1.73"/>
+<binaryImage start="0x00007FFFA2650000" end="0x00007FFFA26D8000" path="adobe\METADATA.RPLN" version="21.5.1.73"/>
+<binaryImage start="0x00007FFFA2630000" end="0x00007FFFA264D000" path="adobe\MOVIE.RPLN" version="21.5.1.73"/>
+<binaryImage start="0x00007FFFA25E0000" end="0x00007FFFA262A000" path="adobe\OPEN PLACE.RPLN" version="21.5.1.73"/>
+<binaryImage start="0x00007FFFA2530000" end="0x00007FFFA25E0000" path="adobe\PARAGRAPH COMPOSER.RPLN" version="21.5.1.73"/>
+<binaryImage start="0x00007FFFA24F0000" end="0x00007FFFA2522000" path="adobe\SUPPORT FOR VISUAL BASIC.APLN" version="21.5.1.73"/>
+<binaryImage start="0x00007FFFA24A0000" end="0x00007FFFA24E5000" path="adobe\PATH TYPE.RPLN" version="21.5.1.73"/>
+<binaryImage start="0x00007FFFA2480000" end="0x00007FFFA2491000" path="adobe\PathTypeLib.dll" version="21.5.1.73"/>
+<binaryImage start="0x00007FFFA2420000" end="0x00007FFFA247F000" path="adobe\PHOTOSHOP IMPORT FILTER.RPLN" version="21.5.1.73"/>
+<binaryImage start="0x00007FFFA2330000" end="0x00007FFFA241D000" path="adobe\JBX.APLN" version="21.5.1.73"/>
+<binaryImage start="0x00007FFFA22E0000" end="0x00007FFFA232D000" path="adobe\PNG IMPORT FILTER.RPLN" version="21.5.1.73"/>
+<binaryImage start="0x00007FFFA22A0000" end="0x00007FFFA22D5000" path="adobe\TEXT WRAP PATH.RPLN" version="21.5.1.73"/>
+<binaryImage start="0x00007FFFA2280000" end="0x00007FFFA229A000" path="adobe\SCOTCH RULES.APLN" version="21.5.1.73"/>
+<binaryImage start="0x00007FFFA21F0000" end="0x00007FFFA2278000" path="adobe\SHAREDCONTENT.RPLN" version="21.5.1.73"/>
+<binaryImage start="0x00007FFFA21D0000" end="0x00007FFFA21E6000" path="adobe\SOUND.RPLN" version="21.5.1.73"/>
+<binaryImage start="0x00007FFFA21B0000" end="0x00007FFFA21CA000" path="adobe\SPELLING SERVICE.RPLN" version="21.5.1.73"/>
+<binaryImage start="0x00007FFFA2170000" end="0x00007FFFA21AC000" path="adobe\TABLESTYLES.RPLN" version="21.5.0.73"/>
+<binaryImage start="0x00007FFFA20A0000" end="0x00007FFFA216F000" path="adobe\KNOWLEDGE BASE.APLN" version="21.5.1.73"/>
+<binaryImage start="0x00007FFFA2060000" end="0x00007FFFA2091000" path="adobe\LAYOUT ADJUSTMENT.APLN" version="21.5.1.73"/>
+<binaryImage start="0x00007FFFA2040000" end="0x00007FFFA205B000" path="adobe\TEXT EDITOR MODEL.RPLN" version="21.5.1.73"/>
+<binaryImage start="0x00007FFFA2000000" end="0x00007FFFA2039000" path="adobe\WORKGROUP.RPLN" version="21.5.1.73"/>
+<binaryImage start="0x00007FFFA1FD0000" end="0x00007FFFA1FF8000" path="adobe\WORKGROUP CLIENT.RPLN" version="21.5.1.73"/>
+<binaryImage start="0x00007FFFA1F60000" end="0x00007FFFA1FCA000" path="adobe\XMLPARSER.RPLN" version="21.5.1.73"/>
+<binaryImage start="0x00007FFFA1EB0000" end="0x00007FFFA1F56000" path="adobe\AXSLE.dll" version="7.0.0.57387"/>
+<binaryImage start="0x00007FF8DF390000" end="0x00007FF8DF39B000" path="adobe\AIASSISTANTMODEL.APLN" version="21.5.0.73"/>
+<binaryImage start="0x00007FFFA1E70000" end="0x00007FFFA1EA1000" path="adobe\COLLABORATION.RPLN" version="21.5.1.73"/>
+<binaryImage start="0x00007FF8DE130000" end="0x00007FF8DE13F000" path="adobe\DATA SERVICES.APLN" version="21.5.1.73"/>
+<binaryImage start="0x00007FFFA1E50000" end="0x00007FFFA1E6B000" path="adobe\DTTRANSFORM.APLN" version="21.5.1.73"/>
+<binaryImage start="0x00007FFFA1E20000" end="0x00007FFFA1E4E000" path="adobe\LILO.APLN" version="21.5.1.73"/>
+<binaryImage start="0x00007FFFA1C80000" end="0x00007FFFA1E18000" path="adobe\AdobeLinguistic.dll" version="17.1.2.0"/>
+<binaryImage start="0x00007FF8D6300000" end="0x00007FF8D630D000" path="adobe\INCOPYIMPORT.APLN" version="21.5.1.73"/>
+<binaryImage start="0x00007FFFA1AA0000" end="0x00007FFFA1C7B000" path="adobe\DIGITALPUBLISHING.APLN" version="21.5.1.73"/>
+<binaryImage start="0x00007FFFA1A80000" end="0x00007FFFA1A91000" path="adobe\INCOPYEXPORT.APLN" version="21.5.1.73"/>
+<binaryImage start="0x00007FFFA1A30000" end="0x00007FFFA1A74000" path="adobe\MEDIA IMPORT FILTER.APLN" version="21.5.1.73"/>
+<binaryImage start="0x00007FFFA1900000" end="0x00007FFFA1A22000" path="adobe\SANGAMSERVICER-MAPPER.APLN" version="21.5.1.73"/>
+<binaryImage start="0x00007FFFA1820000" end="0x00007FFFA1900000" path="adobe\Sangam.dll" version="6.0.0.58907"/>
+<binaryImage start="0x00007FFFA17F0000" end="0x00007FFFA1815000" path="adobe\SAVEBACK.APLN" version="21.5.1.73"/>
+<binaryImage start="0x00007FFFA1740000" end="0x00007FFFA17EE000" path="adobe\TAGGED TEXT ATTRIBUTES.APLN" version="21.5.1.73"/>
+<binaryImage start="0x000001C30A0C0000" end="0x000001C30A13F000" path="adobe\SVG EXPORT.APLN" version="21.5.1.73"/>
+<binaryImage start="0x00007FFFA15F0000" end="0x00007FFFA1733000" path="adobe\svgexport.dll" version="9.3.0.59115"/>
+<binaryImage start="0x00007FFFA1520000" end="0x00007FFFA15E1000" path="adobe\TAGGED TEXT FILTERS.APLN" version="21.5.1.73"/>
+<binaryImage start="0x00007FFFA1450000" end="0x00007FFFA151D000" path="adobe\GENAI.APLN" version="21.5.0.73"/>
+<binaryImage start="0x00007FFFA1420000" end="0x00007FFFA1443000" path="adobe\PRINTER STYLES.APLN" version="21.5.1.73"/>
+<binaryImage start="0x00007FFFA13E0000" end="0x00007FFFA1415000" path="adobe\JPEG EXPORT.APLN" version="21.5.1.73"/>
+<binaryImage start="0x00007FF90E6B0000" end="0x00007FF90E71E000" path="netprofm.dll" version="6.2.26100.9278"/>
+<binaryImage start="0x00007FF90C2A0000" end="0x00007FF90C2B9000" path="npmproxy.dll" version="6.2.26100.9278"/>
+<binaryImage start="0x00007FF913F50000" end="0x00007FF913FB4000" path="winsta.dll" version="6.2.26100.9278"/>
+<binaryImage start="0x00007FFFA1330000" end="0x00007FFFA13D2000" path="tiptsf.dll" version="6.2.26100.9278"/>
+<binaryImage start="0x000001C3100D0000" end="0x000001C3101B2000" path="adobe\DV_WIDGETS.RPLN" version="21.5.1.73"/>
+<binaryImage start="0x00007FFFA1300000" end="0x00007FFFA1327000" path="adobe\GAPTOOL.APLN" version="21.5.1.73"/>
+<binaryImage start="0x00007FFFA12C0000" end="0x00007FFFA12FF000" path="adobe\CONTENTDROPPER TOOL.APLN" version="21.5.1.73"/>
+<binaryImage start="0x00007FFFA12A0000" end="0x00007FFFA12BC000" path="adobe\PATH TYPE UI.APLN" version="21.5.1.73"/>
+<binaryImage start="0x00007FFFA1250000" end="0x00007FFFA129B000" path="adobe\SPLINE UI.RPLN" version="21.5.1.73"/>
+<binaryImage start="0x00007FFFA1210000" end="0x00007FFFA1245000" path="adobe\TOOL BOX.APLN" version="21.5.1.73"/>
+<binaryImage start="0x00007FFFA1160000" end="0x00007FFFA120A000" path="adobe\CONTROL PANEL.APLN" version="21.5.1.73"/>
+<binaryImage start="0x00007FFFA1040000" end="0x00007FFFA115B000" path="adobe\EPS UI.APLN" version="21.5.1.73"/>
+<binaryImage start="0x00007FFFA0F30000" end="0x00007FFFA1036000" path="adobe\ONBOARDING.APLN" version="21.5.1.73"/>
+<binaryImage start="0x00007FF9140D0000" end="0x00007FF914172000" path="sxs.dll" version="6.2.26100.9278"/>
+<binaryImage start="0x00007FF8F2B50000" end="0x00007FF8F2B6E000" path="windows.staterepositorycore.dll" version="6.2.26100.9444"/>
+<binaryImage start="0x00007FFFA0F10000" end="0x00007FFFA0F29000" path="adobe\METADATA UI.APLN" version="21.5.1.73"/>
+<binaryImage start="0x00007FFFA0EB0000" end="0x00007FFFA0F10000" path="adobe\BNUI.APLN" version="21.5.1.73"/>
+<binaryImage start="0x00007FFFA0E90000" end="0x00007FFFA0EA1000" path="adobe\JUSTIFICATION PANEL.APLN" version="21.5.1.73"/>
+<binaryImage start="0x00007FFFA0E00000" end="0x00007FFFA0E83000" path="adobe\PARAGRAPH PANEL.APLN" version="21.5.1.73"/>
+<binaryImage start="0x00007FFFA0DD0000" end="0x00007FFFA0DFC000" path="adobe\ALIGNMENT PANEL.APLN" version="21.5.1.73"/>
+<binaryImage start="0x00007FFFA0D70000" end="0x00007FFFA0DC3000" path="adobe\TEXT WRAP PANEL.APLN" version="21.5.1.73"/>
+<binaryImage start="0x00007FFFA0D40000" end="0x00007FFFA0D63000" path="adobe\PERFORMANCE UI.APLN" version="21.5.1.73"/>
+<binaryImage start="0x00007FFFA0D20000" end="0x00007FFFA0D40000" path="adobe\INCOPY BRIDGE UI.APLN" version="21.5.1.73"/>
+<binaryImage start="0x00007FFFA0CC0000" end="0x00007FFFA0D1B000" path="adobe\WORKGROUP UI.APLN" version="21.5.1.73"/>
+<binaryImage start="0x00007FF90C550000" end="0x00007FF90C775000" path="mfplat.dll" version="6.2.26100.9278"/>
+<binaryImage start="0x00007FF90C3F0000" end="0x00007FF90C42B000" path="RTWorkQ.dll" version="6.2.26100.8972"/>
+<binaryImage start="0x00007FF8CAF20000" end="0x00007FF8CAF2E000" path="adobe\TOOL TIPS.APLN" version="21.5.1.73"/>
+<binaryImage start="0x00007FFFA0BB0000" end="0x00007FFFA0BD7000" path="adobe\HELP.APLN" version="21.5.1.73"/>
+<binaryImage start="0x00007FFFA0B00000" end="0x00007FFFA0BAE000" path="adobe\ahclient.dll" version="4.5.4.0"/>
+<binaryImage start="0x00007FFFA0A80000" end="0x00007FFFA0AFF000" path="adobe\DATAMERGEUI.APLN" version="21.5.1.73"/>
+<binaryImage start="0x00007FFFA0A00000" end="0x00007FFFA0A80000" path="adobe\Reader for DOCX.smrd" version="6.0.0.58907"/>
+<binaryImage start="0x00007FFFA0950000" end="0x00007FFFA09FB000" path="adobe\SangamML.dll" version="6.0.0.58907"/>
+<binaryImage start="0x00007FFF9B9C0000" end="0x00007FFF9BA15000" path="adobe\Reader for Excel.smrd" version="6.0.0.58907"/>
+<binaryImage start="0x00007FFF9B8D0000" end="0x00007FFF9B9B6000" path="adobe\Reader for QuarkXPress.smrd" version="6.0.0.58907"/>
+<binaryImage start="0x00007FFF9B860000" end="0x00007FFF9B8C9000" path="adobe\Reader for RTF.smrd" version="6.0.0.58907"/>
+<binaryImage start="0x00007FFF9B7F0000" end="0x00007FFF9B858000" path="adobe\Reader for Word.smrd" version="6.0.0.58907"/>
+<binaryImage start="0x00007FFF94640000" end="0x00007FFF946B5000" path="adobe\Reader for XLSX.smrd" version="6.0.0.58907"/>
+<binaryImage start="0x00007FFF945B0000" end="0x00007FFF9463F000" path="adobe\ZTextRdr.smrd" version="6.0.0.58907"/>
+<binaryImage start="0x00007FFFA0920000" end="0x00007FFFA094E000" path="adobe\DIALOG LAYOUT.RPLN" version="21.5.1.73"/>
+<binaryImage start="0x00007FFF928C0000" end="0x00007FFF92954000" path="adobe\PDF UI.APLN" version="21.5.1.73"/>
+<binaryImage start="0x00007FFF9B790000" end="0x00007FFF9B7A2000" path="adobe\JPEG EXPORT UI.APLN" version="21.5.1.73"/>
+<binaryImage start="0x00007FFF92880000" end="0x00007FFF928B9000" path="adobe\GRADIENT PANEL.APLN" version="21.5.1.73"/>
+<binaryImage start="0x00007FFF979D0000" end="0x00007FFF979E9000" path="adobe\CLIPPING PATH DIALOG.APLN" version="21.5.1.73"/>
+<binaryImage start="0x00007FFF92860000" end="0x00007FFF92872000" path="adobe\TAGGED TEXT FILTERS UI.APLN" version="21.5.1.73"/>
+<binaryImage start="0x00007FFF92830000" end="0x00007FFF9285C000" path="adobe\SANGAM PREFERENCES UI.APLN" version="21.5.1.73"/>
+<binaryImage start="0x00007FFF92810000" end="0x00007FFF92822000" path="adobe\PNG IMPORT FILTER UI.APLN" version="21.5.1.73"/>
+<binaryImage start="0x00007FFF927C0000" end="0x00007FFF92804000" path="adobe\DIGITALPUBLISHINGUI.APLN" version="21.5.1.73"/>
+<binaryImage start="0x00007FF8CAAD0000" end="0x00007FF8CAADD000" path="adobe\INCOPYEXPORTUI.APLN" version="21.5.1.73"/>
+<binaryImage start="0x00007FF8CA640000" end="0x00007FF8CA64F000" path="adobe\INCOPYWORKFLOW UI.APLN" version="21.5.1.73"/>
+<binaryImage start="0x00007FFF927A0000" end="0x00007FFF927B4000" path="adobe\NOTEPREF.APLN" version="21.5.1.73"/>
+<binaryImage start="0x00007FF8CA5E0000" end="0x00007FF8CA5ED000" path="adobe\DATA SERVICES UI.APLN" version="21.5.1.73"/>
+<binaryImage start="0x00007FFF92780000" end="0x00007FFF92796000" path="adobe\COLLABORATIONUI.RPLN"/>
+<binaryImage start="0x00007FFF92700000" end="0x00007FFF92771000" path="adobe\AIASSISTANT.APLN" version="21.5.0.73"/>
+<binaryImage start="0x00007FFF926C0000" end="0x00007FFF926F3000" path="adobe\MEDIAUI.APLN" version="21.5.1.73"/>
+<binaryImage start="0x00007FFF926A0000" end="0x00007FFF926B1000" path="adobe\WORKGROUP CLIENT UI.RPLN" version="21.5.1.73"/>
+<binaryImage start="0x00007FFF92680000" end="0x00007FFF92691000" path="adobe\CREATE GUIDES DIALOG.APLN" version="21.5.1.73"/>
+<binaryImage start="0x00007FFF92620000" end="0x00007FFF92672000" path="adobe\INFO PANEL.APLN" version="21.5.1.73"/>
+<binaryImage start="0x00007FFF925C0000" end="0x00007FFF92618000" path="adobe\FONT USAGE DIALOG.APLN" version="21.5.1.73"/>
+<binaryImage start="0x00007FFF92560000" end="0x00007FFF925B7000" path="adobe\LINKS UI.APLN" version="21.5.1.73"/>
+<binaryImage start="0x00007FFF92510000" end="0x00007FFF9255F000" path="adobe\PAGE SETUP DIALOG.APLN" version="21.5.1.73"/>
+<binaryImage start="0x00007FFF924F0000" end="0x00007FFF92503000" path="adobe\STEPREPEAT.APLN" version="21.5.1.73"/>
+<binaryImage start="0x00007FFF924C0000" end="0x00007FFF924E8000" path="adobe\IMAGE IMPORT UI.APLN" version="21.5.1.73"/>
+<binaryImage start="0x00007FFF92490000" end="0x00007FFF924BD000" path="adobe\RULERS.RPLN" version="21.5.1.73"/>
+<binaryImage start="0x00007FFF92340000" end="0x00007FFF9248D000" path="adobe\microsoft.ai.machinelearning.dll" version="1.3.20.515"/>
+<binaryImage start="0x00007FFF91C00000" end="0x00007FFF92336000" path="adobe\onnxruntime.dll" version="1.3.20.515"/>
+<binaryImage start="0x00007FFF912D0000" end="0x00007FFF91BFC000" path="adobe\AdobeHunspellPlugin.dll" version="17.1.2.0"/>
+<binaryImage start="0x00007FFF91230000" end="0x00007FFF912CE000" path="adobe\Duden.dll" version="1.5.0.8344"/>
+<binaryImage start="0x00007FFF90F30000" end="0x00007FFF91228000" path="adobe\dpflt.dll" version="3.0.3.6327"/>
+<binaryImage start="0x00007FFF906D0000" end="0x00007FFF90822000" path="adobe\sx.dll" version="6.4.0.1529"/>
+<binaryImage start="0x00007FFF90E70000" end="0x00007FFF90F27000" path="adobe\CSegmentation.dll"/>
+<binaryImage start="0x00007FFF905C0000" end="0x00007FFF906C1000" path="adobe\GAMORPHDPF.dll"/>
+<binaryImage start="0x00007FFF90500000" end="0x00007FFF905BC000" path="adobe\DpfDict.dll"/>
+<binaryImage start="0x00007FFF903C0000" end="0x00007FFF90500000" path="adobe\CTokenizer.dll"/>
+<binaryImage start="0x00007FFF90320000" end="0x00007FFF903BE000" path="adobe\Duden-Conservative.dll" version="1.5.0.8344"/>
+<binaryImage start="0x00007FFF90280000" end="0x00007FFF9031E000" path="adobe\Duden-PressAgency.dll" version="1.5.0.8344"/>
+<binaryImage start="0x00007FFF901E0000" end="0x00007FFF9027E000" path="adobe\Duden-Tolerant.dll" version="1.5.0.8344"/>
+<binaryImage start="0x00007FFF900D0000" end="0x00007FFF901D5000" path="adobe\WRLiloPlugin.dll" version="1.3.15.1"/>
+<binaryImage start="0x00007FF8BB290000" end="0x00007FF8BB2A0000" path="adobe\FastCore.8BX" version="27.2.0.1"/>
+<binaryImage start="0x00007FFF8FFF0000" end="0x00007FFF900C3000" path="adobe\MMXCore.8BX" version="27.2.0.1"/>
+<binaryImage start="0x00007FFF8FF40000" end="0x00007FFF8FFF0000" path="adobe\MultiProcessor Support.8BX" version="27.2.0.1"/>
+<binaryImage start="0x00007FFF8FEF0000" end="0x00007FFF8FF3A000" path="adobe\Plugin.dll" version="27.2.0.1"/>
+<binaryImage start="0x00007FFF81DB0000" end="0x00007FFF82FDB000" path="adobe\HalideBottlenecks.8BX" version="27.2.0.1"/>
+<binaryImage start="0x00007FFF8FE90000" end="0x00007FFF8FEE3000" path="adobe\SAVEBACKSERVICE.APLN" version="21.5.0.73"/>
+<binaryImage start="0x00007FFF8FD70000" end="0x00007FFF8FD8D000" path="adobe\HISTORYPANEL.APLN" version="21.5.1.73"/>
+<binaryImage start="0x00007FF894FA0000" end="0x00007FF894FB0000" path="adobe\SCRIPT LABEL PANEL.APLN" version="21.5.1.73"/>
+<binaryImage start="0x00007FFF8FCF0000" end="0x00007FFF8FD70000" path="adobe\GLYPHS PANEL.APLN" version="21.5.1.73"/>
+<binaryImage start="0x00007FFF8FCD0000" end="0x00007FFF8FCE4000" path="adobe\HYPHENATION PANEL.APLN" version="21.5.1.73"/>
+<binaryImage start="0x00007FFF8FCA0000" end="0x00007FFF8FCC6000" path="adobe\TEXT RULER.APLN" version="21.5.1.73"/>
+<binaryImage start="0x00007FFF8FC30000" end="0x00007FFF8FC95000" path="adobe\INDENTS AND TABS.APLN" version="21.5.1.73"/>
+<binaryImage start="0x00007FF894C30000" end="0x00007FF894C3D000" path="adobe\KEEPS PANEL.APLN" version="21.5.1.73"/>
+<binaryImage start="0x00007FFF8FC00000" end="0x00007FFF8FC22000" path="adobe\INCOPYSHAREDUI.RPLN" version="21.5.1.73"/>
+<binaryImage start="0x00007FFF8FBE0000" end="0x00007FFF8FBF4000" path="adobe\PARAGRAPH RULES PANEL.APLN" version="21.5.1.73"/>
+<binaryImage start="0x00007FFF8FBB0000" end="0x00007FFF8FBDA000" path="adobe\RUNIN STYLES PANEL.APLN" version="21.5.1.73"/>
+<binaryImage start="0x00007FF894210000" end="0x00007FF89421F000" path="adobe\SPANCOLUMNS PANEL.APLN" version="21.5.1.73"/>
+<binaryImage start="0x00007FFF8FB90000" end="0x00007FFF8FBA9000" path="adobe\STORY PANEL.APLN" version="21.5.1.73"/>
+<binaryImage start="0x00007FFF814D0000" end="0x00007FFF81DAB000" path="EmbeddedBrowserWebView.dll" version="154.0.4258.53"/>
+<binaryImage start="0x00007FF8D1A60000" end="0x00007FF8D1A89000" path="edputil.dll" version="6.2.26100.9278"/>
+<binaryImage start="0x00007FFF8FB70000" end="0x00007FFF8FB81000" path="adobe\TEXT COLOR PANEL.APLN" version="21.5.1.73"/>
+<binaryImage start="0x00007FFF8F720000" end="0x00007FFF8F769000" path="adobe\TEXT FRAME OPTIONS.APLN" version="21.5.1.73"/>
+<binaryImage start="0x00007FFF8F6F0000" end="0x00007FFF8F718000" path="adobe\TEXT PREFERENCES.APLN" version="21.5.1.73"/>
+<binaryImage start="0x00007FFF8F6C0000" end="0x00007FFF8F6E4000" path="adobe\DOCUMENT UI.RPLN" version="21.5.1.73"/>
+<binaryImage start="0x00007FFF8F680000" end="0x00007FFF8F6B4000" path="adobe\GALLEY PREFERENCES.APLN" version="21.5.1.73"/>
+<binaryImage start="0x00007FFF8F660000" end="0x00007FFF8F67D000" path="adobe\GENERAL PREFERENCES PANEL.APLN" version="21.5.1.73"/>
+<binaryImage start="0x00007FFF8F420000" end="0x00007FFF8F447000" path="adobe\SHAREDCONTENTUI.APLN" version="21.5.1.73"/>
+<binaryImage start="0x00007FFF8F3F0000" end="0x00007FFF8F41F000" path="adobe\SHORTCUT EDITOR DIALOG.APLN" version="21.5.1.73"/>
+<binaryImage start="0x00007FF88ECB0000" end="0x00007FF88ECBF000" path="adobe\TRACK CHANGES PREFERENCES.APLN" version="21.5.1.73"/>
+<binaryImage start="0x00007FFF8F3D0000" end="0x00007FFF8F3E7000" path="adobe\TRACK CHANGES UI.APLN" version="21.5.1.73"/>
+<binaryImage start="0x00007FF87D040000" end="0x00007FF87D5F0000" path="D3D10Warp.dll" version="6.2.26100.9278"/>
+<binaryImage start="0x00007FF90E730000" end="0x00007FF90E78E000" path="directxdatabasehelper.dll" version="6.2.26100.9444"/>
+<binaryImage start="0x00007FFF7C500000" end="0x00007FFF7CE62000" path="adobe\AdobeGrowthSDK.dll"/>
+<binaryImage start="0x00007FF8DE220000" end="0x00007FF8DE233000" path="cscapi.dll" version="6.2.26100.1"/>
+</binaryImageSet>
+<dumpType>
+Mini
+</dumpType>
+<hbLogSessionDllStatus>
+
+</hbLogSessionDllStatus>
+</crash>
+
+<sessionId>
+e2cbf316-72cd-438b-84f4-f6212c5a0836
+</sessionId>
+<dunamisConfigGuid>
+fb3c95c5-af6d-42c9-b3de-029ab1ceb353
+</dunamisConfigGuid>
+</crashreport>

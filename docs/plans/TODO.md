@@ -2,12 +2,14 @@
 
 - check how looks debugging of script required in script (.ts)
 - multiple sessions for same plugin (needs rework UI, some buttons apply only for bundle)
-- debug also makes plugin load if that did not happen, but does not apply break on load
 - add new host apps support
 - feature to attach plugins without loading them via Debugger?
+- investigate Media Encoder launch hanging when the broker is already running
 
 ## DONE
 
+- debugging gated by catalog minVersion (launch anything, debug only supported versions)
+- debug auto-loads the plugin and respects the break on load checkbox
 - test MacOS
 - find out why I don't see error in console log
 - review commands

@@ -441,6 +441,44 @@ describe("CdpMessageRewriter — misc client-side rewriting", () => {
         expect(rewriter.rewriteFromClient(raw)).toBe(raw);
     });
 
+    it("swallows Runtime.runIfWaitingForDebugger while the target is paused (would resume it)", () => {
+        const { rewriter, sendToClient } = makeRewriter();
+        rewriter.rewriteFromTarget(JSON.stringify({ method: "Debugger.paused", params: { reason: "other", callFrames: [] } }));
+
+        const result = rewriter.rewriteFromClient(JSON.stringify({ id: 7, method: "Runtime.runIfWaitingForDebugger" }));
+
+        expect(result).toBeNull();
+        expect(sendToClient).toHaveBeenCalledWith(JSON.stringify({ id: 7, result: {} }));
+    });
+
+    it("forwards Runtime.runIfWaitingForDebugger when the target is not paused", () => {
+        const { rewriter, sendToClient } = makeRewriter();
+        const raw = JSON.stringify({ id: 7, method: "Runtime.runIfWaitingForDebugger" });
+
+        expect(rewriter.rewriteFromClient(raw)).toBe(raw);
+
+        rewriter.rewriteFromTarget(JSON.stringify({ method: "Debugger.paused", params: { reason: "other", callFrames: [] } }));
+        rewriter.rewriteFromTarget(JSON.stringify({ method: "Debugger.resumed", params: {} }));
+        expect(rewriter.rewriteFromClient(raw)).toBe(raw);
+
+        rewriter.rewriteFromTarget(JSON.stringify({ method: "Debugger.paused", params: { reason: "other", callFrames: [] } }));
+        rewriter.resetContextState();
+        expect(rewriter.rewriteFromClient(raw)).toBe(raw);
+
+        expect(sendToClient).not.toHaveBeenCalled();
+    });
+
+    it("forwards Runtime.runIfWaitingForDebugger from a new client that never saw the earlier pause (Restart)", () => {
+        const { rewriter, sendToClient } = makeRewriter();
+        const raw = JSON.stringify({ id: 7, method: "Runtime.runIfWaitingForDebugger" });
+        rewriter.rewriteFromTarget(JSON.stringify({ method: "Debugger.paused", params: { reason: "other", callFrames: [] } }));
+
+        rewriter.markNewClient();
+
+        expect(rewriter.rewriteFromClient(raw)).toBe(raw);
+        expect(sendToClient).not.toHaveBeenCalled();
+    });
+
     it("returns the raw string unchanged if it is not valid JSON (defensive parse guard)", () => {
         const { rewriter } = makeRewriter();
 

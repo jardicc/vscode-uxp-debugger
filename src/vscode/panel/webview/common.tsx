@@ -51,7 +51,7 @@ export function IconButton(props: IconButtonProps): ReactNode {
 // ---------------------------------------------------------------------------
 
 export interface MenuItem {
-    icon: string;
+    icon?: string;
     label: string;
     onClick: () => void;
     disabled?: boolean;
@@ -124,7 +124,7 @@ export function OverflowMenu({
                                 item.onClick();
                             }}
                         >
-                            <span className={`codicon codicon-${item.icon}`} />
+                            {item.icon && <span className={`codicon codicon-${item.icon}`} />}
                             <span>{item.label}</span>
                         </button>
                     ))}
@@ -220,7 +220,7 @@ export function SplitButton({
                                 item.onClick();
                             }}
                         >
-                            <span className={`codicon codicon-${item.icon}`} />
+                            {item.icon && <span className={`codicon codicon-${item.icon}`} />}
                             <span>{item.label}</span>
                         </button>
                     ))}
@@ -231,33 +231,23 @@ export function SplitButton({
 }
 
 // ---------------------------------------------------------------------------
-// HostBadge — click launches the host app (CONTROL-PANEL.md §2.3 #5)
+// HostBadge — static, non-interactive host-app label
 // ---------------------------------------------------------------------------
 
 export function HostBadge({
-    appId,
+    uiCode,
     connected,
-    onLaunch,
 }: {
-    appId: string;
+    uiCode: string;
     connected: boolean;
-    onLaunch: (appId: string) => void;
 }): ReactNode {
     return (
-        <button
+        <span
             className={clsx("host-badge", { connected })}
-            title={
-                connected
-                    ? `${appId} is connected — click to launch another version`
-                    : `${appId} — click to launch`
-            }
-            onClick={(e: MouseEvent) => {
-                e.stopPropagation();
-                onLaunch(appId);
-            }}
+            title={connected ? `${uiCode} is connected` : uiCode}
         >
-            {appId}
-        </button>
+            {uiCode}
+        </span>
     );
 }
 

@@ -58,6 +58,14 @@ to the repo root and the workspace opened at `e2e/fixtures/plugin`.
   one). Since an automated test can't click a real native modal, it
   temporarily stubs `vscode.window.showWarningMessage` to auto-answer,
   restoring the original implementation afterwards.
+- **`attachAutoLoadBreakOnLoad.photoshop.test.ts`** — same gate. Runs
+  `uxp.attachDebugger` on a plugin that is not loaded yet (the Debug action's
+  auto-load path) with the "Break on load" checkbox on and off. On: the plugin
+  loads paused and a breakpoint on its startup code (`plugin-sourcemap`) is
+  hit at `original.ts:7`. Off: it loads normally — the startup code has run
+  and that breakpoint is not hit within a window measured from attach. Both
+  cases also spy on `UxpService.loadPlugin` to assert the `breakOnStart`
+  argument the checkbox produced.
 - **`debugScript.photoshop.test.ts`** — same gate. Runs the fixture's
   `index.js` as a standalone script via `UxpService.runScript` (the
   `Plugin/runScript` flow behind `uxp.debugScript`), asserting a script

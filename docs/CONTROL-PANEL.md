@@ -51,17 +51,21 @@ The Apps section renders the static host catalog from
 [`hostAppCatalog.ts`](../src/core/vulcan/hostAppCatalog.ts). Each row reports one of:
 
 - connected, including app version and UXP runtime version;
+- unsupported version, connected or merely running (e.g. a pre-UXP Photoshop), shown with a
+  warning icon that stays visible in compact view;
 - starting;
+- running but not connected (from Vulcan's running-app registry);
 - not connected;
 - not installed, when native installation detection is available.
 
-The **Start...** action is available for a non-connected app. It reuses the native
+The **Start...** action is available only for an app that is neither connected nor known to
+be running (any version, incl. an unsupported one). It reuses the native
 installed-version picker and remains busy until that app connects or the connection wait
 times out. When installation detection is unavailable, the panel leaves Start enabled
 instead of assuming that no application is installed.
 
-Plugin host badges use the same launch flow. A connected badge remains clickable so that
-another installed version can be launched.
+Plugin host badges are static labels; clicking them does nothing. Launching is done only
+from the Apps section.
 
 ### 2.1 Broker states
 
@@ -95,7 +99,7 @@ Registration validates the manifest and rejects duplicate paths.
 | **Load** | Uses the shared load flow, including host selection, app launch, developer-mode, timeout, and takeover dialogs. |
 | **Load (break on load)** | Loads the plugin paused and records each new session as waiting for its first debugger attach. |
 | **Unload** | Unloads every live session associated with the manifest. |
-| **Debug** | Uses the shared attach flow and can offer to load an unloaded plugin first. |
+| **Debug** | Uses the shared attach flow. An unloaded plugin is loaded automatically first, following **Break on load** (when checked, it loads paused and startup breakpoints hit once the debugger attaches). |
 | **Stop debugging** | Stops all attached VS Code debug sessions for the manifest. |
 | **Open HTML/CSS inspector** | Opens an inspector for the only live session, or asks which session to inspect when several exist. |
 | **Close inspector** | Closes inspectors belonging to all sessions for the manifest. |
@@ -147,9 +151,9 @@ The section header provides a target-app selector populated from connected appli
 Applications that do not advertise script-debugging support remain visible but disabled.
 The saved target remains visible as "not connected" when that app disconnects.
 
-Scripts can be added with a file picker, from the active editor, or from the active editor
-and debugged immediately. A dirty active document is saved before it is registered and
-run. Missing files remain visible with a warning; run, watch, and open actions are disabled.
+Scripts can be added with a file picker (multiple files can be selected at once) or from
+the active editor. A dirty active document is saved before it is registered. Missing files remain visible with a warning; run, watch,
+and open actions are disabled.
 
 ### 4.1 Script actions
 

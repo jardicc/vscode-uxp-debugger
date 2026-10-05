@@ -237,7 +237,13 @@ export function activate(context: vscode.ExtensionContext): UxpDebuggerTestApi {
         if (typeof manifestPath !== "string") {
             throw new Error("\"uxp.attachDebugger\" requires a manifestPath argument.");
         }
-        return attachDebuggerCommand(service, debugManager, output, manifestPath);
+        return attachDebuggerCommand(
+            service,
+            debugManager,
+            output,
+            manifestPath,
+            pluginRegistry.snapshot.breakOnLoad.plugins,
+        );
     });
     register("uxp.debugScript", async (args) => {
         await debugScriptCommand(

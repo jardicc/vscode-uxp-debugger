@@ -4,6 +4,8 @@
  * and no runtime dependencies, so the browser bundle can import it too.
  */
 
+import type { RunningApp } from "../../core/vulcan/hostAppCatalog";
+
 // ---------------------------------------------------------------------------
 // Persisted per-entry settings (CONTROL-PANEL.md §5.2)
 // ---------------------------------------------------------------------------
@@ -22,7 +24,7 @@ export type PanelAction
         | { kind: "refreshPlugin"; manifestPath: string }
   /** Unload + Load sequence (full reset) with debugger/inspector auto-restore. */
         | { kind: "reloadPlugin"; manifestPath: string; breakOnLoad: boolean }
-        | { kind: "attachDebugger"; manifestPath: string }
+        | { kind: "attachDebugger"; manifestPath: string; breakOnLoad: boolean }
         | { kind: "detachDebugger"; manifestPath: string }
         | { kind: "openInspector"; manifestPath: string }
         | { kind: "closeInspector"; manifestPath: string }
@@ -38,7 +40,7 @@ export type PanelAction
             mode?: "reveal" | "addToWorkspace" | "newWindow";
         }
         | { kind: "openManifestFile"; manifestPath: string }
-  /** Host badge click → installed-version QuickPick + launch (host side). */
+  /** Apps-section Start click → installed-version QuickPick + launch (host side). */
         | { kind: "launchHostApp"; appId: string }
         | { kind: "debugScript"; scriptPath: string }
         | { kind: "stopScript"; scriptPath: string }
@@ -48,7 +50,7 @@ export type PanelAction
         | { kind: "editScriptArgs"; scriptPath: string }
         | { kind: "openScriptFile"; scriptPath: string }
         | { kind: "addScriptPick" }
-        | { kind: "addActiveScript"; andDebug: boolean }
+        | { kind: "addActiveScript" }
         | { kind: "removeScript"; scriptPath: string }
         | { kind: "setBreakOnLoad"; scope: "plugins" | "scripts"; value: boolean }
         | { kind: "setScriptTargetApp"; appId: string | undefined }
@@ -90,6 +92,8 @@ export interface ConnectedAppView {
     uxpVersion: string;
     /** From `App/info.supportedFeatures.debugScripts` — false/undefined on older UXP runtimes. */
     supportsScripts: boolean;
+    /** Why this connected app can't be debugged (e.g. version below catalog `minVersion`); undefined when supported. */
+    unsupportedReason?: string;
 }
 
 export interface PluginView {
@@ -143,6 +147,12 @@ export interface PanelState {
     connectedApps: ConnectedAppView[];
     /** App ids launched but not yet connected — Apps section shows a spinner. */
     launchingApps: string[];
+    /**
+   * Running catalog app instances, connected or not (from Vulcan's app
+   * registry, polled while the panel is visible) — pre-UXP versions never
+   * connect, so they'd be invisible otherwise.
+   */
+    runningApps: RunningApp[];
     /**
    * Catalog app ids confirmed installed on this machine, or `undefined` when
    * detection isn't available (e.g. unsupported platform) — the Apps

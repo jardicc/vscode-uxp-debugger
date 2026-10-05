@@ -20,6 +20,7 @@ export async function attachDebuggerCommand(
     debugManager: UxpDebugSessionManager,
     output: vscode.OutputChannel,
     manifestPathArg: string,
+    breakOnLoad = false,
 ): Promise<void> {
     // 1. Resolve the manifest.
     const manifestPath = path.normalize(manifestPathArg);
@@ -39,11 +40,14 @@ export async function attachDebuggerCommand(
     // requires explicit user interaction (Retry / launch-app dialogs) to
     // continue, so this can't turn into an unattended infinite loop.
         output.appendLine(`[attach] no live session for "${manifestPath}" — loading it automatically`);
-        const result = await loadWithDialogs(service, manifestPath, output);
+        const result = await loadWithDialogs(service, manifestPath, output, breakOnLoad);
         if (!result) {
             return;
         }
         reportLoadResult(result, output);
+        if (breakOnLoad) {
+            debugManager.markPendingBreakOnStart(result.sessions);
+        }
         sessions = result.sessions;
 
         // Defensive: loadWithDialogs reported success but this manifest still

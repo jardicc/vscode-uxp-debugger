@@ -9,10 +9,16 @@
 > four falsified approaches) is kept for the record — each failure
 > exposed one non-obvious fact about UXP or js-debug that future work
 > must respect.
+>
+> **Follow-up (2026-10-03):** a fourth piece was added — the proxy drops
+> js-debug's late `Runtime.runIfWaitingForDebugger` while the target is
+> paused, because UXP resumes a breakpoint pause on it (see piece 4 below).
 
 Context: `src/vscode/proxy/cdpProxy.ts` (all break-on-start logic),
+`src/vscode/proxy/cdpMessageRewriter.ts` (late resume-nudge guard),
 `src/vscode/debug/UxpDebugSessionManager.ts` (`pauseForSourceMap`),
 `src/vscode/commands/loadPlugin.ts` (`uxp.loadPluginBreakOnStart`),
+`src/vscode/commands/attachDebugger.ts` (Debug action auto-load),
 `src/core/protocol/messages.ts` (`Plugin/load` with `breakOnStart:true`).
 
 ## The problem
@@ -90,7 +96,7 @@ violates every assumption that flow relies on:
 | 3 | Internal entry breakpoint `setBreakpointByUrl {lineNumber:0, urlRegex:"^(\/\|uxp:\/\/(?!uxp-internal\/))"}`, classify pauses by script URL, remove after first hit; still rewrite reason + `continueOnAttach` | Reached the right pause (bundle line 0, source map available), **but** js-debug with `continueOnAttach` sends `Debugger.resume` immediately after a "Break on start" pause and binds breakpoints asynchronously afterwards — too late again. First regex attempt also failed because plugin URLs are `/assets/…`, not `uxp://<plugin-id>/…`. |
 | 4 | Approach 3 + hold js-debug's `Debugger.resume` until its `Runtime.runIfWaitingForDebugger` (sent after binding) | Worked, but ~150 lines of timing machinery. Replaced wholesale by the instrumentation-breakpoint mechanism below. |
 
-## Final mechanism (three cooperating pieces)
+## Final mechanism (four cooperating pieces)
 
 On a break-on-start attach (`CdpProxyServer` constructed with
 `breakOnStartPending = true`):
@@ -130,8 +136,31 @@ On a break-on-start attach (`CdpProxyServer` constructed with
    (`Debugger.setBreakpoint` on the parsed script succeeds with
    `actualLocation`), and silently resumes. Startup breakpoints hit.
 
-Normal (non-break-on-start) attaches are untouched: the nudge is sent
-immediately and no instrumentation breakpoint is armed.
+4. **Keep js-debug's late resume nudge away from a paused target**
+   (`CdpMessageRewriter.rewriteFromClient`, added 2026-10-03): js-debug's
+   delegated child session sends its own `Runtime.runIfWaitingForDebugger`
+   when it finishes configuring. That can happen *after* UXP already
+   paused at a startup breakpoint, and UXP treats the request as a resume
+   even then. Without this guard the breakpoint only flashed in VS Code:
+   DAP `stopped`, then `continued` right away, while the plugin ran on.
+   Seen live with the Debug action auto-load on Photoshop 27.12.0. It
+   depends on timing and is rare (seen in 2 of 12 live runs).
+   The rewriter tracks whether the target is paused *and* the current
+   client was told so: `Debugger.paused` / `Debugger.resumed` forwarded to
+   js-debug. Spurious pauses swallowed by piece 2 never count. While that
+   flag is set, the request is answered locally with `{}` and not
+   forwarded. The proxy's own nudge (piece 1) already resumed the startup
+   wait, so dropping js-debug's copy loses nothing. The flag resets on
+   every new client (`markNewClient`) and on a target reconnect
+   (`resetContextState`). A client reattaching via Restart never saw the
+   earlier pause, so its nudge is forwarded exactly as before. This is
+   *not* falsified approach 1: nothing is delayed or held, and the request
+   is only dropped while the client already owns a pause.
+
+Normal (non-break-on-start) attaches are untouched by pieces 1–3: the
+nudge is sent immediately and no instrumentation breakpoint is armed.
+Piece 4 applies to every session but only acts while the client holds a
+pause, where forwarding the nudge would always be wrong.
 
 The delegated configuration also sets `autoAttachChildProcesses: false`.
 UXP exposes enough Node-like globals for js-debug's child-process probe to
@@ -146,6 +175,14 @@ behavior.
   loads with `breakOnStart:true` and registers the sessions as pending
   in `UxpDebugSessionManager`; the UXP Devtools panel marks the session
   as waiting and emphasizes its Debug action.
+- The panel's Debug action (`uxp.attachDebugger`) loads the plugin
+  automatically when it has no live session. That load follows the
+  panel's "Break on load" checkbox: when it is checked, the plugin is
+  loaded with `breakOnStart:true` and its sessions are registered as
+  pending before the attach, so startup breakpoints hit just like with
+  the separate load + attach steps. An already-loaded plugin is attached
+  as-is. `e2e/suite/attachAutoLoadBreakOnLoad.photoshop.test.ts` covers
+  both checkbox states live.
 - Attaching to a pending session passes `wasPendingBreakOnStart` into
   `CdpProxyServer` and adds `pauseForSourceMap: true` to the debug
   config. The `"uxp"` launch type no longer has a `breakOnStart`
@@ -180,10 +217,15 @@ Expected break-on-start sequence:
 [CDP] Adopting js-debug's setInstrumentationBreakpoint — replying with the armed id.
 [CDP] Startup instrumentation pause — handing over to js-debug.
 … js-debug: Debugger.setBreakpoint on the parsed script (actualLocation) BEFORE Debugger.resume …
+[CDP] Swallowed Runtime.runIfWaitingForDebugger (id=…) — target is paused.   ← only when piece 4's race occurs
 ```
 
 Failure signatures:
 
+- DAP `stopped` (reason `breakpoint`) followed at once by `continued`,
+  with `js-debug → UXP: Runtime.runIfWaitingForDebugger` and then
+  `Debugger.resumed` in between → the piece 4 guard regressed (or the
+  pause never reached the rewriter as `Debugger.paused`).
 - `Instrumentation breakpoint reply: {"error":…}` → the host does not
   support `setInstrumentationBreakpoint`; fall back to approach 3+4
   (entry URL breakpoint + held resume) from git history.
@@ -200,6 +242,10 @@ Failure signatures:
   ack). Never rely on reply ordering.
 - `Runtime.evaluate` while paused works in UXP (js-debug's probes get
   answered mid-pause).
+- `Runtime.runIfWaitingForDebugger` is **not** a no-op on a paused UXP
+  runtime. Unlike in Chrome/Node, it resumes a regular breakpoint pause
+  (Photoshop 27.12.0, 2026-10-03). Never forward it while a client holds
+  a pause (piece 4).
 - Supported domains per `Schema.getDomains`: Runtime, Debugger,
   Profiler, HeapProfiler, Schema (all "1.3"). `Network.enable` returns
   `true` but is a stub; `NodeWorker.enable` is unsupported (the

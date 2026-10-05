@@ -459,6 +459,11 @@ body {
   color: var(--vscode-errorForeground);
 }
 
+/* Connected host app below the catalog minVersion — icon swap + color keeps it visible in compact view. */
+.status-icon.unsupported {
+  color: var(--vscode-problemsWarningIcon-foreground, var(--vscode-editorWarning-foreground));
+}
+
 .status-icon.not-installed {
   opacity: 0.4;
 }
@@ -551,12 +556,8 @@ input:focus-visible {
   background: transparent;
   border:1px solid var(--vscode-sideBar-foreground, var(--vscode-foreground));
   color: var(--vscode-sideBar-foreground, var(--vscode-foreground));
-  cursor: pointer;
-  font-family: inherit;
-}
-
-.host-badge.static {
   cursor: default;
+  font-family: inherit;
 }
 
 .open-in-vscode-icon {

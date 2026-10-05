@@ -1,6 +1,6 @@
 import type * as vscode from "vscode";
 import { NativeAddonUnavailableError } from "../../core/errors";
-import { HOST_APPS } from "../../core/vulcan/hostAppCatalog";
+import { connectedAppUnsupportedReason, HOST_APPS, isDebuggableVersion } from "../../core/vulcan/hostAppCatalog";
 import type { UxpService } from "../UxpService";
 import { textResult } from "./toolResult";
 
@@ -22,17 +22,27 @@ export class UxpListInstalledAppsTool implements vscode.LanguageModelTool<Record
             name: string;
             installed: boolean | undefined;
             running: boolean | undefined;
+            runningVersions: string[];
             versions: string[];
+            debuggableVersions: string[];
         }[];
         try {
             catalog = HOST_APPS.map((app) => {
                 const candidates = controller.getInstalledCandidates(app);
+                // A bare SAP code only matches Vulcan's default version — check each installed one.
+                const runningVersions = candidates
+                    .filter((c) => controller.isRunning(`${c.sapCode}-${c.version}`))
+                    .map((c) => c.version);
                 return {
                     app: app.value,
                     name: app.name,
                     installed: candidates.length > 0,
-                    running: candidates.some((c) => controller.isRunning(c.sapCode)),
+                    running: runningVersions.length > 0,
+                    runningVersions,
                     versions: candidates.map((c) => c.version),
+                    debuggableVersions: candidates
+                        .filter((c) => isDebuggableVersion(app, c.version))
+                        .map((c) => c.version),
                 };
             });
         }
@@ -43,7 +53,9 @@ export class UxpListInstalledAppsTool implements vscode.LanguageModelTool<Record
                     name: app.name,
                     installed: undefined,
                     running: undefined,
+                    runningVersions: [],
                     versions: [],
+                    debuggableVersions: [],
                 }));
             }
             else {
@@ -56,6 +68,7 @@ export class UxpListInstalledAppsTool implements vscode.LanguageModelTool<Record
             name: a.info.appName,
             version: a.info.appVersion,
             uxpVersion: a.info.uxpVersion,
+            debuggable: connectedAppUnsupportedReason(a.info.appId, a.info.appVersion) === undefined,
         }));
 
         return textResult(JSON.stringify({ catalog, connected }, null, 2));

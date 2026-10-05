@@ -143,8 +143,9 @@ when **no host application at all** connected, then waits another `500 ms`. It d
 `false -> true` as a refresh mechanism.
 
 The same native module also exposes a separate `VulcanControlAdapter`, created lazily for installed
-application discovery and host-app launch. Photoshop, InDesign, and Premiere Pro are represented
-by the current host catalog. Both adapters follow a one-instance-per-process lifetime rule.
+application discovery and host-app launch. Photoshop, InDesign, Premiere Pro, and Media Encoder are
+represented by the current host catalog. Both adapters follow a one-instance-per-process lifetime
+rule.
 
 ## 3. Implemented protocol behavior
 
@@ -272,7 +273,9 @@ The proxy adapts UXP behavior expected neither by stock Chromium nor Node debugg
 Break on load uses a V8 instrumentation breakpoint
 `beforeScriptWithSourceMapExecution`, coordinated by the proxy and js-debug's
 `pauseForSourceMap`. The proxy arms it before resuming the UXP target, suppresses irrelevant early
-pauses, and lets js-debug reuse the armed breakpoint ID. The investigation and rejected approaches
+pauses, lets js-debug reuse the armed breakpoint ID, and keeps js-debug's late
+`Runtime.runIfWaitingForDebugger` from reaching a paused target (UXP would resume a breakpoint
+pause on it). The investigation and rejected approaches
 remain in [`BREAK-ON-START.md`](BREAK-ON-START.md).
 
 ### 5.2 HTML/CSS inspector

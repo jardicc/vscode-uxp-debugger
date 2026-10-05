@@ -15,6 +15,7 @@ import * as http from "http";
 import type { Duplex } from "stream";
 import { WebSocketServer } from "ws";
 import { TypedEvent } from "../events";
+import { sleep } from "../sleep";
 import {
     HostReplyError,
     PortInUseError,
@@ -567,7 +568,7 @@ export class UxpBroker {
                 `waiting ${String(remaining)} ms for ${connection.appInfo?.appId ?? "app"} to finish `
                 + "initialising its devtools layer (connected moments ago)",
             );
-            await new Promise((resolve) => setTimeout(resolve, remaining));
+            await sleep(remaining);
         }
     }
 }

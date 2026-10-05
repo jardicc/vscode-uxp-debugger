@@ -5,6 +5,7 @@
 
 import clsx from "clsx";
 import type { ChangeEvent, ReactNode } from "react";
+import { getUICodeByValue } from "../../../core/vulcan/hostAppCatalog";
 import type { PanelState, ScriptView } from "../panelProtocol";
 import { dispatch } from "./vscodeApi";
 import { IconButton, OverflowMenu, PathLabel, Spinner } from "./common";
@@ -58,21 +59,13 @@ export function AddScriptButton({ state }: { state: PanelState }): ReactNode {
             label="Add script…"
             items={[
                 {
-                    icon: "search",
-                    label: "Add script (pick)…",
+                    label: "Browse for scripts…",
                     onClick: () => { dispatch({ kind: "addScriptPick" }); },
                 },
                 {
-                    icon: "debug-alt",
-                    label: "Add active file & debug",
+                    label: "Currently opened script",
                     disabled: !hasScript,
-                    onClick: () => { dispatch({ kind: "addActiveScript", andDebug: true }); },
-                },
-                {
-                    icon: "file-code",
-                    label: "Add active file",
-                    disabled: !hasScript,
-                    onClick: () => { dispatch({ kind: "addActiveScript", andDebug: false }); },
+                    onClick: () => { dispatch({ kind: "addActiveScript" }); },
                 },
             ]}
         />
@@ -89,24 +82,24 @@ export function ScriptTargetSelect({ state }: { state: PanelState }): ReactNode 
             onClick={(e) => { e.stopPropagation(); }}
             onChange={(e: ChangeEvent<HTMLSelectElement>) => { dispatch({ kind: "setScriptTargetApp", appId: e.target.value || undefined }); }}
         >
-            <option value="">Any host app</option>
+            <option value="">Auto</option>
             {state.connectedApps.map((app) => (
                 <option
                     key={app.appId}
                     value={app.appId}
                     disabled={!app.supportsScripts}
-                    title={app.supportsScripts ? undefined : "This app does not report script-debugging support"}
+                    title={app.supportsScripts ? `${app.name} ${app.version}` : `${app.name} ${app.version} does not report script-debugging support`}
                 >
-                    {app.name}
-                    {" "}
-                    {app.version}
-                    {!app.supportsScripts && " (no script support)"}
+                    {getUICodeByValue(app.appId) || app.name}
+                    {!app.supportsScripts && " (scripts n/a)"}
                 </option>
             ))}
             {state.scriptTargetApp
                 && !state.connectedApps.some((a) => a.appId === state.scriptTargetApp) && (
-                <option value={state.scriptTargetApp}>
-                    {state.scriptTargetApp}
+                <option
+                    value={state.scriptTargetApp}
+                >
+                    {getUICodeByValue(state.scriptTargetApp) || state.scriptTargetApp}
                     {" "}
                     (not connected)
                 </option>
@@ -142,7 +135,7 @@ function ScriptRow({ script }: { script: ScriptView }): ReactNode {
             <div className="row-text">
                 <div className="row-line">
                     <span className="row-title">{script.name}</span>
-                    <span className="host-badge static" title="Host app implied by the file extension">
+                    <span className="host-badge" title="Host app implied by the file extension">
                         {script.hostApp}
                     </span>
                 </div>

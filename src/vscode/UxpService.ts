@@ -17,12 +17,13 @@ import type { PluginSession } from "../core/broker/SessionRegistry";
 import type { HostLogEvent } from "../core/broker/AppConnection";
 import { probeBrokerIdentity, type BrokerIdentity } from "../core/broker/identify";
 import { requestTakeover } from "../core/broker/takeover";
-import { HostAppNotRunningError, MultipleAppsMatchError, PortInUseError, UxpError } from "../core/errors";
+import { HostAppNotRunningError, HostAppVersionUnsupportedError, MultipleAppsMatchError, PortInUseError, UxpError } from "../core/errors";
 import { matchApps, requiredAppIds } from "../core/manifest/appMatching";
 import { parseManifestContent, type ParsedManifest } from "../core/manifest/manifest";
 import { isDevModeEnabled } from "../core/devmode/devMode";
 import { DEFAULT_BROKER_PORT } from "../core/protocol/types";
-import type { HostAppDescriptor } from "../core/vulcan/hostAppCatalog";
+import { sleep } from "../core/sleep";
+import { connectedAppUnsupportedReason, type HostAppDescriptor, parseRunningApps, runningUnsupportedReasons } from "../core/vulcan/hostAppCatalog";
 import type { IHostAppController, LaunchResult } from "../core/vulcan/IHostAppController";
 import { VulcanAnnouncer } from "../core/vulcan/VulcanAnnouncer";
 import { VulcanHostAppController } from "../core/vulcan/VulcanHostAppController";
@@ -145,6 +146,20 @@ export class UxpService implements vscode.Disposable {
 
     get connectedApps(): ConnectedApp[] {
         return this.broker?.connectedApps ?? [];
+    }
+
+    /** See {@link VulcanAnnouncer.runningApps} — `undefined` until this window has announced. */
+    getVulcanRunningApps(): string[] | undefined {
+        return this.announcer?.runningApps();
+    }
+
+    /**
+     * Why none of `appIds` can connect although one is running: only
+     * unsupported (e.g. pre-UXP) versions of it are running. Empty when
+     * nothing like that is detected.
+     */
+    runningUnsupportedReasons(appIds?: readonly string[]): string[] {
+        return runningUnsupportedReasons(parseRunningApps(this.getVulcanRunningApps() ?? []), appIds);
     }
 
     /** Current broker ownership state for UI surfaces (control panel). */
@@ -504,6 +519,9 @@ export class UxpService implements vscode.Disposable {
    * @throws {HostAppNotRunningError} when no applicable app is connected, or
    * when `targetAppId` was given but that specific app isn't connected
    * anymore (e.g. it was closed since the last load/reload).
+   * @throws {HostAppVersionUnsupportedError} when the matching apps that are
+   * connected — or, with none connected, running per Vulcan — are all below
+   * the catalog `minVersion`.
    * @throws {MultipleAppsMatchError} when ≥ 2 apps match and no
    * `targetAppId` was given.
    */
@@ -517,15 +535,31 @@ export class UxpService implements vscode.Disposable {
         await this.ensureStarted();
         const broker = this.requireBroker();
 
-        const matched = await this.applicableAppsWithRetry(hosts);
-        if (matched.length === 0) {
+        const applicable = await this.applicableAppsWithRetry(hosts);
+        if (applicable.length === 0) {
+            const reasons = this.runningUnsupportedReasons(requiredAppIds(hosts));
+            if (reasons.length > 0) {
+                throw new HostAppVersionUnsupportedError(reasons);
+            }
             throw new HostAppNotRunningError(requiredAppIds(hosts));
+        }
+        const matched = applicable.filter(
+            (app) => connectedAppUnsupportedReason(app.info.appId, app.info.appVersion) === undefined,
+        );
+        if (matched.length === 0) {
+            throw new HostAppVersionUnsupportedError(
+                applicable.flatMap((app) => connectedAppUnsupportedReason(app.info.appId, app.info.appVersion) ?? []),
+            );
         }
 
         let apps: ConnectedApp[];
         if (targetAppId !== undefined) {
             apps = matched.filter((app) => app.info.appId === targetAppId);
             if (apps.length === 0) {
+                const reasons = this.runningUnsupportedReasons([targetAppId]);
+                if (reasons.length > 0) {
+                    throw new HostAppVersionUnsupportedError(reasons);
+                }
                 throw new HostAppNotRunningError([targetAppId]);
             }
         }
@@ -647,7 +681,7 @@ export class UxpService implements vscode.Disposable {
     ): Promise<void> {
         const deadline = Date.now() + timeoutMs;
         while (!condition() && Date.now() < deadline) {
-            await new Promise((resolve) => setTimeout(resolve, APP_POLL_INTERVAL_MS));
+            await sleep(APP_POLL_INTERVAL_MS);
         }
     }
 
@@ -666,7 +700,7 @@ export class UxpService implements vscode.Disposable {
             if (cancelToken?.isCancellationRequested || Date.now() >= deadline) {
                 return hasMatch();
             }
-            await new Promise((resolve) => setTimeout(resolve, APP_POLL_INTERVAL_MS));
+            await sleep(APP_POLL_INTERVAL_MS);
         }
         return true;
     }

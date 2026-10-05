@@ -830,7 +830,7 @@
     "compile:inspector": "esbuild src/vscode/inspector/host/mainHost.ts --bundle --outfile=dist/inspectorHost.js --format=iife --platform=browser",
     "compile:panel": "esbuild src/vscode/panel/webview/index.tsx --bundle --outfile=dist/panel.js --format=iife --platform=browser --minify --loader:.ttf=file --define:process.env.NODE_ENV=\\\"production\\\"",
     "compile:devtools": "node scripts/bundle-devtools.mjs",
-    "watch": "esbuild src/vscode/extension.ts --bundle --outfile=dist/extension.js --external:vscode --format=cjs --platform=node --sourcemap --watch",
+    "watch": "node scripts/watch.mjs",
     "typecheck": "tsc --noEmit",
     "lint": "eslint src test e2e --format ./scripts/eslint-formatter.mjs",
     "lint:fix": "eslint src test e2e --fix --format ./scripts/eslint-formatter.mjs",

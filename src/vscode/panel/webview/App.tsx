@@ -78,13 +78,11 @@ export function App(): ReactNode {
                             label="Add plugin…"
                             items={[
                                 {
-                                    icon: "file-code",
-                                    label: "Add manifest.json manually…",
+                                    label: "Browse for manifest.json…",
                                     onClick: () => { dispatch({ kind: "addPluginPick" }); },
                                 },
                                 {
-                                    icon: "file-code",
-                                    label: "Add active manifest.json",
+                                    label: "Currently opened manifest.json",
                                     disabled: !state.activeEditor.isManifest,
                                     onClick: () => { dispatch({ kind: "addActiveManifest" }); },
                                 },
@@ -98,6 +96,7 @@ export function App(): ReactNode {
                         collapsed={collapsed.scripts}
                         onToggle={() => { toggleSection("scripts"); }}
                     >
+                        <span className="section-label">Target:</span>
                         <ScriptTargetSelect state={state} />
                         <AddScriptButton state={state} />
                     </SectionHeader>

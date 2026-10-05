@@ -52,6 +52,24 @@ export class VulcanAnnouncer implements IPortAnnouncer {
         }
     }
 
+    /**
+   * Vulcan's registry of running host apps (`"<appId>,<version>,<name>"`,
+   * incl. pre-UXP versions), or `undefined` before the first `announce()` —
+   * never instantiates the native adapter just to query.
+   */
+    runningApps(): string[] | undefined {
+        if (this.disposed || !this.adapter) {
+            return undefined;
+        }
+        try {
+            return this.adapter.getAppsList();
+        }
+        catch (err) {
+            this.log(`vulcan: getAppsList failed: ${String(err instanceof Error ? err.message : err)}`);
+            return undefined;
+        }
+    }
+
     dispose(): void {
         if (this.disposed) {
             return;
