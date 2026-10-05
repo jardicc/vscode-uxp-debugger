@@ -7,6 +7,7 @@
 import * as vscode from "vscode";
 import { NativeAddonUnavailableError } from "../../core/errors";
 import { type HostAppDescriptor, HOST_APPS, isDebuggableVersion } from "../../core/vulcan/hostAppCatalog";
+import { sleep } from "../../core/sleep";
 import type { IHostAppController } from "../../core/vulcan/IHostAppController";
 import type { UxpService } from "../UxpService";
 import { hostAppNotRunningDialog, offerLaunchHostAppDialog } from "../ui/dialogs";
@@ -210,7 +211,7 @@ async function launchCandidate(
         if (Date.now() >= deadline) {
             return false;
         }
-        await new Promise((resolve) => setTimeout(resolve, 500));
+        await sleep(500);
     }
     return true;
 }
@@ -273,7 +274,7 @@ async function waitForConnection(
                 `[hostapp] ${app.name} connected — settling ${String(POST_CONNECT_SETTLE_MS)}ms before retrying load`,
             );
             progress.report({ message: "connected, letting it finish starting up..." });
-            await new Promise((resolve) => setTimeout(resolve, POST_CONNECT_SETTLE_MS));
+            await sleep(POST_CONNECT_SETTLE_MS);
             return true;
         },
     );

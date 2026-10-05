@@ -22,6 +22,7 @@ import { matchApps, requiredAppIds } from "../core/manifest/appMatching";
 import { parseManifestContent, type ParsedManifest } from "../core/manifest/manifest";
 import { isDevModeEnabled } from "../core/devmode/devMode";
 import { DEFAULT_BROKER_PORT } from "../core/protocol/types";
+import { sleep } from "../core/sleep";
 import { connectedAppUnsupportedReason, type HostAppDescriptor, parseRunningApps, runningUnsupportedReasons } from "../core/vulcan/hostAppCatalog";
 import type { IHostAppController, LaunchResult } from "../core/vulcan/IHostAppController";
 import { VulcanAnnouncer } from "../core/vulcan/VulcanAnnouncer";
@@ -680,7 +681,7 @@ export class UxpService implements vscode.Disposable {
     ): Promise<void> {
         const deadline = Date.now() + timeoutMs;
         while (!condition() && Date.now() < deadline) {
-            await new Promise((resolve) => setTimeout(resolve, APP_POLL_INTERVAL_MS));
+            await sleep(APP_POLL_INTERVAL_MS);
         }
     }
 
@@ -699,7 +700,7 @@ export class UxpService implements vscode.Disposable {
             if (cancelToken?.isCancellationRequested || Date.now() >= deadline) {
                 return hasMatch();
             }
-            await new Promise((resolve) => setTimeout(resolve, APP_POLL_INTERVAL_MS));
+            await sleep(APP_POLL_INTERVAL_MS);
         }
         return true;
     }

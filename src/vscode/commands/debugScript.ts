@@ -17,6 +17,7 @@ import type { ConnectedApp } from "../../core/broker/UxpBroker";
 import type { PluginSession } from "../../core/broker/SessionRegistry";
 import { HostReplyError, NonErasableTypeScriptError } from "../../core/errors";
 import { normalizeUserArgs, parseArgsText } from "../../core/protocol/messages";
+import { sleep } from "../../core/sleep";
 import { stripTypeScriptFile } from "../../core/stripTypeScript";
 import { connectedAppUnsupportedReason } from "../../core/vulcan/hostAppCatalog";
 import type { UxpService } from "../UxpService";
@@ -181,7 +182,7 @@ async function runScriptWithModalRetry(
                 `[script] Photoshop is still modal (previous run tearing down) — retrying `
                 + `(${String(attempt)}/${String(MODAL_RETRY_ATTEMPTS)})…`,
             );
-            await new Promise((resolve) => setTimeout(resolve, MODAL_RETRY_DELAY_MS));
+            await sleep(MODAL_RETRY_DELAY_MS);
         }
     }
 }

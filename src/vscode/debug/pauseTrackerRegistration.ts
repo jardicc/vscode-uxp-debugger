@@ -12,6 +12,7 @@
  */
 
 import * as vscode from "vscode";
+import { sleep } from "../../core/sleep";
 import type { PauseFrame, PauseSnapshot, PauseTracker } from "./pauseTracker";
 import { findUxpClientSessionId } from "./uxpSessionChain";
 
@@ -72,10 +73,6 @@ function withTimeout<T>(thenable: Thenable<T>, ms: number): Promise<TimedResult<
             },
         );
     });
-}
-
-function delay(ms: number): Promise<void> {
-    return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
 export function registerPauseTracker(tracker: PauseTracker, output: vscode.OutputChannel): vscode.Disposable {
@@ -157,7 +154,7 @@ async function buildSnapshot(session: vscode.DebugSession, threadId: number): Pr
         }
         lastFailure = result.kind === "timeout" ? `no reply within ${String(REQUEST_TIMEOUT_MS)}ms` : String(result.error);
         if (attempt < STACK_TRACE_ATTEMPTS) {
-            await delay(RETRY_DELAY_MS);
+            await sleep(RETRY_DELAY_MS);
         }
     }
     throw new Error(`stackTrace failed after ${String(STACK_TRACE_ATTEMPTS)} attempts (last: ${lastFailure})`);
