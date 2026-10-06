@@ -55,7 +55,7 @@ export function App(): ReactNode {
     }
 
     return (
-        <div className={clsx("panel-root", state.compactView && "compact")}>
+        <div className={clsx("panel-root", { compact: state.compactView })}>
             <div className="panel-content-wrapper">
                 <BrokerBlockedOverlay state={state} />
                 <div className="panel-content">

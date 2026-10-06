@@ -161,7 +161,7 @@ The saved target remains visible as "not connected" when that app disconnects.
 
 Scripts can be added with a file picker (multiple files can be selected at once) or from
 the active editor. A dirty active document is saved before it is registered. Missing files remain visible with a warning; run, watch,
-and open actions are disabled.
+and clicking the row (which opens the file) are disabled.
 
 ### 4.1 Script actions
 
@@ -170,7 +170,7 @@ and open actions are disabled.
 | **Run & debug** | Runs the script in the selected target app and attaches the debugger. |
 | **Stop debugging** | Stops attached debug sessions associated with the original script path. |
 | **Watch / Unwatch** | Persists watch mode. It becomes active while the script is being debugged. |
-| **Open file** | Opens the script in a non-preview editor. |
+| **Click the row** | Opens (activates) the script in a non-preview editor. There is no dedicated button; clicks on the row's action buttons do not trigger it. Ignored while the row is busy or the file is missing. |
 | **Pass arguments...** | Edits and validates the stored comma-separated JSON values. |
 | **Remove** | Removes the entry and offers **Undo**. The source file is not deleted. |
 

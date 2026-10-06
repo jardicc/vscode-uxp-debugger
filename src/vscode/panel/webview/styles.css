@@ -339,6 +339,14 @@ body {
   background: var(--vscode-list-hoverBackground);
 }
 
+.row.clickable {
+  cursor: pointer;
+}
+
+.row.clickable:hover {
+  background: var(--vscode-list-hoverBackground);
+}
+
 .row.active-item {
   background: var(--vscode-list-inactiveSelectionBackground, rgba(128, 128, 128, 0.1));
 }

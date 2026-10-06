@@ -6,6 +6,8 @@
 - feature to attach plugins without loading them via Debugger?
 - investigate Media Encoder launch hanging when the broker is already running
 - move json config creation under triple dot
+- decide script targeting, should it follow file extension? Does target apply only to generic extension?
+- allow to fetch plugin/script entries from launch.json config? It contains all necessary data. Or would it be temporary only while workspace is opened?
 
 ## DONE
 

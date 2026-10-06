@@ -130,7 +130,18 @@ function ScriptRow({ script }: { script: ScriptView }): ReactNode {
                         );
 
     return (
-        <div className={clsx("row script-row", script.isActiveFile && "active-item")}>
+        <div
+            className={clsx("row script-row", {
+                "active-item": script.isActiveFile,
+                clickable: script.exists && !busy,
+            })}
+            title={missingReason}
+            onClick={() => {
+                if (script.exists && !busy) {
+                    dispatch({ kind: "openScriptFile", scriptPath: script.scriptPath });
+                }
+            }}
+        >
             {statusIcon}
             <div className="row-text">
                 <div className="row-line">
@@ -191,13 +202,6 @@ function ScriptRow({ script }: { script: ScriptView }): ReactNode {
                             value: !script.watching,
                         });
                     }}
-                />
-                <IconButton
-                    icon="go-to-file"
-                    label="Open file"
-                    disabled={busy || !script.exists}
-                    disabledReason={missingReason}
-                    onClick={() => { dispatch({ kind: "openScriptFile", scriptPath: script.scriptPath }); }}
                 />
                 <IconButton
                     icon="symbol-parameter"

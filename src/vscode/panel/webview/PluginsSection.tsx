@@ -72,12 +72,11 @@ function pluginStatus(plugin: PluginView, busy: boolean): { label: string; icon:
         label: plugin.loaded ? "loaded" : "not loaded",
         icon: busyIcon ?? (
             <span
-                className={clsx(
-                    "codicon",
-                    plugin.loaded ? "codicon-window-active" : "codicon-window",
-                    "status-icon",
-                    plugin.loaded && "loaded",
-                )}
+                className={clsx("codicon status-icon", {
+                    "codicon-window-active": plugin.loaded,
+                    "codicon-window": !plugin.loaded,
+                    loaded: plugin.loaded,
+                })}
                 title={plugin.loaded ? "Loaded" : "Not loaded"}
             />
         ),
@@ -124,7 +123,7 @@ function PluginRow({ plugin, state }: { plugin: PluginView; state: PanelState })
     ];
 
     return (
-        <div className={clsx("row plugin-row", plugin.hasActiveFile && "active-item")}>
+        <div className={clsx("row plugin-row", { "active-item": plugin.hasActiveFile })}>
             {statusIcon}
             <div className="row-text">
                 <div className="row-line">
