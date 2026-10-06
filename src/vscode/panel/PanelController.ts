@@ -12,6 +12,7 @@ import { NativeAddonUnavailableError, RequestTimeoutError } from "../../core/err
 import { parseManifestContent } from "../../core/manifest/manifest";
 import { buildPluginLaunchConfig, buildScriptLaunchConfig } from "../../core/launchConfig";
 import { parseArgsText } from "../../core/protocol/messages";
+import { isScriptPath, scriptDialogExtensions, scriptExtensionsLabel } from "../../core/scriptCatalog";
 import type { PluginSession } from "../../core/broker/SessionRegistry";
 import { connectedAppUnsupportedReason, HOST_APPS, parseRunningApps, type RunningApp } from "../../core/vulcan/hostAppCatalog";
 import { sortInstalledCandidates } from "../../core/vulcan/VulcanHostAppController";
@@ -37,8 +38,6 @@ import {
     rowKeyForAction,
 } from "./panelProtocol";
 import { type ManifestFacts, buildPanelState } from "./panelState";
-
-const SCRIPT_EXTENSIONS = [".js", ".ts", ".ccjs", ".psjs", ".idjs"];
 
 /** Safety net against pathological loops (symlink cycles, etc.) — see CONTROL-PANEL.md §3.3. */
 const MAX_ANCESTOR_DEPTH = 50;
@@ -191,7 +190,7 @@ export class PanelController implements vscode.Disposable {
           && path.basename(activeEditorPath).toLowerCase() === "manifest.json",
                 isScript:
           !!activeEditorPath
-          && SCRIPT_EXTENSIONS.includes(path.extname(activeEditorPath).toLowerCase()),
+          && isScriptPath(activeEditorPath),
                 path: activeEditorPath,
             },
             workspaceFolders: (vscode.workspace.workspaceFolders ?? []).map((f) => f.uri.fsPath),
@@ -962,7 +961,7 @@ export class PanelController implements vscode.Disposable {
             canSelectFiles: true,
             canSelectFolders: false,
             canSelectMany: true,
-            filters: { "UXP scripts": ["ccjs", "psjs", "idjs", "js", "ts"] },
+            filters: { "UXP scripts": scriptDialogExtensions() },
             openLabel: "Add Scripts",
         });
         for (const uri of picked ?? []) {
@@ -977,9 +976,9 @@ export class PanelController implements vscode.Disposable {
             return;
         }
         const scriptPath = active.uri.fsPath;
-        if (!SCRIPT_EXTENSIONS.includes(path.extname(scriptPath).toLowerCase())) {
+        if (!isScriptPath(scriptPath)) {
             void vscode.window.showErrorMessage(
-                "UXP: The active file is not a UXP script (.ccjs / .psjs / .idjs / .js / .ts).",
+                `UXP: The active file is not a UXP script (${scriptExtensionsLabel()}).`,
             );
             return;
         }

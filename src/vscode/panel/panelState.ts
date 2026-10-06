@@ -5,6 +5,7 @@
  */
 
 import * as path from "path";
+import { scriptHostBadge } from "../../core/scriptCatalog";
 import type { RunningApp } from "../../core/vulcan/hostAppCatalog";
 import { type RegistryData, pathKey } from "./PluginRegistry";
 import type {
@@ -97,17 +98,8 @@ export function matchingWorkspaceFolderLength(
     return best;
 }
 
-/** Extension → implied host-app badge for scripts (ANY when unrestricted). */
-export function scriptHostBadge(scriptPath: string): string {
-    switch (path.extname(scriptPath).toLowerCase()) {
-        case ".psjs":
-            return "PS";
-        case ".idjs":
-            return "ID";
-        default:
-            return "ANY";
-    }
-}
+// Re-exported so existing importers keep working — implementation lives in src/core/scriptCatalog.ts.
+export { scriptHostBadge };
 
 function commonPathPrefixLength(a: string, b: string): number {
     let i = 0;

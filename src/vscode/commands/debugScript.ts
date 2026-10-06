@@ -17,6 +17,15 @@ import type { ConnectedApp } from "../../core/broker/UxpBroker";
 import type { PluginSession } from "../../core/broker/SessionRegistry";
 import { HostReplyError, NonErasableTypeScriptError } from "../../core/errors";
 import { normalizeUserArgs, parseArgsText } from "../../core/protocol/messages";
+import {
+    describeSupportedScripts,
+    isAppAllowedForScript,
+    isScriptExtension,
+    isTypeScriptExtension,
+    scriptExtensionOf,
+    scriptExtensionsLabel,
+    scriptHostAppIds,
+} from "../../core/scriptCatalog";
 import { sleep } from "../../core/sleep";
 import { stripTypeScriptFile } from "../../core/stripTypeScript";
 import { connectedAppUnsupportedReason } from "../../core/vulcan/hostAppCatalog";
@@ -27,15 +36,6 @@ import {
 } from "../debug/UxpDebugSessionManager";
 import { hostAppNotRunningDialog, showHostAppNotRunningError } from "../ui/dialogs";
 import { pickApp } from "../ui/picks";
-
-/** Extension → allowed host app ids (UDT 2.2.1 renderer table). `undefined` = any app. */
-const SCRIPT_EXTENSION_APPS: Record<string, string[] | undefined> = {
-    ".js": undefined,
-    ".ts": undefined,
-    ".ccjs": undefined,
-    ".psjs": ["PS"],
-    ".idjs": ["ID", "IDS", "indesign", "indesignserver"],
-};
 
 const ARGS_STATE_KEY_PREFIX = "uxp.scriptArgs:";
 
@@ -75,11 +75,11 @@ export async function debugScriptCommand(
     if (!scriptPath) {
         return;
     }
-    const extension = path.extname(scriptPath).toLowerCase();
-    if (!(extension in SCRIPT_EXTENSION_APPS)) {
+    const extension = scriptExtensionOf(scriptPath);
+    if (!isScriptExtension(extension)) {
         void vscode.window.showErrorMessage(
             `UXP: "${path.basename(scriptPath)}" is not a UXP script. `
-            + "Supported extensions: .ccjs (any app), .psjs (Photoshop), .idjs (InDesign), .ts (stripped on the fly).",
+            + `Supported extensions: ${describeSupportedScripts()}.`,
         );
         return;
     }
@@ -103,7 +103,7 @@ export async function debugScriptCommand(
     // multi-module TS plugin still needs a real bundler.
     let runPath = scriptPath;
     let cleanupStripped: (() => void) | undefined;
-    if (extension === ".ts") {
+    if (isTypeScriptExtension(extension)) {
         try {
             const stripped = stripTypeScriptFile(scriptPath);
             runPath = stripped.jsPath;
@@ -200,7 +200,7 @@ async function resolveScriptPath(args?: DebugScriptArgs): Promise<string | undef
     const editor = vscode.window.activeTextEditor;
     if (editor?.document.uri.scheme !== "file") {
         void vscode.window.showErrorMessage(
-            "UXP: Open a UXP script file (.ccjs / .psjs / .idjs / .ts) in the editor first.",
+            `UXP: Open a UXP script file (${scriptExtensionsLabel()}) in the editor first.`,
         );
         return undefined;
     }
@@ -216,11 +216,11 @@ async function pickScriptTargetApp(
     appIdFilter?: string,
     promptToRetry = true,
 ): Promise<ConnectedApp | undefined> {
-    const allowedIds = SCRIPT_EXTENSION_APPS[extension];
+    const allowedIds = scriptHostAppIds(extension);
 
     const filterApps = (): ConnectedApp[] => {
         let apps = service.connectedApps.filter(
-            (app) => !allowedIds || allowedIds.includes(app.info.appId),
+            (app) => isAppAllowedForScript(extension, app.info.appId),
         );
         if (appIdFilter) {
             apps = apps.filter((app) => app.info.appId === appIdFilter);

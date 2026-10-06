@@ -22,14 +22,22 @@ export interface HostAppDescriptor {
     readonly sapCodes: readonly string[];
     /** Minimum UXP-capable installed version (dotted numeric string). */
     readonly minVersion: string;
+    /**
+     * Host-specific standalone script extensions (lowercase, with dot) that may
+     * only run in this app, e.g. `.psjs`. Beta channels report the same `value`,
+     * so they are covered automatically. Consumed via `src/core/scriptCatalog.ts`.
+     */
+    readonly scriptExtensions?: readonly string[];
+    /** Extra (case-insensitive) app ids a host may report besides `value`. */
+    readonly appIdAliases?: readonly string[];
 }
 
 export const HOST_APPS: readonly HostAppDescriptor[] = [
-    { name: "Photoshop", value: "PS", uiCode: "PS", sapCodes: ["PHSP", "PHSPBETA"], minVersion: "23.2.0" },
+    { name: "Photoshop", value: "PS", uiCode: "PS", sapCodes: ["PHSP", "PHSPBETA"], minVersion: "23.2.0", scriptExtensions: [".psjs"] },
     // For InDesign - scripts are supported from 18.0 and plugins from 18.5 but old matrix support pages shows support back to 17.0 but that could be behind experimental flag
-    { name: "InDesign", value: "ID", uiCode: "ID", sapCodes: ["IDSN", "IDSNBETA"], minVersion: "18.5.0" },
+    { name: "InDesign", value: "ID", uiCode: "ID", sapCodes: ["IDSN", "IDSNBETA"], minVersion: "18.5.0", scriptExtensions: [".idjs"], appIdAliases: ["indesign"] },
     // TODO: verify — `AIS` confirmed from the SAPCode (issue #5), `AISBETA` is an unverified guess; minVersion and uiCode are assumed (live broker reported appId "IDS", version 21.3.0).
-    { name: "InDesign Server", value: "IDS", uiCode: "IDS", sapCodes: ["AIS", "AISBETA"], minVersion: "18.5.0" },
+    { name: "InDesign Server", value: "IDS", uiCode: "IDS", sapCodes: ["AIS", "AISBETA"], minVersion: "18.5.0", scriptExtensions: [".idjs"], appIdAliases: ["indesignserver"] },
     { name: "Premiere Pro", value: "premierepro", uiCode: "PR", sapCodes: ["PPRO", "PPROBETA"], minVersion: "25.6.0" },
     { name: "Media Encoder", value: "ame", uiCode: "ME", sapCodes: ["AME", "AMEBETA"], minVersion: "27.0.0" },
 
