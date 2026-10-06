@@ -5,6 +5,7 @@
 - add new host apps support
 - feature to attach plugins without loading them via Debugger?
 - investigate Media Encoder launch hanging when the broker is already running
+- move json config creation under triple dot
 
 ## DONE
 
