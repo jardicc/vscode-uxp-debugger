@@ -100,26 +100,25 @@ export function ScriptTargetSelect({ state }: { state: PanelState }): ReactNode 
     );
 }
 
+function renderStatusIcon(script: ScriptView, busy: boolean): ReactNode {
+    if (busy) {
+        return <Spinner />;
+    }
+    if (!script.exists) {
+        return <span className="codicon codicon-warning status-icon error" title="File not found" />;
+    }
+    if (script.debugging) {
+        return <span className="codicon codicon-debug-alt status-icon debugging" title="Debugging" />;
+    }
+    return <span className="codicon codicon-file status-icon" />;
+}
+
 function ScriptRow({ script }: { script: ScriptView }): ReactNode {
     const busy = !!script.busy;
     const disabled = busy || !script.exists;
     const missingReason = script.exists ? undefined : "Script file not found on disk";
 
-    const statusIcon = busy
-        ? (
-                <Spinner />
-            )
-        : !script.exists
-                ? (
-                        <span className="codicon codicon-warning status-icon error" title="File not found" />
-                    )
-                : script.debugging
-                    ? (
-                            <span className="codicon codicon-debug-alt status-icon debugging" title="Debugging" />
-                        )
-                    : (
-                            <span className="codicon codicon-file status-icon" />
-                        );
+    const statusIcon = renderStatusIcon(script, busy);
 
     return (
         <div
