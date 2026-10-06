@@ -5,6 +5,8 @@
 
 import clsx from "clsx";
 import type { ChangeEvent, ReactNode } from "react";
+import { Fragment } from "react";
+import { SCRIPT_EXTENSIONS } from "../../../core/scriptCatalog";
 import { getUICodeByValue } from "../../../core/vulcan/hostAppCatalog";
 import type { PanelState, ScriptView } from "../panelProtocol";
 import { dispatch } from "./vscodeApi";
@@ -18,22 +20,12 @@ export function ScriptsSection({ state }: { state: PanelState }): ReactNode {
                 <p>
                     Register a
                     {" "}
-                    <code>.psjs</code>
-                    {" "}
-                    /
-                    {" "}
-                    <code>.idjs</code>
-                    {" "}
-                    /
-                    {" "}
-                    <code>.ccjs</code>
-                    {" "}
-                    /
-                    {" "}
-                    <code>.js</code>
-                    {" "}
-                    /
-                    <code>.ts</code>
+                    {SCRIPT_EXTENSIONS.map((ext, i) => (
+                        <Fragment key={ext}>
+                            {i > 0 && " / "}
+                            <code>{ext}</code>
+                        </Fragment>
+                    ))}
                     {" "}
                     file to run and debug it in a host app.
                 </p>

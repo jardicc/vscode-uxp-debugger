@@ -12,7 +12,6 @@
  * them in sync.
  */
 
-import * as path from "path";
 import { HOST_APPS, type HostAppDescriptor } from "./vulcan/hostAppCatalog";
 
 /** Extensions runnable in any UXP host app. */
@@ -43,9 +42,11 @@ export const SCRIPT_EXTENSIONS: readonly string[] = [
     ...HOST_SCRIPT_EXTENSIONS,
 ];
 
-/** Lowercase extension of `filePath` including the dot (`""` when none). */
+/** Lowercase extension of `filePath` including the dot (`""` when none). Browser-safe (no `path`). */
 export function scriptExtensionOf(filePath: string): string {
-    return path.extname(filePath).toLowerCase();
+    const name = filePath.slice(Math.max(filePath.lastIndexOf("/"), filePath.lastIndexOf("\\")) + 1);
+    const dot = name.lastIndexOf(".");
+    return dot > 0 ? name.slice(dot).toLowerCase() : "";
 }
 
 export function isScriptExtension(extension: string): boolean {

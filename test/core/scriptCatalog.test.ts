@@ -38,6 +38,9 @@ describe("scriptExtensionOf / isScriptPath", () => {
         expect(isScriptPath("x.ccjs")).toBe(true);
         expect(isScriptPath("manifest.json")).toBe(false);
         expect(isScriptPath("noext")).toBe(false);
+        expect(scriptExtensionOf("/a.b/noext")).toBe("");
+        expect(scriptExtensionOf("C:\\a.b\\.psjs")).toBe("");
+        expect(scriptExtensionOf("/x/y.tar.PSJS")).toBe(".psjs");
     });
 });
 
