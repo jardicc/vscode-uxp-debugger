@@ -84,7 +84,6 @@ through localhost HTTP hooks on the broker's existing port. See
 | `UXP: Debug Current Script` | Runs + debugs the `.ccjs` / `.psjs` / `.idjs` / `.js` / `.ts` file in the active editor |
 | `UXP: Pack Plugin…` | Packages a registered plugin as a `.ccx` archive |
 | `UXP: Enable Developer Mode` | Writes Adobe's developer-mode flag (consent + elevation) |
-| `UXP: Configure launch.json` | Creates or updates UXP debug configurations |
 | `UXP: Start UXP Devtools` | Starts the built-in broker |
 | `UXP: Stop UXP Devtools` | Stops the built-in broker |
 | `UXP: Enable Compact View` | Switches the panel to its compact layout |
@@ -120,7 +119,8 @@ Run + debug a script:
 
 `app` is optional and restricts execution to one host app id (`PS`, `ID`, `premierepro`);
 without it you are asked to pick when several compatible apps are connected.
-Use `UXP: Configure launch.json` to generate these entries.
+Use the **Create launch.json configuration** button on a plugin (`…` menu) or script row in the
+UXP Devtools panel to generate these entries with the known values filled in.
 
 ## Settings
 

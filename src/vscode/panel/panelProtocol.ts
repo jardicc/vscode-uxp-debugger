@@ -40,6 +40,10 @@ export type PanelAction
             mode?: "reveal" | "addToWorkspace" | "newWindow";
         }
         | { kind: "openManifestFile"; manifestPath: string }
+  /** Appends a pre-filled `"uxp"` attach config to the workspace's launch.json. */
+        | { kind: "createPluginLaunchConfig"; manifestPath: string }
+  /** Appends a pre-filled `"uxp-script"` launch config to the workspace's launch.json. */
+        | { kind: "createScriptLaunchConfig"; scriptPath: string }
   /** Apps-section Start click → installed-version QuickPick + launch (host side). */
         | { kind: "launchHostApp"; appId: string }
         | { kind: "debugScript"; scriptPath: string }
@@ -197,6 +201,7 @@ export function rowKeyForAction(action: PanelAction): string | undefined {
         case "closeInspector":
         case "openPluginFolder":
         case "openManifestFile":
+        case "createPluginLaunchConfig":
         case "removePlugin":
         case "packPlugin":
             return `plugin:${action.manifestPath}`;
@@ -204,6 +209,7 @@ export function rowKeyForAction(action: PanelAction): string | undefined {
         case "stopScript":
         case "restartScript":
         case "editScriptArgs":
+        case "createScriptLaunchConfig":
         case "removeScript":
             return `script:${action.scriptPath}`;
         case "launchHostApp":

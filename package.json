@@ -93,11 +93,6 @@
         "title": "UXP: Enable Developer Mode"
       },
       {
-        "command": "uxp.configureLaunchJson",
-        "title": "UXP: Configure launch.json",
-        "icon": "$(json)"
-      },
-      {
         "command": "uxp.startDebugger",
         "title": "UXP: Start UXP Devtools",
         "icon": "$(radio-tower)"
@@ -683,10 +678,6 @@
           "when": "!uxp.devModeEnabled"
         },
         {
-          "command": "uxp.configureLaunchJson",
-          "when": "uxp.debuggerRunning && workspaceFolderCount > 0"
-        },
-        {
           "command": "uxp.enableCompactView",
           "when": "uxp.debuggerRunning && !uxp.compactView"
         },
@@ -704,29 +695,24 @@
       ],
       "view/title": [
         {
-          "command": "uxp.configureLaunchJson",
-          "when": "view == uxp.controlPanel",
-          "group": "navigation@1"
-        },
-        {
           "command": "uxp.enableCompactView",
           "when": "view == uxp.controlPanel && !uxp.compactView",
-          "group": "navigation@2"
+          "group": "navigation@1"
         },
         {
           "command": "uxp.disableCompactView",
           "when": "view == uxp.controlPanel && uxp.compactView",
-          "group": "navigation@2"
+          "group": "navigation@1"
         },
         {
           "command": "uxp.startDebugger",
           "when": "view == uxp.controlPanel && !uxp.debuggerRunning",
-          "group": "navigation@3"
+          "group": "navigation@2"
         },
         {
           "command": "uxp.stopDebugger",
           "when": "view == uxp.controlPanel && uxp.debuggerRunning",
-          "group": "navigation@3"
+          "group": "navigation@2"
         }
       ]
     },

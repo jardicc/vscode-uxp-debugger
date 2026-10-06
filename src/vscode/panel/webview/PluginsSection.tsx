@@ -104,6 +104,12 @@ function PluginRow({ plugin, state }: { plugin: PluginView; state: PanelState })
             onClick: () => { dispatch({ kind: "openManifestFile", manifestPath: plugin.manifestPath }); },
         },
         {
+            icon: "json",
+            label: "Create launch.json configuration",
+            disabled: busy,
+            onClick: () => { dispatch({ kind: "createPluginLaunchConfig", manifestPath: plugin.manifestPath }); },
+        },
+        {
             icon: "package",
             label: "Create installer…",
             disabled: busy || !!plugin.manifestError,

@@ -206,6 +206,12 @@ function ScriptRow({ script }: { script: ScriptView }): ReactNode {
                     onClick={() => { dispatch({ kind: "editScriptArgs", scriptPath: script.scriptPath }); }}
                 />
                 <IconButton
+                    icon="json"
+                    label="Create launch.json configuration"
+                    disabled={busy}
+                    onClick={() => { dispatch({ kind: "createScriptLaunchConfig", scriptPath: script.scriptPath }); }}
+                />
+                <IconButton
                     icon="close-small"
                     label="Remove script"
                     disabled={busy}

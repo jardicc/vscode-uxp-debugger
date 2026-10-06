@@ -10,10 +10,12 @@ import * as path from "path";
 import * as vscode from "vscode";
 import { NativeAddonUnavailableError, RequestTimeoutError } from "../../core/errors";
 import { parseManifestContent } from "../../core/manifest/manifest";
+import { buildPluginLaunchConfig, buildScriptLaunchConfig } from "../../core/launchConfig";
 import { parseArgsText } from "../../core/protocol/messages";
 import type { PluginSession } from "../../core/broker/SessionRegistry";
 import { connectedAppUnsupportedReason, HOST_APPS, parseRunningApps, type RunningApp } from "../../core/vulcan/hostAppCatalog";
 import type { UxpService } from "../UxpService";
+import { addLaunchConfiguration, launchFolderFor } from "../commands/addLaunchConfig";
 import { attachDebuggerCommand } from "../commands/attachDebugger";
 import { debugScriptCommand } from "../commands/debugScript";
 import { CONNECT_TIMEOUT_MS, launchHostAppByValue } from "../commands/hostAppLaunch";
@@ -327,6 +329,10 @@ export class PanelController implements vscode.Disposable {
                 return this.openPluginFolder(action.manifestPath, action.folder, action.mode);
             case "openManifestFile":
                 return this.openManifestFile(action.manifestPath);
+            case "createPluginLaunchConfig":
+                return this.createPluginLaunchConfig(action.manifestPath);
+            case "createScriptLaunchConfig":
+                return this.createScriptLaunchConfig(action.scriptPath);
             case "packPlugin":
                 return packManifest(action.manifestPath, this.output);
             case "launchHostApp":
@@ -692,6 +698,29 @@ export class PanelController implements vscode.Disposable {
     private async openManifestFile(manifestPath: string): Promise<void> {
         const doc = await vscode.workspace.openTextDocument(manifestPath);
         await vscode.window.showTextDocument(doc, { preview: false });
+    }
+
+    private async createPluginLaunchConfig(manifestPath: string): Promise<void> {
+        const folder = launchFolderFor(manifestPath);
+        if (!folder) {
+            void vscode.window.showErrorMessage("UXP: Open a workspace folder to create a launch.json configuration.");
+            return;
+        }
+        const { name } = this.readManifestFacts(manifestPath);
+        await addLaunchConfiguration(folder, buildPluginLaunchConfig(name, manifestPath, folder.uri.fsPath));
+    }
+
+    private async createScriptLaunchConfig(scriptPath: string): Promise<void> {
+        const folder = launchFolderFor(scriptPath);
+        if (!folder) {
+            void vscode.window.showErrorMessage("UXP: Open a workspace folder to create a launch.json configuration.");
+            return;
+        }
+        const stored = this.pluginRegistry.scriptByPath(scriptPath);
+        await addLaunchConfiguration(folder, buildScriptLaunchConfig(scriptPath, folder.uri.fsPath, {
+            app: this.pluginRegistry.snapshot.scriptTargetApp,
+            userArgs: parseArgsText(stored?.args ?? "") ?? [],
+        }));
     }
 
     /**

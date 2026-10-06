@@ -32,9 +32,17 @@ workspace are highlighted, and the row associated with the active editor is high
 
 The view title contributes these commands:
 
-- **Configure launch.json**
 - **Enable/Disable Compact View**
 - **Start/Stop UXP Devtools**
+
+Each plugin (in its `…` menu) and each script row has a **Create launch.json configuration**
+action that appends a pre-filled `uxp` attach / `uxp-script` launch entry to the owning
+workspace folder's `.vscode/launch.json` and opens it.
+
+Practical use: with the entry in `launch.json`, you can start debugging with **F5** (or the
+Run and Debug view) without opening the panel, and share it with your team through version
+control. Paths inside the workspace are written as `${workspaceFolder}/…`, so the
+configuration works on any machine.
 
 Compact view hides secondary row details. Section collapse state is local to the webview
 and survives view recreation through `vscode.getState()` / `vscode.setState()`; compact
