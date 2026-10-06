@@ -14,6 +14,7 @@ import { buildPluginLaunchConfig, buildScriptLaunchConfig } from "../../core/lau
 import { parseArgsText } from "../../core/protocol/messages";
 import type { PluginSession } from "../../core/broker/SessionRegistry";
 import { connectedAppUnsupportedReason, HOST_APPS, parseRunningApps, type RunningApp } from "../../core/vulcan/hostAppCatalog";
+import { sortInstalledCandidates } from "../../core/vulcan/VulcanHostAppController";
 import type { UxpService } from "../UxpService";
 import { addLaunchConfiguration, launchFolderFor } from "../commands/addLaunchConfig";
 import { attachDebuggerCommand } from "../commands/attachDebugger";
@@ -92,6 +93,7 @@ export class PanelController implements vscode.Disposable {
     private postScheduled = false;
     /** Cache for {@link getInstalledAppIds} — see its doc comment. */
     private installedAppIds: string[] | undefined;
+    private installedAppsScheduled = false;
     /** Last result of {@link pollRunningApps}. */
     private runningApps: RunningApp[] = [];
     private runningAppsTimer: ReturnType<typeof setInterval> | undefined;
@@ -869,26 +871,34 @@ export class PanelController implements vscode.Disposable {
    * nothing is installed.
    */
     private getInstalledAppIds(): string[] | undefined {
-        if (this.installedAppIds) {
-            return this.installedAppIds;
-        }
-        const controller = this.service.getHostAppController();
-        const ids: string[] = [];
-        for (const app of HOST_APPS) {
-            try {
-                if (controller.getInstalledCandidates(app).length > 0) {
-                    ids.push(app.value);
+        if (!this.installedAppIds && !this.installedAppsScheduled) {
+            // The first native call loads the Vulcan addon and scans installed apps
+            // synchronously — defer it so the first snapshot isn't blocked by it.
+            this.installedAppsScheduled = true;
+            setTimeout(() => {
+                this.installedAppIds = this.detectInstalledAppIds();
+                if (this.installedAppIds) {
+                    this.postState();
                 }
-            }
-            catch (err) {
-                if (err instanceof NativeAddonUnavailableError) {
-                    return undefined;
-                }
-                throw err;
-            }
+            }, 0);
         }
-        this.installedAppIds = ids;
-        return ids;
+        return this.installedAppIds;
+    }
+
+    private detectInstalledAppIds(): string[] | undefined {
+        try {
+            const specifiers = this.service.getHostAppController().getSpecifiers();
+            return HOST_APPS
+                .filter((app) => sortInstalledCandidates(specifiers, app.sapCodes).length > 0)
+                .map((app) => app.value);
+        }
+        catch (err) {
+            if (err instanceof NativeAddonUnavailableError) {
+                return undefined;
+            }
+            this.output.appendLine(`[panel] Installed-app detection failed: ${err instanceof Error ? err.message : String(err)}`);
+            return undefined;
+        }
     }
 
     // -------------------------------------------------------------------------
