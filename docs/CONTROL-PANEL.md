@@ -32,9 +32,17 @@ workspace are highlighted, and the row associated with the active editor is high
 
 The view title contributes these commands:
 
-- **Configure launch.json**
 - **Enable/Disable Compact View**
 - **Start/Stop UXP Devtools**
+
+Each plugin (in its `…` menu) and each script row has a **Create launch.json configuration**
+action that appends a pre-filled `uxp` attach / `uxp-script` launch entry to the owning
+workspace folder's `.vscode/launch.json` and opens it.
+
+Practical use: with the entry in `launch.json`, you can start debugging with **F5** (or the
+Run and Debug view) without opening the panel, and share it with your team through version
+control. Paths inside the workspace are written as `${workspaceFolder}/…`, so the
+configuration works on any machine.
 
 Compact view hides secondary row details. Section collapse state is local to the webview
 and survives view recreation through `vscode.getState()` / `vscode.setState()`; compact
@@ -147,13 +155,21 @@ Supported script extensions are `.ccjs`, `.psjs`, `.idjs`, `.js`, and `.ts`. The
 badge is inferred from the extension: `.psjs` maps to `PS`, `.idjs` to `ID`, and all
 other supported extensions to `ANY`.
 
+The extension is authoritative for compatibility: `.psjs` and `.idjs` scripts can only run in
+Photoshop / InDesign respectively, while `.js`, `.ts`, and `.ccjs` run in any host. The selected
+target never overrides this; it only narrows the compatible apps, so it effectively applies to
+the universal extensions. A target that conflicts with a host-specific extension matches no app
+and the run fails with a "host app not running" error.
+
 The section header provides a target-app selector populated from connected applications.
 Applications that do not advertise script-debugging support remain visible but disabled.
-The saved target remains visible as "not connected" when that app disconnects.
+Installed applications that are not connected are listed as "not connected". The selected
+target is persisted and stays selected while its app is disconnected; it falls back to Auto
+only when its app is detected as not installed.
 
 Scripts can be added with a file picker (multiple files can be selected at once) or from
 the active editor. A dirty active document is saved before it is registered. Missing files remain visible with a warning; run, watch,
-and open actions are disabled.
+and clicking the row (which opens the file) are disabled.
 
 ### 4.1 Script actions
 
@@ -162,7 +178,7 @@ and open actions are disabled.
 | **Run & debug** | Runs the script in the selected target app and attaches the debugger. |
 | **Stop debugging** | Stops attached debug sessions associated with the original script path. |
 | **Watch / Unwatch** | Persists watch mode. It becomes active while the script is being debugged. |
-| **Open file** | Opens the script in a non-preview editor. |
+| **Click the row** | Opens (activates) the script in a non-preview editor. There is no dedicated button; clicks on the row's action buttons do not trigger it. Ignored while the row is busy or the file is missing. |
 | **Pass arguments...** | Edits and validates the stored comma-separated JSON values. |
 | **Remove** | Removes the entry and offers **Undo**. The source file is not deleted. |
 

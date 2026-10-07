@@ -5,6 +5,7 @@
  */
 
 import * as path from "path";
+import { scriptHostBadge } from "../../core/scriptCatalog";
 import type { RunningApp } from "../../core/vulcan/hostAppCatalog";
 import { type RegistryData, pathKey } from "./PluginRegistry";
 import type {
@@ -51,6 +52,8 @@ export interface SnapshotInputs {
     runningApps?: RunningApp[];
     /** Catalog app ids confirmed installed, or undefined when unknown (see `PanelState`). */
     installedApps?: string[];
+    /** See `PanelState.inDesignBannerDismissed`; defaults to false. */
+    inDesignBannerDismissed?: boolean;
     sessions: SessionFact[];
     /** clientSessionIds with an attached debugger. */
     attachedSessionIds: ReadonlySet<string>;
@@ -97,17 +100,8 @@ export function matchingWorkspaceFolderLength(
     return best;
 }
 
-/** Extension → implied host-app badge for scripts (ANY when unrestricted). */
-export function scriptHostBadge(scriptPath: string): string {
-    switch (path.extname(scriptPath).toLowerCase()) {
-        case ".psjs":
-            return "PS";
-        case ".idjs":
-            return "ID";
-        default:
-            return "ANY";
-    }
-}
+// Re-exported so existing importers keep working — implementation lives in src/core/scriptCatalog.ts.
+export { scriptHostBadge };
 
 function commonPathPrefixLength(a: string, b: string): number {
     let i = 0;
@@ -253,6 +247,7 @@ export function buildPanelState(inputs: SnapshotInputs): PanelState {
         launchingApps,
         runningApps: inputs.runningApps ?? [],
         installedApps: inputs.installedApps,
+        inDesignBannerDismissed: inputs.inDesignBannerDismissed ?? false,
         breakOnLoad: inputs.registry.breakOnLoad,
         scriptTargetApp: inputs.registry.scriptTargetApp,
         compactView: inputs.registry.compactView,

@@ -5,45 +5,70 @@
 
 import clsx from "clsx";
 import type { ChangeEvent, ReactNode } from "react";
-import { getUICodeByValue } from "../../../core/vulcan/hostAppCatalog";
-import type { PanelState, ScriptView } from "../panelProtocol";
+import { Fragment } from "react";
+import { SCRIPT_EXTENSIONS } from "../../../core/scriptCatalog";
+import { getUICodeByValue, HOST_APPS } from "../../../core/vulcan/hostAppCatalog";
+import type { ConnectedAppView, ScriptView } from "../panelProtocol";
 import { dispatch } from "./vscodeApi";
-import { IconButton, OverflowMenu, PathLabel, Spinner } from "./common";
+import { IconButton, OverflowMenu, PathLabel, SectionHeader, Spinner, ToggleIconButton } from "./components";
 
-export function ScriptsSection({ state }: { state: PanelState }): ReactNode {
-    if (state.scripts.length === 0) {
-        return (
-            <div className="empty-state">
-                <p>No scripts yet.</p>
-                <p>
-                    Register a
-                    {" "}
-                    <code>.psjs</code>
-                    {" "}
-                    /
-                    {" "}
-                    <code>.idjs</code>
-                    {" "}
-                    /
-                    {" "}
-                    <code>.ccjs</code>
-                    {" "}
-                    /
-                    {" "}
-                    <code>.js</code>
-                    {" "}
-                    /
-                    <code>.ts</code>
-                    {" "}
-                    file to run and debug it in a host app.
-                </p>
-            </div>
-        );
-    }
+export function ScriptsSection({
+    scripts,
+    connectedApps,
+    installedApps,
+    scriptTargetApp,
+    activeEditorIsScript,
+    collapsed,
+    onToggle,
+}: {
+    scripts: ScriptView[];
+    connectedApps: ConnectedAppView[];
+    installedApps: string[] | undefined;
+    scriptTargetApp: string | undefined;
+    activeEditorIsScript: boolean;
+    collapsed: boolean;
+    onToggle: () => void;
+}): ReactNode {
+    return (
+        <>
+            <SectionHeader title="Scripts" collapsed={collapsed} onToggle={onToggle}>
+                <span className="section-label">Target:</span>
+                <ScriptTargetSelect
+                    connectedApps={connectedApps}
+                    installedApps={installedApps}
+                    scriptTargetApp={scriptTargetApp}
+                />
+                <AddScriptButton activeEditorIsScript={activeEditorIsScript} />
+            </SectionHeader>
+            {!collapsed && (scripts.length === 0 ? <ScriptsEmptyState /> : <ScriptsList scripts={scripts} />)}
+        </>
+    );
+}
 
+function ScriptsEmptyState(): ReactNode {
+    return (
+        <div className="empty-state">
+            <p>No scripts yet.</p>
+            <p>
+                Register a
+                {" "}
+                {SCRIPT_EXTENSIONS.map((ext, i) => (
+                    <Fragment key={ext}>
+                        {i > 0 && " / "}
+                        <code>{ext}</code>
+                    </Fragment>
+                ))}
+                {" "}
+                file to run and debug it in a host app.
+            </p>
+        </div>
+    );
+}
+
+function ScriptsList({ scripts }: { scripts: ScriptView[] }): ReactNode {
     return (
         <div className="section-body scripts-section">
-            {state.scripts.map((script) => (
+            {scripts.map((script) => (
                 <ScriptRow key={script.scriptPath} script={script} />
             ))}
         </div>
@@ -51,8 +76,7 @@ export function ScriptsSection({ state }: { state: PanelState }): ReactNode {
 }
 
 /** "+" add-script control for the Scripts section header. */
-export function AddScriptButton({ state }: { state: PanelState }): ReactNode {
-    const hasScript = state.activeEditor.isScript;
+function AddScriptButton({ activeEditorIsScript }: { activeEditorIsScript: boolean }): ReactNode {
     return (
         <OverflowMenu
             icon="add"
@@ -64,7 +88,7 @@ export function AddScriptButton({ state }: { state: PanelState }): ReactNode {
                 },
                 {
                     label: "Currently opened script",
-                    disabled: !hasScript,
+                    disabled: !activeEditorIsScript,
                     onClick: () => { dispatch({ kind: "addActiveScript" }); },
                 },
             ]}
@@ -73,17 +97,35 @@ export function AddScriptButton({ state }: { state: PanelState }): ReactNode {
 }
 
 /** "Target host app" dropdown for the Scripts section header (§9.9). */
-export function ScriptTargetSelect({ state }: { state: PanelState }): ReactNode {
+function ScriptTargetSelect({
+    connectedApps,
+    installedApps,
+    scriptTargetApp,
+}: {
+    connectedApps: ConnectedAppView[];
+    installedApps: string[] | undefined;
+    scriptTargetApp: string | undefined;
+}): ReactNode {
+    // Installed apps that aren't connected. When installed-app detection is
+    // unavailable, the saved target is kept visible instead.
+    const disconnectedIds = HOST_APPS
+        .map((a) => a.value)
+        // eslint-disable-next-line @typescript-eslint/prefer-nullish-coalescing
+        .filter((id) => installedApps?.includes(id) || (!installedApps && id === scriptTargetApp))
+        .filter((id) => !connectedApps.some((a) => a.appId === id));
+    const knownTarget = !!scriptTargetApp
+        && (connectedApps.some((a) => a.appId === scriptTargetApp) || disconnectedIds.includes(scriptTargetApp));
+
     return (
         <select
             className="target-select"
             title="Which connected host app runs the scripts"
-            value={state.scriptTargetApp ?? ""}
+            value={knownTarget ? scriptTargetApp : ""}
             onClick={(e) => { e.stopPropagation(); }}
             onChange={(e: ChangeEvent<HTMLSelectElement>) => { dispatch({ kind: "setScriptTargetApp", appId: e.target.value || undefined }); }}
         >
             <option value="">Auto</option>
-            {state.connectedApps.map((app) => (
+            {connectedApps.map((app) => (
                 <option
                     key={app.appId}
                     value={app.appId}
@@ -94,43 +136,49 @@ export function ScriptTargetSelect({ state }: { state: PanelState }): ReactNode 
                     {!app.supportsScripts && " (scripts n/a)"}
                 </option>
             ))}
-            {state.scriptTargetApp
-                && !state.connectedApps.some((a) => a.appId === state.scriptTargetApp) && (
-                <option
-                    value={state.scriptTargetApp}
-                >
-                    {getUICodeByValue(state.scriptTargetApp) || state.scriptTargetApp}
-                    {" "}
-                    (not connected)
+            {disconnectedIds.map((appId) => (
+                <option key={appId} value={appId}>
+                    {`${getUICodeByValue(appId) || appId} (not connected)`}
                 </option>
-            )}
+            ))}
         </select>
     );
 }
 
+function renderStatusIcon(script: ScriptView, busy: boolean): ReactNode {
+    if (busy) {
+        return <Spinner />;
+    }
+    if (!script.exists) {
+        return <span className="codicon codicon-warning status-icon error" title="File not found" />;
+    }
+    if (script.debugging) {
+        return <span className="codicon codicon-debug-alt status-icon debugging" title="Debugging" />;
+    }
+    return <span className="codicon codicon-file status-icon" />;
+}
+
 function ScriptRow({ script }: { script: ScriptView }): ReactNode {
     const busy = !!script.busy;
+    const { scriptPath } = script;
     const disabled = busy || !script.exists;
     const missingReason = script.exists ? undefined : "Script file not found on disk";
 
-    const statusIcon = busy
-        ? (
-                <Spinner />
-            )
-        : !script.exists
-                ? (
-                        <span className="codicon codicon-warning status-icon error" title="File not found" />
-                    )
-                : script.debugging
-                    ? (
-                            <span className="codicon codicon-debug-alt status-icon debugging" title="Debugging" />
-                        )
-                    : (
-                            <span className="codicon codicon-file status-icon" />
-                        );
+    const statusIcon = renderStatusIcon(script, busy);
 
     return (
-        <div className={clsx("row script-row", script.isActiveFile && "active-item")}>
+        <div
+            className={clsx("row script-row", {
+                "active-item": script.isActiveFile,
+                clickable: script.exists && !busy,
+            })}
+            title={missingReason}
+            onClick={() => {
+                if (script.exists && !busy) {
+                    dispatch({ kind: "openScriptFile", scriptPath: script.scriptPath });
+                }
+            }}
+        >
             {statusIcon}
             <div className="row-text">
                 <div className="row-line">
@@ -147,69 +195,62 @@ function ScriptRow({ script }: { script: ScriptView }): ReactNode {
                     {script.debugging && <span className="state-suffix"> · debugging</span>}
                     {script.args && (
                         <span className="state-suffix" title={`Arguments: ${script.args}`}>
-                            {" "}
-                            · args:
-                            {" "}
-                            {script.args}
+                            {` · args: ${script.args}`}
                         </span>
                     )}
                 </div>
             </div>
             <div className="row-actions">
-                {script.debugging
-                    ? (
-                            <IconButton
-                                icon="debug-stop"
-                                label="Stop debugging"
-                                disabled={busy}
-                                onClick={() => { dispatch({ kind: "stopScript", scriptPath: script.scriptPath }); }}
-                            />
-                        )
-                    : (
-                            <IconButton
-                                icon="debug-alt"
-                                label="Run & debug"
-                                disabled={disabled}
-                                disabledReason={missingReason}
-                                onClick={() => {
-                                    dispatch({
-                                        kind: "debugScript",
-                                        scriptPath: script.scriptPath,
-                                    });
-                                }}
-                            />
-                        )}
-                <IconButton
-                    icon={script.watching ? "eye-closed" : "eye"}
-                    label={script.watching ? "Unwatch" : "Watch"}
-                    disabled={disabled}
-                    disabledReason={missingReason}
-                    onClick={() => {
-                        dispatch({
-                            kind: "setWatch",
-                            target: { scriptPath: script.scriptPath },
-                            value: !script.watching,
-                        });
+                <ToggleIconButton
+                    active={script.debugging}
+                    whenActive={{
+                        icon: "debug-stop",
+                        label: "Stop debugging",
+                        disabled: busy,
+                        onClick: () => { dispatch({ kind: "stopScript", scriptPath }); },
+                    }}
+                    whenInactive={{
+                        icon: "debug-alt",
+                        label: "Run & debug",
+                        disabled,
+                        disabledReason: missingReason,
+                        onClick: () => { dispatch({ kind: "debugScript", scriptPath }); },
                     }}
                 />
-                <IconButton
-                    icon="go-to-file"
-                    label="Open file"
-                    disabled={busy || !script.exists}
-                    disabledReason={missingReason}
-                    onClick={() => { dispatch({ kind: "openScriptFile", scriptPath: script.scriptPath }); }}
+                <ToggleIconButton
+                    active={script.watching}
+                    whenActive={{
+                        icon: "eye-closed",
+                        label: "Unwatch",
+                        disabled,
+                        disabledReason: missingReason,
+                        onClick: () => { dispatch({ kind: "setWatch", target: { scriptPath }, value: false }); },
+                    }}
+                    whenInactive={{
+                        icon: "eye",
+                        label: "Watch",
+                        disabled,
+                        disabledReason: missingReason,
+                        onClick: () => { dispatch({ kind: "setWatch", target: { scriptPath }, value: true }); },
+                    }}
                 />
                 <IconButton
                     icon="symbol-parameter"
                     label={script.args ? `Pass arguments… (${script.args})` : "Pass arguments…"}
                     disabled={busy}
-                    onClick={() => { dispatch({ kind: "editScriptArgs", scriptPath: script.scriptPath }); }}
+                    onClick={() => { dispatch({ kind: "editScriptArgs", scriptPath }); }}
+                />
+                <IconButton
+                    icon="json"
+                    label="Create launch.json configuration"
+                    disabled={busy}
+                    onClick={() => { dispatch({ kind: "createScriptLaunchConfig", scriptPath }); }}
                 />
                 <IconButton
                     icon="close-small"
                     label="Remove script"
                     disabled={busy}
-                    onClick={() => { dispatch({ kind: "removeScript", scriptPath: script.scriptPath }); }}
+                    onClick={() => { dispatch({ kind: "removeScript", scriptPath }); }}
                 />
             </div>
         </div>

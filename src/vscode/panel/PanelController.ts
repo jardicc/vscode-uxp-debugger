@@ -10,10 +10,14 @@ import * as path from "path";
 import * as vscode from "vscode";
 import { NativeAddonUnavailableError, RequestTimeoutError } from "../../core/errors";
 import { parseManifestContent } from "../../core/manifest/manifest";
+import { buildPluginLaunchConfig, buildScriptLaunchConfig } from "../../core/launchConfig";
 import { parseArgsText } from "../../core/protocol/messages";
+import { isScriptPath, scriptDialogExtensions, scriptExtensionsLabel } from "../../core/scriptCatalog";
 import type { PluginSession } from "../../core/broker/SessionRegistry";
 import { connectedAppUnsupportedReason, HOST_APPS, parseRunningApps, type RunningApp } from "../../core/vulcan/hostAppCatalog";
+import { sortInstalledCandidates } from "../../core/vulcan/VulcanHostAppController";
 import type { UxpService } from "../UxpService";
+import { addLaunchConfiguration, launchFolderFor } from "../commands/addLaunchConfig";
 import { attachDebuggerCommand } from "../commands/attachDebugger";
 import { debugScriptCommand } from "../commands/debugScript";
 import { CONNECT_TIMEOUT_MS, launchHostAppByValue } from "../commands/hostAppLaunch";
@@ -34,8 +38,6 @@ import {
     rowKeyForAction,
 } from "./panelProtocol";
 import { type ManifestFacts, buildPanelState } from "./panelState";
-
-const SCRIPT_EXTENSIONS = [".js", ".ts", ".ccjs", ".psjs", ".idjs"];
 
 /** Safety net against pathological loops (symlink cycles, etc.) — see CONTROL-PANEL.md §3.3. */
 const MAX_ANCESTOR_DEPTH = 50;
@@ -90,6 +92,9 @@ export class PanelController implements vscode.Disposable {
     private postScheduled = false;
     /** Cache for {@link getInstalledAppIds} — see its doc comment. */
     private installedAppIds: string[] | undefined;
+    private installedAppsScheduled = false;
+    /** In-memory only — the InDesign crash banner returns after a VS Code restart. */
+    private inDesignBannerDismissed = false;
     /** Last result of {@link pollRunningApps}. */
     private runningApps: RunningApp[] = [];
     private runningAppsTimer: ReturnType<typeof setInterval> | undefined;
@@ -106,7 +111,10 @@ export class PanelController implements vscode.Disposable {
             this.postState();
         };
         this.disposables.push(
-            this.service.onAppsChanged(refresh),
+            this.service.onAppsChanged(() => {
+                this.resetUninstalledScriptTarget();
+                refresh();
+            }),
             this.service.onSessionStarted(refresh),
             this.service.onSessionEnded(refresh),
             this.service.onBrokerStateChanged(refresh),
@@ -121,6 +129,19 @@ export class PanelController implements vscode.Disposable {
             }),
             UxpInspectorPanel.onDidChangeInstances.on(refresh),
         );
+    }
+
+    /** The saved script target falls back to Auto once its app is known to be not installed. */
+    private resetUninstalledScriptTarget(): void {
+        const target = this.pluginRegistry.snapshot.scriptTargetApp;
+        if (
+            target
+            && this.installedAppIds
+            && !this.installedAppIds.includes(target)
+            && !this.service.connectedApps.some((app) => app.info.appId === target)
+        ) {
+            void this.pluginRegistry.setScriptTargetApp(undefined);
+        }
     }
 
     /** Hook up (or replace) the webview this controller renders into. */
@@ -165,6 +186,7 @@ export class PanelController implements vscode.Disposable {
             })),
             runningApps: this.runningApps,
             installedApps: this.getInstalledAppIds(),
+            inDesignBannerDismissed: this.inDesignBannerDismissed,
             sessions: this.service.sessions.map((session) => ({
                 clientSessionId: session.clientSessionId,
                 kind: session.kind,
@@ -187,7 +209,7 @@ export class PanelController implements vscode.Disposable {
           && path.basename(activeEditorPath).toLowerCase() === "manifest.json",
                 isScript:
           !!activeEditorPath
-          && SCRIPT_EXTENSIONS.includes(path.extname(activeEditorPath).toLowerCase()),
+          && isScriptPath(activeEditorPath),
                 path: activeEditorPath,
             },
             workspaceFolders: (vscode.workspace.workspaceFolders ?? []).map((f) => f.uri.fsPath),
@@ -327,6 +349,10 @@ export class PanelController implements vscode.Disposable {
                 return this.openPluginFolder(action.manifestPath, action.folder, action.mode);
             case "openManifestFile":
                 return this.openManifestFile(action.manifestPath);
+            case "createPluginLaunchConfig":
+                return this.createPluginLaunchConfig(action.manifestPath);
+            case "createScriptLaunchConfig":
+                return this.createScriptLaunchConfig(action.scriptPath);
             case "packPlugin":
                 return packManifest(action.manifestPath, this.output);
             case "launchHostApp":
@@ -339,6 +365,10 @@ export class PanelController implements vscode.Disposable {
                 return this.service.ensureStarted();
             case "requestTakeover":
                 return this.service.takeOverFromPanel();
+            case "dismissInDesignBanner":
+                this.inDesignBannerDismissed = true;
+                this.postState();
+                return;
             case "debugScript":
                 return this.debugScript(action.scriptPath);
             case "stopScript":
@@ -694,6 +724,29 @@ export class PanelController implements vscode.Disposable {
         await vscode.window.showTextDocument(doc, { preview: false });
     }
 
+    private async createPluginLaunchConfig(manifestPath: string): Promise<void> {
+        const folder = launchFolderFor(manifestPath);
+        if (!folder) {
+            void vscode.window.showErrorMessage("UXP: Open a workspace folder to create a launch.json configuration.");
+            return;
+        }
+        const { name } = this.readManifestFacts(manifestPath);
+        await addLaunchConfiguration(folder, buildPluginLaunchConfig(name, manifestPath, folder.uri.fsPath));
+    }
+
+    private async createScriptLaunchConfig(scriptPath: string): Promise<void> {
+        const folder = launchFolderFor(scriptPath);
+        if (!folder) {
+            void vscode.window.showErrorMessage("UXP: Open a workspace folder to create a launch.json configuration.");
+            return;
+        }
+        const stored = this.pluginRegistry.scriptByPath(scriptPath);
+        await addLaunchConfiguration(folder, buildScriptLaunchConfig(scriptPath, folder.uri.fsPath, {
+            app: this.pluginRegistry.snapshot.scriptTargetApp,
+            userArgs: parseArgsText(stored?.args ?? "") ?? [],
+        }));
+    }
+
     /**
     * Ancestor-folder picker (CONTROL-PANEL.md §3.3): walks up from the
    * manifest's own directory to (and including) the first folder containing
@@ -840,26 +893,35 @@ export class PanelController implements vscode.Disposable {
    * nothing is installed.
    */
     private getInstalledAppIds(): string[] | undefined {
-        if (this.installedAppIds) {
-            return this.installedAppIds;
-        }
-        const controller = this.service.getHostAppController();
-        const ids: string[] = [];
-        for (const app of HOST_APPS) {
-            try {
-                if (controller.getInstalledCandidates(app).length > 0) {
-                    ids.push(app.value);
+        if (!this.installedAppIds && !this.installedAppsScheduled) {
+            // The first native call loads the Vulcan addon and scans installed apps
+            // synchronously — defer it so the first snapshot isn't blocked by it.
+            this.installedAppsScheduled = true;
+            setTimeout(() => {
+                this.installedAppIds = this.detectInstalledAppIds();
+                if (this.installedAppIds) {
+                    this.resetUninstalledScriptTarget();
+                    this.postState();
                 }
-            }
-            catch (err) {
-                if (err instanceof NativeAddonUnavailableError) {
-                    return undefined;
-                }
-                throw err;
-            }
+            }, 0);
         }
-        this.installedAppIds = ids;
-        return ids;
+        return this.installedAppIds;
+    }
+
+    private detectInstalledAppIds(): string[] | undefined {
+        try {
+            const specifiers = this.service.getHostAppController().getSpecifiers();
+            return HOST_APPS
+                .filter((app) => sortInstalledCandidates(specifiers, app.sapCodes).length > 0)
+                .map((app) => app.value);
+        }
+        catch (err) {
+            if (err instanceof NativeAddonUnavailableError) {
+                return undefined;
+            }
+            this.output.appendLine(`[panel] Installed-app detection failed: ${err instanceof Error ? err.message : String(err)}`);
+            return undefined;
+        }
     }
 
     // -------------------------------------------------------------------------
@@ -923,7 +985,7 @@ export class PanelController implements vscode.Disposable {
             canSelectFiles: true,
             canSelectFolders: false,
             canSelectMany: true,
-            filters: { "UXP scripts": ["ccjs", "psjs", "idjs", "js", "ts"] },
+            filters: { "UXP scripts": scriptDialogExtensions() },
             openLabel: "Add Scripts",
         });
         for (const uri of picked ?? []) {
@@ -938,9 +1000,9 @@ export class PanelController implements vscode.Disposable {
             return;
         }
         const scriptPath = active.uri.fsPath;
-        if (!SCRIPT_EXTENSIONS.includes(path.extname(scriptPath).toLowerCase())) {
+        if (!isScriptPath(scriptPath)) {
             void vscode.window.showErrorMessage(
-                "UXP: The active file is not a UXP script (.ccjs / .psjs / .idjs / .js / .ts).",
+                `UXP: The active file is not a UXP script (${scriptExtensionsLabel()}).`,
             );
             return;
         }

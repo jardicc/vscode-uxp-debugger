@@ -40,6 +40,10 @@ export type PanelAction
             mode?: "reveal" | "addToWorkspace" | "newWindow";
         }
         | { kind: "openManifestFile"; manifestPath: string }
+  /** Appends a pre-filled `"uxp"` attach config to the workspace's launch.json. */
+        | { kind: "createPluginLaunchConfig"; manifestPath: string }
+  /** Appends a pre-filled `"uxp-script"` launch config to the workspace's launch.json. */
+        | { kind: "createScriptLaunchConfig"; scriptPath: string }
   /** Apps-section Start click → installed-version QuickPick + launch (host side). */
         | { kind: "launchHostApp"; appId: string }
         | { kind: "debugScript"; scriptPath: string }
@@ -68,6 +72,8 @@ export type PanelAction
    * skips the modal confirm dialog (the overlay itself is the confirmation).
    */
         | { kind: "requestTakeover" }
+  /** Closes the InDesign crash banner until the extension host restarts. */
+        | { kind: "dismissInDesignBanner" }
   /** Webview booted — request the first snapshot. */
         | { kind: "ready" };
 
@@ -160,6 +166,8 @@ export interface PanelState {
    * that omits the app.
    */
     installedApps?: string[];
+    /** The InDesign crash banner was closed in this session. */
+    inDesignBannerDismissed: boolean;
     breakOnLoad: { plugins: boolean };
     /** Host app id restriction for script runs, or undefined = any. */
     scriptTargetApp: string | undefined;
@@ -197,6 +205,7 @@ export function rowKeyForAction(action: PanelAction): string | undefined {
         case "closeInspector":
         case "openPluginFolder":
         case "openManifestFile":
+        case "createPluginLaunchConfig":
         case "removePlugin":
         case "packPlugin":
             return `plugin:${action.manifestPath}`;
@@ -204,6 +213,7 @@ export function rowKeyForAction(action: PanelAction): string | undefined {
         case "stopScript":
         case "restartScript":
         case "editScriptArgs":
+        case "createScriptLaunchConfig":
         case "removeScript":
             return `script:${action.scriptPath}`;
         case "launchHostApp":

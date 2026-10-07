@@ -5,8 +5,10 @@
 
 import type { FromWebviewMessage, PanelAction } from "../panelProtocol";
 
+export type SectionId = "apps" | "plugins" | "scripts";
+
 export interface PersistedUiState {
-    collapsed?: { apps?: boolean; plugins?: boolean; scripts?: boolean };
+    collapsed?: Partial<Record<SectionId, boolean>>;
 }
 
 interface VsCodeWebviewApi {

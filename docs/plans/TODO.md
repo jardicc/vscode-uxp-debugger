@@ -5,9 +5,12 @@
 - add new host apps support
 - feature to attach plugins without loading them via Debugger?
 - investigate Media Encoder launch hanging when the broker is already running
+- allow to fetch plugin/script entries from launch.json config? It contains all necessary data. Or would it be temporary only while workspace is opened?
 
 ## DONE
 
+- script targeting: extension decides compatible hosts, target only narrows (documented)
+- move json config creation under triple dot
 - debugging gated by catalog minVersion (launch anything, debug only supported versions)
 - debug auto-loads the plugin and respects the break on load checkbox
 - test MacOS

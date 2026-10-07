@@ -8,8 +8,12 @@ import clsx from "clsx";
 import type { ReactNode } from "react";
 import { HOST_APPS, type RunningApp } from "../../../core/vulcan/hostAppCatalog";
 import type { ConnectedAppView, PanelState } from "../panelProtocol";
-import { IconButton, Spinner } from "./common";
+import { BrokerStatusBanner } from "./BrokerStatus";
+import { IconButton, SectionHeader, Spinner } from "./components";
+import { InDesignCrashBanner } from "./InDesignCrashBanner";
 import { dispatch } from "./vscodeApi";
+
+type AppsInfo = Pick<PanelState, "connectedApps" | "runningApps" | "launchingApps" | "installedApps" | "inDesignBannerDismissed">;
 
 interface AppStatus {
     connected: ConnectedAppView | undefined;
@@ -21,17 +25,36 @@ interface AppStatus {
     notInstalled: boolean;
 }
 
-export function AppsSection({ state }: { state: PanelState }): ReactNode {
+export function AppsSection({
+    brokerStatus,
+    brokerError,
+    apps,
+    collapsed,
+    onToggle,
+}: {
+    brokerStatus: PanelState["brokerStatus"];
+    brokerError: PanelState["brokerError"];
+    apps: AppsInfo;
+    collapsed: boolean;
+    onToggle: () => void;
+}): ReactNode {
     return (
-        <div className="section-body apps-section">
-            {HOST_APPS.map((app) => (
-                <AppRow key={app.value} appName={app.name} appId={app.value} state={state} />
-            ))}
-        </div>
+        <>
+            <SectionHeader title="Apps" collapsed={collapsed} onToggle={onToggle} />
+            <BrokerStatusBanner brokerStatus={brokerStatus} brokerError={brokerError} />
+            <InDesignCrashBanner installedApps={apps.installedApps} dismissed={apps.inDesignBannerDismissed} />
+            {!collapsed && (
+                <div className="section-body apps-section">
+                    {HOST_APPS.map((app) => (
+                        <AppRow key={app.value} appName={app.name} appId={app.value} apps={apps} />
+                    ))}
+                </div>
+            )}
+        </>
     );
 }
 
-function getAppStatus(appId: string, state: PanelState): AppStatus {
+function getAppStatus(appId: string, state: AppsInfo): AppStatus {
     const connected = state.connectedApps.find((a) => a.appId === appId);
     // Vulcan also lists the connected instance — only the others are extra info.
     const otherRunning = state.runningApps.filter((a) => a.appId === appId && a.version !== connected?.version);
@@ -85,13 +108,13 @@ function getStatusText({ connected, otherRunning, launching, notInstalled }: App
 function AppRow({
     appName,
     appId,
-    state,
+    apps,
 }: {
     appName: string;
     appId: string;
-    state: PanelState;
+    apps: AppsInfo;
 }): ReactNode {
-    const status = getAppStatus(appId, state);
+    const status = getAppStatus(appId, apps);
     const { connected, running, launching, unsupported, notInstalled } = status;
 
     const statusIcon = launching

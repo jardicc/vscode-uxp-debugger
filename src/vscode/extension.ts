@@ -9,7 +9,6 @@ import { isDevModeEnabled } from "../core/devmode/devMode";
 import { cleanupAllStrippedScripts } from "../core/stripTypeScript";
 import { UxpService } from "./UxpService";
 import { attachDebuggerCommand } from "./commands/attachDebugger";
-import { configureLaunchJsonCommand } from "./commands/configureLaunchJson";
 import { debugScriptCommand } from "./commands/debugScript";
 import { enableDevModeCommand } from "./commands/enableDevMode";
 import { expHostAppMethodsCommand } from "./commands/expHostAppMethods";
@@ -264,7 +263,6 @@ export function activate(context: vscode.ExtensionContext): UxpDebuggerTestApi {
         // been enabled already, or the elevation prompt may have been declined.
         setBoolContext("uxp.devModeEnabled", isDevModeEnabled());
     });
-    register("uxp.configureLaunchJson", () => configureLaunchJsonCommand());
 
     // Command Palette visibility (package.json menus.commandPalette "when"
     // clauses) for commands that are only ever useful in certain states.
