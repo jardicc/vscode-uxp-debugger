@@ -10,9 +10,10 @@ import { HOST_APPS, type RunningApp } from "../../../core/vulcan/hostAppCatalog"
 import type { ConnectedAppView, PanelState } from "../panelProtocol";
 import { BrokerStatusBanner } from "./BrokerStatus";
 import { IconButton, SectionHeader, Spinner } from "./components";
+import { InDesignCrashBanner } from "./InDesignCrashBanner";
 import { dispatch } from "./vscodeApi";
 
-type AppsInfo = Pick<PanelState, "connectedApps" | "runningApps" | "launchingApps" | "installedApps">;
+type AppsInfo = Pick<PanelState, "connectedApps" | "runningApps" | "launchingApps" | "installedApps" | "inDesignBannerDismissed">;
 
 interface AppStatus {
     connected: ConnectedAppView | undefined;
@@ -41,6 +42,7 @@ export function AppsSection({
         <>
             <SectionHeader title="Apps" collapsed={collapsed} onToggle={onToggle} />
             <BrokerStatusBanner brokerStatus={brokerStatus} brokerError={brokerError} />
+            <InDesignCrashBanner installedApps={apps.installedApps} dismissed={apps.inDesignBannerDismissed} />
             {!collapsed && (
                 <div className="section-body apps-section">
                     {HOST_APPS.map((app) => (

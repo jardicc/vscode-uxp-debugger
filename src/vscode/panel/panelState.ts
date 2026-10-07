@@ -52,6 +52,8 @@ export interface SnapshotInputs {
     runningApps?: RunningApp[];
     /** Catalog app ids confirmed installed, or undefined when unknown (see `PanelState`). */
     installedApps?: string[];
+    /** See `PanelState.inDesignBannerDismissed`; defaults to false. */
+    inDesignBannerDismissed?: boolean;
     sessions: SessionFact[];
     /** clientSessionIds with an attached debugger. */
     attachedSessionIds: ReadonlySet<string>;
@@ -245,6 +247,7 @@ export function buildPanelState(inputs: SnapshotInputs): PanelState {
         launchingApps,
         runningApps: inputs.runningApps ?? [],
         installedApps: inputs.installedApps,
+        inDesignBannerDismissed: inputs.inDesignBannerDismissed ?? false,
         breakOnLoad: inputs.registry.breakOnLoad,
         scriptTargetApp: inputs.registry.scriptTargetApp,
         compactView: inputs.registry.compactView,

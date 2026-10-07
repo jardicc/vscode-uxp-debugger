@@ -72,6 +72,8 @@ export type PanelAction
    * skips the modal confirm dialog (the overlay itself is the confirmation).
    */
         | { kind: "requestTakeover" }
+  /** Closes the InDesign crash banner until the extension host restarts. */
+        | { kind: "dismissInDesignBanner" }
   /** Webview booted — request the first snapshot. */
         | { kind: "ready" };
 
@@ -164,6 +166,8 @@ export interface PanelState {
    * that omits the app.
    */
     installedApps?: string[];
+    /** The InDesign crash banner was closed in this session. */
+    inDesignBannerDismissed: boolean;
     breakOnLoad: { plugins: boolean };
     /** Host app id restriction for script runs, or undefined = any. */
     scriptTargetApp: string | undefined;

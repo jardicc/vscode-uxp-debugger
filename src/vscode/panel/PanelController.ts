@@ -93,6 +93,8 @@ export class PanelController implements vscode.Disposable {
     /** Cache for {@link getInstalledAppIds} — see its doc comment. */
     private installedAppIds: string[] | undefined;
     private installedAppsScheduled = false;
+    /** In-memory only — the InDesign crash banner returns after a VS Code restart. */
+    private inDesignBannerDismissed = false;
     /** Last result of {@link pollRunningApps}. */
     private runningApps: RunningApp[] = [];
     private runningAppsTimer: ReturnType<typeof setInterval> | undefined;
@@ -168,6 +170,7 @@ export class PanelController implements vscode.Disposable {
             })),
             runningApps: this.runningApps,
             installedApps: this.getInstalledAppIds(),
+            inDesignBannerDismissed: this.inDesignBannerDismissed,
             sessions: this.service.sessions.map((session) => ({
                 clientSessionId: session.clientSessionId,
                 kind: session.kind,
@@ -346,6 +349,10 @@ export class PanelController implements vscode.Disposable {
                 return this.service.ensureStarted();
             case "requestTakeover":
                 return this.service.takeOverFromPanel();
+            case "dismissInDesignBanner":
+                this.inDesignBannerDismissed = true;
+                this.postState();
+                return;
             case "debugScript":
                 return this.debugScript(action.scriptPath);
             case "stopScript":
