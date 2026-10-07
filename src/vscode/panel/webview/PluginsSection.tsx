@@ -15,6 +15,7 @@ import {
     PathLabel,
     SectionHeader,
     Spinner,
+    ToggleIconButton,
 } from "./components";
 import { getUICodeByValue } from "../../../core/vulcan/hostAppCatalog";
 
@@ -130,6 +131,7 @@ function pluginStatus(plugin: PluginView, busy: boolean): { label: string; icon:
 
 function PluginRow({ plugin, state }: { plugin: PluginView; state: PanelState }): ReactNode {
     const busy = !!plugin.busy;
+    const { manifestPath } = plugin;
     const breakOnLoad = state.breakOnLoad.plugins;
     const connectedIds = new Set(state.connectedApps.map((a) => a.appId));
     const { label: stateLabel, icon: statusIcon } = pluginStatus(plugin, busy);
@@ -139,31 +141,31 @@ function PluginRow({ plugin, state }: { plugin: PluginView; state: PanelState })
             icon: "folder-opened",
             label: "Open folder…",
             disabled: busy,
-            onClick: () => { dispatch({ kind: "openPluginFolder", manifestPath: plugin.manifestPath }); },
+            onClick: () => { dispatch({ kind: "openPluginFolder", manifestPath }); },
         },
         {
             icon: "go-to-file",
             label: "Open manifest.json",
             disabled: busy,
-            onClick: () => { dispatch({ kind: "openManifestFile", manifestPath: plugin.manifestPath }); },
+            onClick: () => { dispatch({ kind: "openManifestFile", manifestPath }); },
         },
         {
             icon: "json",
             label: "Create launch.json configuration",
             disabled: busy,
-            onClick: () => { dispatch({ kind: "createPluginLaunchConfig", manifestPath: plugin.manifestPath }); },
+            onClick: () => { dispatch({ kind: "createPluginLaunchConfig", manifestPath }); },
         },
         {
             icon: "package",
             label: "Create installer…",
             disabled: busy || !!plugin.manifestError,
-            onClick: () => { dispatch({ kind: "packPlugin", manifestPath: plugin.manifestPath }); },
+            onClick: () => { dispatch({ kind: "packPlugin", manifestPath }); },
         },
         {
             icon: "sync",
             label: "Reload (unload + load)",
             disabled: busy || !plugin.loaded,
-            onClick: () => { dispatch({ kind: "reloadPlugin", manifestPath: plugin.manifestPath, breakOnLoad }); },
+            onClick: () => { dispatch({ kind: "reloadPlugin", manifestPath, breakOnLoad }); },
         },
     ];
 
@@ -201,87 +203,78 @@ function PluginRow({ plugin, state }: { plugin: PluginView; state: PanelState })
                 </div>
             </div>
             <div className="row-actions">
-                {plugin.loaded
-                    ? (
-                            <IconButton
-                                icon="debug-stop"
-                                label="Unload"
-                                disabled={busy}
-                                onClick={() => { dispatch({ kind: "unloadPlugin", manifestPath: plugin.manifestPath }); }}
-                            />
-                        )
-                    : (
-                            <IconButton
-                                icon="play"
-                                label={breakOnLoad ? "Load (break on load)" : "Load"}
-                                disabled={busy || !!plugin.manifestError}
-                                disabledReason={plugin.manifestError}
-                                onClick={() => { dispatch({ kind: "loadPlugin", manifestPath: plugin.manifestPath, breakOnLoad }); }}
-                            />
-                        )}
-                {plugin.debugging
-                    ? (
-                            <IconButton
-                                icon="debug-disconnect"
-                                label="Stop debugging"
-                                disabled={busy}
-                                onClick={() => { dispatch({ kind: "detachDebugger", manifestPath: plugin.manifestPath }); }}
-                            />
-                        )
-                    : (
-                            <IconButton
-                                icon="debug"
-                                label={
-                                    plugin.pendingBreakOnStart ? "Attach debugger (plugin is paused)" : "Debug"
-                                }
-                                emphasized={plugin.pendingBreakOnStart}
-                                disabled={busy || !!plugin.manifestError}
-                                disabledReason={plugin.manifestError}
-                                onClick={() => { dispatch({ kind: "attachDebugger", manifestPath: plugin.manifestPath, breakOnLoad }); }}
-                            />
-                        )}
-                {plugin.inspectorOpen
-                    ? (
-                            <IconButton
-                                icon="right-panel-hide"
-                                label="Close inspector"
-                                disabled={busy}
-                                onClick={() => { dispatch({ kind: "closeInspector", manifestPath: plugin.manifestPath }); }}
-                            />
-                        )
-                    : (
-                            <IconButton
-                                icon="inspect"
-                                label={
-                                    plugin.pendingBreakOnStart
-                                        ? "Inspector unavailable — attach the debugger first"
-                                        : "Open HTML/CSS inspector"
-                                }
-                                disabled={busy || !plugin.loaded || plugin.pendingBreakOnStart}
-                                disabledReason={
-                                    plugin.pendingBreakOnStart
-                                        ? "Attach the debugger first (break on start)"
-                                        : "Load the plugin first"
-                                }
-                                onClick={() => { dispatch({ kind: "openInspector", manifestPath: plugin.manifestPath }); }}
-                            />
-                        )}
+                <ToggleIconButton
+                    active={plugin.loaded}
+                    whenActive={{
+                        icon: "debug-stop",
+                        label: "Unload",
+                        disabled: busy,
+                        onClick: () => { dispatch({ kind: "unloadPlugin", manifestPath }); },
+                    }}
+                    whenInactive={{
+                        icon: "play",
+                        label: breakOnLoad ? "Load (break on load)" : "Load",
+                        disabled: busy || !!plugin.manifestError,
+                        disabledReason: plugin.manifestError,
+                        onClick: () => { dispatch({ kind: "loadPlugin", manifestPath, breakOnLoad }); },
+                    }}
+                />
+                <ToggleIconButton
+                    active={plugin.debugging}
+                    whenActive={{
+                        icon: "debug-disconnect",
+                        label: "Stop debugging",
+                        disabled: busy,
+                        onClick: () => { dispatch({ kind: "detachDebugger", manifestPath }); },
+                    }}
+                    whenInactive={{
+                        icon: "debug",
+                        label: plugin.pendingBreakOnStart ? "Attach debugger (plugin is paused)" : "Debug",
+                        emphasized: plugin.pendingBreakOnStart,
+                        disabled: busy || !!plugin.manifestError,
+                        disabledReason: plugin.manifestError,
+                        onClick: () => { dispatch({ kind: "attachDebugger", manifestPath, breakOnLoad }); },
+                    }}
+                />
+                <ToggleIconButton
+                    active={plugin.inspectorOpen}
+                    whenActive={{
+                        icon: "right-panel-hide",
+                        label: "Close inspector",
+                        disabled: busy,
+                        onClick: () => { dispatch({ kind: "closeInspector", manifestPath }); },
+                    }}
+                    whenInactive={{
+                        icon: "inspect",
+                        label: plugin.pendingBreakOnStart
+                            ? "Inspector unavailable — attach the debugger first"
+                            : "Open HTML/CSS inspector",
+                        disabled: busy || !plugin.loaded || plugin.pendingBreakOnStart,
+                        disabledReason: plugin.pendingBreakOnStart
+                            ? "Attach the debugger first (break on start)"
+                            : "Load the plugin first",
+                        onClick: () => { dispatch({ kind: "openInspector", manifestPath }); },
+                    }}
+                />
                 <IconButton
                     icon="refresh"
                     label="Refresh (in-place reload)"
                     disabled={busy || !plugin.loaded}
-                    onClick={() => { dispatch({ kind: "refreshPlugin", manifestPath: plugin.manifestPath }); }}
+                    onClick={() => { dispatch({ kind: "refreshPlugin", manifestPath }); }}
                 />
-                <IconButton
-                    icon={plugin.watching ? "eye-closed" : "eye"}
-                    label={plugin.watching ? "Unwatch" : "Watch"}
-                    disabled={busy}
-                    onClick={() => {
-                        dispatch({
-                            kind: "setWatch",
-                            target: { manifestPath: plugin.manifestPath },
-                            value: !plugin.watching,
-                        });
+                <ToggleIconButton
+                    active={plugin.watching}
+                    whenActive={{
+                        icon: "eye-closed",
+                        label: "Unwatch",
+                        disabled: busy,
+                        onClick: () => { dispatch({ kind: "setWatch", target: { manifestPath }, value: false }); },
+                    }}
+                    whenInactive={{
+                        icon: "eye",
+                        label: "Watch",
+                        disabled: busy,
+                        onClick: () => { dispatch({ kind: "setWatch", target: { manifestPath }, value: true }); },
                     }}
                 />
                 <OverflowMenu items={menuItems} disabled={busy} />
@@ -289,7 +282,7 @@ function PluginRow({ plugin, state }: { plugin: PluginView; state: PanelState })
                     icon="close-small"
                     label="Remove plugin from this list"
                     disabled={busy}
-                    onClick={() => { dispatch({ kind: "removePlugin", manifestPath: plugin.manifestPath }); }}
+                    onClick={() => { dispatch({ kind: "removePlugin", manifestPath }); }}
                 />
             </div>
         </div>

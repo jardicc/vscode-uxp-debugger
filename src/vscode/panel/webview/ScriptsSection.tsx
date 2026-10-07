@@ -10,7 +10,7 @@ import { SCRIPT_EXTENSIONS } from "../../../core/scriptCatalog";
 import { getUICodeByValue } from "../../../core/vulcan/hostAppCatalog";
 import type { PanelState, ScriptView } from "../panelProtocol";
 import { dispatch } from "./vscodeApi";
-import { IconButton, OverflowMenu, PathLabel, SectionHeader, Spinner } from "./components";
+import { IconButton, OverflowMenu, PathLabel, SectionHeader, Spinner, ToggleIconButton } from "./components";
 
 export function ScriptsHeader({
     state,
@@ -133,6 +133,7 @@ function renderStatusIcon(script: ScriptView, busy: boolean): ReactNode {
 
 function ScriptRow({ script }: { script: ScriptView }): ReactNode {
     const busy = !!script.busy;
+    const { scriptPath } = script;
     const disabled = busy || !script.exists;
     const missingReason = script.exists ? undefined : "Script file not found on disk";
 
@@ -176,59 +177,56 @@ function ScriptRow({ script }: { script: ScriptView }): ReactNode {
                 </div>
             </div>
             <div className="row-actions">
-                {script.debugging
-                    ? (
-                            <IconButton
-                                icon="debug-stop"
-                                label="Stop debugging"
-                                disabled={busy}
-                                onClick={() => { dispatch({ kind: "stopScript", scriptPath: script.scriptPath }); }}
-                            />
-                        )
-                    : (
-                            <IconButton
-                                icon="debug-alt"
-                                label="Run & debug"
-                                disabled={disabled}
-                                disabledReason={missingReason}
-                                onClick={() => {
-                                    dispatch({
-                                        kind: "debugScript",
-                                        scriptPath: script.scriptPath,
-                                    });
-                                }}
-                            />
-                        )}
-                <IconButton
-                    icon={script.watching ? "eye-closed" : "eye"}
-                    label={script.watching ? "Unwatch" : "Watch"}
-                    disabled={disabled}
-                    disabledReason={missingReason}
-                    onClick={() => {
-                        dispatch({
-                            kind: "setWatch",
-                            target: { scriptPath: script.scriptPath },
-                            value: !script.watching,
-                        });
+                <ToggleIconButton
+                    active={script.debugging}
+                    whenActive={{
+                        icon: "debug-stop",
+                        label: "Stop debugging",
+                        disabled: busy,
+                        onClick: () => { dispatch({ kind: "stopScript", scriptPath }); },
+                    }}
+                    whenInactive={{
+                        icon: "debug-alt",
+                        label: "Run & debug",
+                        disabled,
+                        disabledReason: missingReason,
+                        onClick: () => { dispatch({ kind: "debugScript", scriptPath }); },
+                    }}
+                />
+                <ToggleIconButton
+                    active={script.watching}
+                    whenActive={{
+                        icon: "eye-closed",
+                        label: "Unwatch",
+                        disabled,
+                        disabledReason: missingReason,
+                        onClick: () => { dispatch({ kind: "setWatch", target: { scriptPath }, value: false }); },
+                    }}
+                    whenInactive={{
+                        icon: "eye",
+                        label: "Watch",
+                        disabled,
+                        disabledReason: missingReason,
+                        onClick: () => { dispatch({ kind: "setWatch", target: { scriptPath }, value: true }); },
                     }}
                 />
                 <IconButton
                     icon="symbol-parameter"
                     label={script.args ? `Pass arguments… (${script.args})` : "Pass arguments…"}
                     disabled={busy}
-                    onClick={() => { dispatch({ kind: "editScriptArgs", scriptPath: script.scriptPath }); }}
+                    onClick={() => { dispatch({ kind: "editScriptArgs", scriptPath }); }}
                 />
                 <IconButton
                     icon="json"
                     label="Create launch.json configuration"
                     disabled={busy}
-                    onClick={() => { dispatch({ kind: "createScriptLaunchConfig", scriptPath: script.scriptPath }); }}
+                    onClick={() => { dispatch({ kind: "createScriptLaunchConfig", scriptPath }); }}
                 />
                 <IconButton
                     icon="close-small"
                     label="Remove script"
                     disabled={busy}
-                    onClick={() => { dispatch({ kind: "removeScript", scriptPath: script.scriptPath }); }}
+                    onClick={() => { dispatch({ kind: "removeScript", scriptPath }); }}
                 />
             </div>
         </div>
