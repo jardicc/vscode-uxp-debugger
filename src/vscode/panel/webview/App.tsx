@@ -7,10 +7,9 @@ import { type ReactNode, useEffect, useState } from "react";
 import clsx from "clsx";
 import type { PanelState, ToWebviewMessage } from "../panelProtocol";
 import { AppsSection } from "./AppsSection";
-import { BrokerBlockedOverlay, BrokerStatusBanner } from "./BrokerStatus";
-import { PluginsHeader, PluginsSection } from "./PluginsSection";
-import { ScriptsHeader, ScriptsSection } from "./ScriptsSection";
-import { SectionHeader } from "./components";
+import { BrokerBlockedOverlay } from "./BrokerStatus";
+import { PluginsSection } from "./PluginsSection";
+import { ScriptsSection } from "./ScriptsSection";
 import { dispatch, getUiState, saveUiState, type SectionId } from "./vscodeApi";
 
 export function App(): ReactNode {
@@ -61,25 +60,31 @@ export function App(): ReactNode {
     return (
         <div className={clsx("panel-root", { compact: state.compactView })}>
             <div className="panel-content-wrapper">
-                <BrokerBlockedOverlay state={state} />
+                <BrokerBlockedOverlay brokerStatus={state.brokerStatus} />
                 <div className="panel-content">
-                    <SectionHeader title="Apps" collapsed={collapsed.apps} onToggle={() => { toggleSection("apps"); }} />
-                    <BrokerStatusBanner state={state} />
-                    {!collapsed.apps && <AppsSection state={state} />}
-
-                    <PluginsHeader
-                        state={state}
+                    <AppsSection
+                        brokerStatus={state.brokerStatus}
+                        brokerError={state.brokerError}
+                        apps={state}
+                        collapsed={collapsed.apps}
+                        onToggle={() => { toggleSection("apps"); }}
+                    />
+                    <PluginsSection
+                        plugins={state.plugins}
+                        breakOnLoad={state.breakOnLoad.plugins}
+                        connectedApps={state.connectedApps}
+                        activeEditorIsManifest={state.activeEditor.isManifest}
                         collapsed={collapsed.plugins}
                         onToggle={() => { toggleSection("plugins"); }}
                     />
-                    {!collapsed.plugins && <PluginsSection state={state} />}
-
-                    <ScriptsHeader
-                        state={state}
+                    <ScriptsSection
+                        scripts={state.scripts}
+                        connectedApps={state.connectedApps}
+                        scriptTargetApp={state.scriptTargetApp}
+                        activeEditorIsScript={state.activeEditor.isScript}
                         collapsed={collapsed.scripts}
                         onToggle={() => { toggleSection("scripts"); }}
                     />
-                    {!collapsed.scripts && <ScriptsSection state={state} />}
                 </div>
             </div>
             <AttributionFooter />

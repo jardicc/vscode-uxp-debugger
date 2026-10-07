@@ -8,52 +8,61 @@ import type { ChangeEvent, ReactNode } from "react";
 import { Fragment } from "react";
 import { SCRIPT_EXTENSIONS } from "../../../core/scriptCatalog";
 import { getUICodeByValue } from "../../../core/vulcan/hostAppCatalog";
-import type { PanelState, ScriptView } from "../panelProtocol";
+import type { ConnectedAppView, ScriptView } from "../panelProtocol";
 import { dispatch } from "./vscodeApi";
 import { IconButton, OverflowMenu, PathLabel, SectionHeader, Spinner, ToggleIconButton } from "./components";
 
-export function ScriptsHeader({
-    state,
+export function ScriptsSection({
+    scripts,
+    connectedApps,
+    scriptTargetApp,
+    activeEditorIsScript,
     collapsed,
     onToggle,
 }: {
-    state: PanelState;
+    scripts: ScriptView[];
+    connectedApps: ConnectedAppView[];
+    scriptTargetApp: string | undefined;
+    activeEditorIsScript: boolean;
     collapsed: boolean;
     onToggle: () => void;
 }): ReactNode {
     return (
-        <SectionHeader title="Scripts" collapsed={collapsed} onToggle={onToggle}>
-            <span className="section-label">Target:</span>
-            <ScriptTargetSelect state={state} />
-            <AddScriptButton state={state} />
-        </SectionHeader>
+        <>
+            <SectionHeader title="Scripts" collapsed={collapsed} onToggle={onToggle}>
+                <span className="section-label">Target:</span>
+                <ScriptTargetSelect connectedApps={connectedApps} scriptTargetApp={scriptTargetApp} />
+                <AddScriptButton activeEditorIsScript={activeEditorIsScript} />
+            </SectionHeader>
+            {!collapsed && (scripts.length === 0 ? <ScriptsEmptyState /> : <ScriptsList scripts={scripts} />)}
+        </>
     );
 }
 
-export function ScriptsSection({ state }: { state: PanelState }): ReactNode {
-    if (state.scripts.length === 0) {
-        return (
-            <div className="empty-state">
-                <p>No scripts yet.</p>
-                <p>
-                    Register a
-                    {" "}
-                    {SCRIPT_EXTENSIONS.map((ext, i) => (
-                        <Fragment key={ext}>
-                            {i > 0 && " / "}
-                            <code>{ext}</code>
-                        </Fragment>
-                    ))}
-                    {" "}
-                    file to run and debug it in a host app.
-                </p>
-            </div>
-        );
-    }
+function ScriptsEmptyState(): ReactNode {
+    return (
+        <div className="empty-state">
+            <p>No scripts yet.</p>
+            <p>
+                Register a
+                {" "}
+                {SCRIPT_EXTENSIONS.map((ext, i) => (
+                    <Fragment key={ext}>
+                        {i > 0 && " / "}
+                        <code>{ext}</code>
+                    </Fragment>
+                ))}
+                {" "}
+                file to run and debug it in a host app.
+            </p>
+        </div>
+    );
+}
 
+function ScriptsList({ scripts }: { scripts: ScriptView[] }): ReactNode {
     return (
         <div className="section-body scripts-section">
-            {state.scripts.map((script) => (
+            {scripts.map((script) => (
                 <ScriptRow key={script.scriptPath} script={script} />
             ))}
         </div>
@@ -61,8 +70,7 @@ export function ScriptsSection({ state }: { state: PanelState }): ReactNode {
 }
 
 /** "+" add-script control for the Scripts section header. */
-function AddScriptButton({ state }: { state: PanelState }): ReactNode {
-    const hasScript = state.activeEditor.isScript;
+function AddScriptButton({ activeEditorIsScript }: { activeEditorIsScript: boolean }): ReactNode {
     return (
         <OverflowMenu
             icon="add"
@@ -74,7 +82,7 @@ function AddScriptButton({ state }: { state: PanelState }): ReactNode {
                 },
                 {
                     label: "Currently opened script",
-                    disabled: !hasScript,
+                    disabled: !activeEditorIsScript,
                     onClick: () => { dispatch({ kind: "addActiveScript" }); },
                 },
             ]}
@@ -83,17 +91,23 @@ function AddScriptButton({ state }: { state: PanelState }): ReactNode {
 }
 
 /** "Target host app" dropdown for the Scripts section header (§9.9). */
-function ScriptTargetSelect({ state }: { state: PanelState }): ReactNode {
+function ScriptTargetSelect({
+    connectedApps,
+    scriptTargetApp,
+}: {
+    connectedApps: ConnectedAppView[];
+    scriptTargetApp: string | undefined;
+}): ReactNode {
     return (
         <select
             className="target-select"
             title="Which connected host app runs the scripts"
-            value={state.scriptTargetApp ?? ""}
+            value={scriptTargetApp ?? ""}
             onClick={(e) => { e.stopPropagation(); }}
             onChange={(e: ChangeEvent<HTMLSelectElement>) => { dispatch({ kind: "setScriptTargetApp", appId: e.target.value || undefined }); }}
         >
             <option value="">Auto</option>
-            {state.connectedApps.map((app) => (
+            {connectedApps.map((app) => (
                 <option
                     key={app.appId}
                     value={app.appId}
@@ -104,10 +118,10 @@ function ScriptTargetSelect({ state }: { state: PanelState }): ReactNode {
                     {!app.supportsScripts && " (scripts n/a)"}
                 </option>
             ))}
-            {state.scriptTargetApp
-                && !state.connectedApps.some((a) => a.appId === state.scriptTargetApp) && (
-                <option value={state.scriptTargetApp}>
-                    {`${getUICodeByValue(state.scriptTargetApp) || state.scriptTargetApp} (not connected)`}
+            {scriptTargetApp
+                && !connectedApps.some((a) => a.appId === scriptTargetApp) && (
+                <option value={scriptTargetApp}>
+                    {`${getUICodeByValue(scriptTargetApp) || scriptTargetApp} (not connected)`}
                 </option>
             )}
         </select>

@@ -5,7 +5,7 @@
 
 import clsx from "clsx";
 import type { ChangeEvent, ReactNode } from "react";
-import type { PanelState, PluginView } from "../panelProtocol";
+import type { ConnectedAppView, PluginView } from "../panelProtocol";
 import { parentFolder } from "./pathUtils";
 import { dispatch } from "./vscodeApi";
 import {
@@ -20,12 +20,63 @@ import {
 } from "./components";
 import { getUICodeByValue } from "../../../core/vulcan/hostAppCatalog";
 
-export function PluginsHeader({
-    state,
+export function PluginsSection({
+    plugins,
+    breakOnLoad,
+    connectedApps,
+    activeEditorIsManifest,
     collapsed,
     onToggle,
 }: {
-    state: PanelState;
+    plugins: PluginView[];
+    breakOnLoad: boolean;
+    connectedApps: ConnectedAppView[];
+    activeEditorIsManifest: boolean;
+    collapsed: boolean;
+    onToggle: () => void;
+}): ReactNode {
+    const connectedIds = new Set(connectedApps.map((a) => a.appId));
+
+    return (
+        <>
+            <PluginsHeader
+                breakOnLoad={breakOnLoad}
+                activeEditorIsManifest={activeEditorIsManifest}
+                collapsed={collapsed}
+                onToggle={onToggle}
+            />
+            {!collapsed && (
+                plugins.length === 0
+                    ? (
+                            <div className="empty-state">
+                                <p>No plugins registered yet. Click the plus icon above to add one.</p>
+                            </div>
+                        )
+                    : (
+                            <div className="section-body plugins-section">
+                                {plugins.map((plugin) => (
+                                    <PluginRow
+                                        key={plugin.manifestPath}
+                                        plugin={plugin}
+                                        breakOnLoad={breakOnLoad}
+                                        connectedIds={connectedIds}
+                                    />
+                                ))}
+                            </div>
+                        )
+            )}
+        </>
+    );
+}
+
+function PluginsHeader({
+    breakOnLoad,
+    activeEditorIsManifest,
+    collapsed,
+    onToggle,
+}: {
+    breakOnLoad: boolean;
+    activeEditorIsManifest: boolean;
     collapsed: boolean;
     onToggle: () => void;
 }): ReactNode {
@@ -38,7 +89,7 @@ export function PluginsHeader({
             >
                 <input
                     type="checkbox"
-                    checked={state.breakOnLoad.plugins}
+                    checked={breakOnLoad}
                     onChange={(e: ChangeEvent<HTMLInputElement>) => {
                         dispatch({ kind: "setBreakOnLoad", scope: "plugins", value: e.target.checked });
                     }}
@@ -55,30 +106,12 @@ export function PluginsHeader({
                     },
                     {
                         label: "Currently opened manifest.json",
-                        disabled: !state.activeEditor.isManifest,
+                        disabled: !activeEditorIsManifest,
                         onClick: () => { dispatch({ kind: "addActiveManifest" }); },
                     },
                 ]}
             />
         </SectionHeader>
-    );
-}
-
-export function PluginsSection({ state }: { state: PanelState }): ReactNode {
-    if (state.plugins.length === 0) {
-        return (
-            <div className="empty-state">
-                <p>No plugins registered yet. Click the plus icon above to add one.</p>
-            </div>
-        );
-    }
-
-    return (
-        <div className="section-body plugins-section">
-            {state.plugins.map((plugin) => (
-                <PluginRow key={plugin.manifestPath} plugin={plugin} state={state} />
-            ))}
-        </div>
     );
 }
 
@@ -123,11 +156,17 @@ function pluginStatus(plugin: PluginView, busy: boolean): { label: string; icon:
     };
 }
 
-function PluginRow({ plugin, state }: { plugin: PluginView; state: PanelState }): ReactNode {
+function PluginRow({
+    plugin,
+    breakOnLoad,
+    connectedIds,
+}: {
+    plugin: PluginView;
+    breakOnLoad: boolean;
+    connectedIds: ReadonlySet<string>;
+}): ReactNode {
     const busy = !!plugin.busy;
     const { manifestPath } = plugin;
-    const breakOnLoad = state.breakOnLoad.plugins;
-    const connectedIds = new Set(state.connectedApps.map((a) => a.appId));
     const { label: stateLabel, icon: statusIcon } = pluginStatus(plugin, busy);
 
     const menuItems: MenuItem[] = [

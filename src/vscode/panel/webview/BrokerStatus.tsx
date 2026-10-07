@@ -18,8 +18,14 @@ import { dispatch } from "./vscodeApi";
  * either state, so a passive banner alongside still-clickable rows was
  * misleading.
  */
-export function BrokerStatusBanner({ state }: { state: PanelState }): ReactNode {
-    switch (state.brokerStatus) {
+export function BrokerStatusBanner({
+    brokerStatus,
+    brokerError,
+}: {
+    brokerStatus: PanelState["brokerStatus"];
+    brokerError: PanelState["brokerError"];
+}): ReactNode {
+    switch (brokerStatus) {
         case "devModeRequired":
             return (
                 <div className="banner" role="status">
@@ -47,7 +53,7 @@ export function BrokerStatusBanner({ state }: { state: PanelState }): ReactNode 
             return (
                 <div className="banner banner-error" role="status">
                     <span className="codicon codicon-error" />
-                    <span>{state.brokerError ?? "The UXP broker failed to start."}</span>
+                    <span>{brokerError ?? "The UXP broker failed to start."}</span>
                     <button className="banner-action" onClick={() => { dispatch({ kind: "startDiscovery" }); }}>
                         Retry
                     </button>
@@ -70,8 +76,8 @@ export function BrokerStatusBanner({ state }: { state: PanelState }): ReactNode 
  * all interaction and offers the single relevant action. Renders `null`
  * (nothing, no DOM) for every other state.
  */
-export function BrokerBlockedOverlay({ state }: { state: PanelState }): ReactNode {
-    switch (state.brokerStatus) {
+export function BrokerBlockedOverlay({ brokerStatus }: { brokerStatus: PanelState["brokerStatus"] }): ReactNode {
+    switch (brokerStatus) {
         case "ownedElsewhere":
             return (
                 <div className="broker-overlay" role="alertdialog">
