@@ -10,7 +10,25 @@ import { SCRIPT_EXTENSIONS } from "../../../core/scriptCatalog";
 import { getUICodeByValue } from "../../../core/vulcan/hostAppCatalog";
 import type { PanelState, ScriptView } from "../panelProtocol";
 import { dispatch } from "./vscodeApi";
-import { IconButton, OverflowMenu, PathLabel, Spinner } from "./components";
+import { IconButton, OverflowMenu, PathLabel, SectionHeader, Spinner } from "./components";
+
+export function ScriptsHeader({
+    state,
+    collapsed,
+    onToggle,
+}: {
+    state: PanelState;
+    collapsed: boolean;
+    onToggle: () => void;
+}): ReactNode {
+    return (
+        <SectionHeader title="Scripts" collapsed={collapsed} onToggle={onToggle}>
+            <span className="section-label">Target:</span>
+            <ScriptTargetSelect state={state} />
+            <AddScriptButton state={state} />
+        </SectionHeader>
+    );
+}
 
 export function ScriptsSection({ state }: { state: PanelState }): ReactNode {
     if (state.scripts.length === 0) {
@@ -43,7 +61,7 @@ export function ScriptsSection({ state }: { state: PanelState }): ReactNode {
 }
 
 /** "+" add-script control for the Scripts section header. */
-export function AddScriptButton({ state }: { state: PanelState }): ReactNode {
+function AddScriptButton({ state }: { state: PanelState }): ReactNode {
     const hasScript = state.activeEditor.isScript;
     return (
         <OverflowMenu
@@ -65,7 +83,7 @@ export function AddScriptButton({ state }: { state: PanelState }): ReactNode {
 }
 
 /** "Target host app" dropdown for the Scripts section header (§9.9). */
-export function ScriptTargetSelect({ state }: { state: PanelState }): ReactNode {
+function ScriptTargetSelect({ state }: { state: PanelState }): ReactNode {
     return (
         <select
             className="target-select"

@@ -4,7 +4,7 @@
  */
 
 import clsx from "clsx";
-import type { ReactNode } from "react";
+import type { ChangeEvent, ReactNode } from "react";
 import type { PanelState, PluginView } from "../panelProtocol";
 import { dispatch } from "./vscodeApi";
 import {
@@ -13,9 +13,54 @@ import {
     type MenuItem,
     OverflowMenu,
     PathLabel,
+    SectionHeader,
     Spinner,
 } from "./components";
 import { getUICodeByValue } from "../../../core/vulcan/hostAppCatalog";
+
+export function PluginsHeader({
+    state,
+    collapsed,
+    onToggle,
+}: {
+    state: PanelState;
+    collapsed: boolean;
+    onToggle: () => void;
+}): ReactNode {
+    return (
+        <SectionHeader title="Plugins" collapsed={collapsed} onToggle={onToggle}>
+            <label
+                className="checkbox-label"
+                title="Load plugins paused, waiting for a debugger (break on start)"
+                onClick={(e) => { e.stopPropagation(); }}
+            >
+                <input
+                    type="checkbox"
+                    checked={state.breakOnLoad.plugins}
+                    onChange={(e: ChangeEvent<HTMLInputElement>) => {
+                        dispatch({ kind: "setBreakOnLoad", scope: "plugins", value: e.target.checked });
+                    }}
+                />
+                Break on load
+            </label>
+            <OverflowMenu
+                icon="add"
+                label="Add plugin…"
+                items={[
+                    {
+                        label: "Browse for manifest.json…",
+                        onClick: () => { dispatch({ kind: "addPluginPick" }); },
+                    },
+                    {
+                        label: "Currently opened manifest.json",
+                        disabled: !state.activeEditor.isManifest,
+                        onClick: () => { dispatch({ kind: "addActiveManifest" }); },
+                    },
+                ]}
+            />
+        </SectionHeader>
+    );
+}
 
 export function PluginsSection({ state }: { state: PanelState }): ReactNode {
     if (state.plugins.length === 0) {
