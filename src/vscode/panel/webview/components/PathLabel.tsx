@@ -1,4 +1,5 @@
 import type { ReactNode } from "react";
+import { toForwardSlashes } from "../pathUtils";
 
 /** Folder path split into dimmed parent + bold last segment (wireframe style). */
 export function PathLabel({
@@ -13,7 +14,7 @@ export function PathLabel({
      */
     matchLength?: number;
 }): ReactNode {
-    const normalized = fullPath.replace(/\\/g, "/");
+    const normalized = toForwardSlashes(fullPath);
     const idx = normalized.lastIndexOf("/");
     const nameStart = idx >= 0 ? idx + 1 : 0;
     const matched = matchLength ? Math.min(Math.max(matchLength, 0), normalized.length) : 0;

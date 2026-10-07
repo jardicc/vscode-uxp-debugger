@@ -6,6 +6,7 @@
 import clsx from "clsx";
 import type { ChangeEvent, ReactNode } from "react";
 import type { PanelState, PluginView } from "../panelProtocol";
+import { parentFolder } from "./pathUtils";
 import { dispatch } from "./vscodeApi";
 import {
     HostBadge,
@@ -79,13 +80,6 @@ export function PluginsSection({ state }: { state: PanelState }): ReactNode {
             ))}
         </div>
     );
-}
-
-/** The plugin's folder (everything before `manifest.json`), for the path label. */
-function pluginFolderPath(manifestPath: string): string {
-    const normalized = manifestPath.replace(/\\/g, "/");
-    const idx = normalized.lastIndexOf("/");
-    return idx >= 0 ? normalized.slice(0, idx) : normalized;
 }
 
 function pluginStatus(plugin: PluginView, busy: boolean): { label: string; icon: ReactNode } {
@@ -191,15 +185,12 @@ function PluginRow({ plugin, state }: { plugin: PluginView; state: PanelState })
                 </div>
                 <div className="row-sub">
                     <PathLabel
-                        fullPath={pluginFolderPath(plugin.manifestPath)}
+                        fullPath={parentFolder(plugin.manifestPath)}
                         matchLength={plugin.matchedFolderLength}
                     />
                 </div>
                 <div className="row-sub" title={plugin.manifestError ?? plugin.manifestPath}>
-                    {plugin.id || plugin.manifestError}
-                    {" "}
-                    ·
-                    {stateLabel}
+                    {`${plugin.id || plugin.manifestError} · ${stateLabel}`}
                 </div>
             </div>
             <div className="row-actions">

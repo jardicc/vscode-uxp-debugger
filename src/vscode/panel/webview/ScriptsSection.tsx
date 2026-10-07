@@ -106,12 +106,8 @@ function ScriptTargetSelect({ state }: { state: PanelState }): ReactNode {
             ))}
             {state.scriptTargetApp
                 && !state.connectedApps.some((a) => a.appId === state.scriptTargetApp) && (
-                <option
-                    value={state.scriptTargetApp}
-                >
-                    {getUICodeByValue(state.scriptTargetApp) || state.scriptTargetApp}
-                    {" "}
-                    (not connected)
+                <option value={state.scriptTargetApp}>
+                    {`${getUICodeByValue(state.scriptTargetApp) || state.scriptTargetApp} (not connected)`}
                 </option>
             )}
         </select>
@@ -168,10 +164,7 @@ function ScriptRow({ script }: { script: ScriptView }): ReactNode {
                     {script.debugging && <span className="state-suffix"> · debugging</span>}
                     {script.args && (
                         <span className="state-suffix" title={`Arguments: ${script.args}`}>
-                            {" "}
-                            · args:
-                            {" "}
-                            {script.args}
+                            {` · args: ${script.args}`}
                         </span>
                     )}
                 </div>

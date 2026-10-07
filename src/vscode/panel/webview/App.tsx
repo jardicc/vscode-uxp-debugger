@@ -11,9 +11,7 @@ import { BrokerBlockedOverlay, BrokerStatusBanner } from "./BrokerStatus";
 import { PluginsHeader, PluginsSection } from "./PluginsSection";
 import { ScriptsHeader, ScriptsSection } from "./ScriptsSection";
 import { SectionHeader } from "./components";
-import { dispatch, getUiState, saveUiState } from "./vscodeApi";
-
-type SectionId = "apps" | "plugins" | "scripts";
+import { dispatch, getUiState, saveUiState, type SectionId } from "./vscodeApi";
 
 export function App(): ReactNode {
     const [state, setState] = useState<PanelState | undefined>(undefined);
