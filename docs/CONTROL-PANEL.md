@@ -157,7 +157,9 @@ other supported extensions to `ANY`.
 
 The section header provides a target-app selector populated from connected applications.
 Applications that do not advertise script-debugging support remain visible but disabled.
-The saved target remains visible as "not connected" when that app disconnects.
+Installed applications that are not connected are listed as "not connected". The selected
+target is persisted and stays selected while its app is disconnected; it falls back to Auto
+only when its app is detected as not installed.
 
 Scripts can be added with a file picker (multiple files can be selected at once) or from
 the active editor. A dirty active document is saved before it is registered. Missing files remain visible with a warning; run, watch,

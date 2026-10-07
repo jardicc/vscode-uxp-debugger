@@ -7,7 +7,7 @@ import clsx from "clsx";
 import type { ChangeEvent, ReactNode } from "react";
 import { Fragment } from "react";
 import { SCRIPT_EXTENSIONS } from "../../../core/scriptCatalog";
-import { getUICodeByValue } from "../../../core/vulcan/hostAppCatalog";
+import { getUICodeByValue, HOST_APPS } from "../../../core/vulcan/hostAppCatalog";
 import type { ConnectedAppView, ScriptView } from "../panelProtocol";
 import { dispatch } from "./vscodeApi";
 import { IconButton, OverflowMenu, PathLabel, SectionHeader, Spinner, ToggleIconButton } from "./components";
@@ -15,6 +15,7 @@ import { IconButton, OverflowMenu, PathLabel, SectionHeader, Spinner, ToggleIcon
 export function ScriptsSection({
     scripts,
     connectedApps,
+    installedApps,
     scriptTargetApp,
     activeEditorIsScript,
     collapsed,
@@ -22,6 +23,7 @@ export function ScriptsSection({
 }: {
     scripts: ScriptView[];
     connectedApps: ConnectedAppView[];
+    installedApps: string[] | undefined;
     scriptTargetApp: string | undefined;
     activeEditorIsScript: boolean;
     collapsed: boolean;
@@ -31,7 +33,7 @@ export function ScriptsSection({
         <>
             <SectionHeader title="Scripts" collapsed={collapsed} onToggle={onToggle}>
                 <span className="section-label">Target:</span>
-                <ScriptTargetSelect connectedApps={connectedApps} scriptTargetApp={scriptTargetApp} />
+                <ScriptTargetSelect connectedApps={connectedApps} installedApps={installedApps} scriptTargetApp={scriptTargetApp} />
                 <AddScriptButton activeEditorIsScript={activeEditorIsScript} />
             </SectionHeader>
             {!collapsed && (scripts.length === 0 ? <ScriptsEmptyState /> : <ScriptsList scripts={scripts} />)}
@@ -93,16 +95,27 @@ function AddScriptButton({ activeEditorIsScript }: { activeEditorIsScript: boole
 /** "Target host app" dropdown for the Scripts section header (§9.9). */
 function ScriptTargetSelect({
     connectedApps,
+    installedApps,
     scriptTargetApp,
 }: {
     connectedApps: ConnectedAppView[];
+    installedApps: string[] | undefined;
     scriptTargetApp: string | undefined;
 }): ReactNode {
+    // Installed apps that aren't connected. When installed-app detection is
+    // unavailable, the saved target is kept visible instead.
+    const disconnectedIds = HOST_APPS
+        .map((a) => a.value)
+        .filter((id) => installedApps?.includes(id) || (!installedApps && id === scriptTargetApp))
+        .filter((id) => !connectedApps.some((a) => a.appId === id));
+    const knownTarget = !!scriptTargetApp
+        && (connectedApps.some((a) => a.appId === scriptTargetApp) || disconnectedIds.includes(scriptTargetApp));
+
     return (
         <select
             className="target-select"
             title="Which connected host app runs the scripts"
-            value={scriptTargetApp ?? ""}
+            value={knownTarget ? scriptTargetApp : ""}
             onClick={(e) => { e.stopPropagation(); }}
             onChange={(e: ChangeEvent<HTMLSelectElement>) => { dispatch({ kind: "setScriptTargetApp", appId: e.target.value || undefined }); }}
         >
@@ -118,12 +131,11 @@ function ScriptTargetSelect({
                     {!app.supportsScripts && " (scripts n/a)"}
                 </option>
             ))}
-            {scriptTargetApp
-                && !connectedApps.some((a) => a.appId === scriptTargetApp) && (
-                <option value={scriptTargetApp}>
-                    {`${getUICodeByValue(scriptTargetApp) || scriptTargetApp} (not connected)`}
+            {disconnectedIds.map((appId) => (
+                <option key={appId} value={appId}>
+                    {`${getUICodeByValue(appId) || appId} (not connected)`}
                 </option>
-            )}
+            ))}
         </select>
     );
 }

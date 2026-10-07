@@ -111,7 +111,10 @@ export class PanelController implements vscode.Disposable {
             this.postState();
         };
         this.disposables.push(
-            this.service.onAppsChanged(refresh),
+            this.service.onAppsChanged(() => {
+                this.resetUninstalledScriptTarget();
+                refresh();
+            }),
             this.service.onSessionStarted(refresh),
             this.service.onSessionEnded(refresh),
             this.service.onBrokerStateChanged(refresh),
@@ -126,6 +129,19 @@ export class PanelController implements vscode.Disposable {
             }),
             UxpInspectorPanel.onDidChangeInstances.on(refresh),
         );
+    }
+
+    /** The saved script target falls back to Auto once its app is known to be not installed. */
+    private resetUninstalledScriptTarget(): void {
+        const target = this.pluginRegistry.snapshot.scriptTargetApp;
+        if (
+            target
+            && this.installedAppIds
+            && !this.installedAppIds.includes(target)
+            && !this.service.connectedApps.some((app) => app.info.appId === target)
+        ) {
+            void this.pluginRegistry.setScriptTargetApp(undefined);
+        }
     }
 
     /** Hook up (or replace) the webview this controller renders into. */
@@ -884,6 +900,7 @@ export class PanelController implements vscode.Disposable {
             setTimeout(() => {
                 this.installedAppIds = this.detectInstalledAppIds();
                 if (this.installedAppIds) {
+                    this.resetUninstalledScriptTarget();
                     this.postState();
                 }
             }, 0);

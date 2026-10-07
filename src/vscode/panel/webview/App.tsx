@@ -80,6 +80,7 @@ export function App(): ReactNode {
                     <ScriptsSection
                         scripts={state.scripts}
                         connectedApps={state.connectedApps}
+                        installedApps={state.installedApps}
                         scriptTargetApp={state.scriptTargetApp}
                         activeEditorIsScript={state.activeEditor.isScript}
                         collapsed={collapsed.scripts}
