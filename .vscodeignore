@@ -14,7 +14,7 @@ uxp-UDT-v2/**
 node_modules/**
 .gitignore
 tsconfig.json
-vitest.config.ts
+vitest.config.mts
 eslint.config.mjs
 **/*.map
 docs/**

@@ -10,7 +10,7 @@ actual debug-adapter wiring (`vscode.debug.*`, DAP tracker, real
 continuously on every save (TDD loop). These tests are slow (spin up a real
 VS Code process), can require a real, already-running Photoshop with
 developer mode on, and use Mocha (`describe`/`it` globals) instead of
-vitest's imported ones. `vitest.config.ts` also explicitly excludes `e2e/**`
+vitest's imported ones. `vitest.config.mts` also explicitly excludes `e2e/**`
 as a second line of defence.
 
 ## Running
