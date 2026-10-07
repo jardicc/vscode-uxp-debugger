@@ -8,7 +8,7 @@ import clsx from "clsx";
 import type { ReactNode } from "react";
 import { HOST_APPS, type RunningApp } from "../../../core/vulcan/hostAppCatalog";
 import type { ConnectedAppView, PanelState } from "../panelProtocol";
-import { IconButton, Spinner } from "./common";
+import { IconButton, Spinner } from "./components";
 import { dispatch } from "./vscodeApi";
 
 interface AppStatus {

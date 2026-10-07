@@ -14,7 +14,7 @@ import {
     OverflowMenu,
     PathLabel,
     Spinner,
-} from "./common";
+} from "./components";
 import { getUICodeByValue } from "../../../core/vulcan/hostAppCatalog";
 
 export function PluginsSection({ state }: { state: PanelState }): ReactNode {

@@ -9,7 +9,7 @@ import type { PanelState, ToWebviewMessage } from "../panelProtocol";
 import { AppsSection } from "./AppsSection";
 import { PluginsSection } from "./PluginsSection";
 import { AddScriptButton, ScriptsSection, ScriptTargetSelect } from "./ScriptsSection";
-import { OverflowMenu, SectionHeader, Spinner } from "./common";
+import { OverflowMenu, SectionHeader, Spinner } from "./components";
 import { dispatch, getUiState, saveUiState } from "./vscodeApi";
 
 export function App(): ReactNode {

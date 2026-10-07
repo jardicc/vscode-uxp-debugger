@@ -10,7 +10,7 @@ import { SCRIPT_EXTENSIONS } from "../../../core/scriptCatalog";
 import { getUICodeByValue } from "../../../core/vulcan/hostAppCatalog";
 import type { PanelState, ScriptView } from "../panelProtocol";
 import { dispatch } from "./vscodeApi";
-import { IconButton, OverflowMenu, PathLabel, Spinner } from "./common";
+import { IconButton, OverflowMenu, PathLabel, Spinner } from "./components";
 
 export function ScriptsSection({ state }: { state: PanelState }): ReactNode {
     if (state.scripts.length === 0) {
