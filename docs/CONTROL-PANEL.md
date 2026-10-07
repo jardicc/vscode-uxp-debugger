@@ -155,6 +155,12 @@ Supported script extensions are `.ccjs`, `.psjs`, `.idjs`, `.js`, and `.ts`. The
 badge is inferred from the extension: `.psjs` maps to `PS`, `.idjs` to `ID`, and all
 other supported extensions to `ANY`.
 
+The extension is authoritative for compatibility: `.psjs` and `.idjs` scripts can only run in
+Photoshop / InDesign respectively, while `.js`, `.ts`, and `.ccjs` run in any host. The selected
+target never overrides this; it only narrows the compatible apps, so it effectively applies to
+the universal extensions. A target that conflicts with a host-specific extension matches no app
+and the run fails with a "host app not running" error.
+
 The section header provides a target-app selector populated from connected applications.
 Applications that do not advertise script-debugging support remain visible but disabled.
 Installed applications that are not connected are listed as "not connected". The selected

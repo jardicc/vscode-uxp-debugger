@@ -118,7 +118,9 @@ Run + debug a script:
 ```
 
 `app` is optional and restricts execution to one host app id (`PS`, `ID`, `premierepro`);
-without it you are asked to pick when several compatible apps are connected.
+without it you are asked to pick when several compatible apps are connected. The script's
+file extension always decides which apps are compatible (see
+[Script debugging notes](#script-debugging-notes)); `app` can only narrow that set.
 Use the **Create launch.json configuration** button on a plugin (`…` menu) or script row in the
 UXP Devtools panel to generate these entries with the known values filled in.
 
@@ -132,7 +134,20 @@ UXP Devtools panel to generate these entries with the known values filled in.
 
 ## Script debugging notes
 
-Supported extensions are `.ccjs`, `.psjs`, `.idjs`, `.js`, and `.ts`. Script arguments are
+Supported extensions are `.ccjs`, `.psjs`, `.idjs`, `.js`, and `.ts`.
+
+**Target app selection.** The file extension decides which host apps may run the script:
+
+- `.js`, `.ts`, and `.ccjs` run in any connected UXP host app.
+- `.psjs` runs only in Photoshop and `.idjs` only in InDesign.
+
+The target (`app` in `launch.json`, `appId` in the `uxp_debug_script` tool, or the target-app
+selector in the panel) never overrides the extension. It only narrows the compatible apps
+further, so it is meaningful for `.js`, `.ts`, and `.ccjs`. A target that conflicts with the
+extension (e.g. `.psjs` with `app: "ID"`) matches no app and is reported as "host app not
+running".
+
+Script arguments are
 comma-separated JSON values or `userArgs` in `launch.json`. The panel workflow and `.ts`
 type-erasure limits are documented in [Control Panel](docs/CONTROL-PANEL.md#4-scripts-section);
 the short-script attach race and workaround are documented in

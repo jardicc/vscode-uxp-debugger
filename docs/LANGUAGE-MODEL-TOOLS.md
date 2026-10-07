@@ -233,7 +233,7 @@ modify application state.
 
 | Tool | Input | Behavior | Confirmation |
 | --- | --- | --- | --- |
-| `uxp_debug_script` | `scriptPath: string`, `appId?: string`, `userArgs?: unknown` | Runs a standalone `.js`, `.ts`, `.ccjs`, `.psjs`, or `.idjs` script and attaches the debugger to its new session. Missing `userArgs` becomes an empty array. | Always |
+| `uxp_debug_script` | `scriptPath: string`, `appId?: string`, `userArgs?: unknown` | Runs a standalone `.js`, `.ts`, `.ccjs`, `.psjs`, or `.idjs` script and attaches the debugger to its new session. Missing `userArgs` becomes an empty array. The extension decides compatible hosts (`.psjs` → Photoshop, `.idjs` → InDesign, others any); `appId` only narrows them and cannot override. | Always |
 | `uxp_load_plugin` | `manifestPath: string`, `appId?: string`, `breakOnStart?: boolean` | Starts the broker if needed and loads the plugin. With `breakOnStart`, records the returned sessions as pending debugger attachment. | Always |
 | `uxp_unload_plugin` | `manifestPath: string`, `sessionId?: string` | Unloads one matching live session or all matching live sessions. | Always |
 | `uxp_refresh_plugin` | `manifestPath: string`, `sessionId?: string` | Sends the in-place `Plugin/reload` operation to one or all matching sessions and reports per-session failures. Existing debugger and inspector attachments remain active. | No |
