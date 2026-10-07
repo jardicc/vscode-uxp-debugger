@@ -33,7 +33,11 @@ export function ScriptsSection({
         <>
             <SectionHeader title="Scripts" collapsed={collapsed} onToggle={onToggle}>
                 <span className="section-label">Target:</span>
-                <ScriptTargetSelect connectedApps={connectedApps} installedApps={installedApps} scriptTargetApp={scriptTargetApp} />
+                <ScriptTargetSelect
+                    connectedApps={connectedApps}
+                    installedApps={installedApps}
+                    scriptTargetApp={scriptTargetApp}
+                />
                 <AddScriptButton activeEditorIsScript={activeEditorIsScript} />
             </SectionHeader>
             {!collapsed && (scripts.length === 0 ? <ScriptsEmptyState /> : <ScriptsList scripts={scripts} />)}
@@ -106,6 +110,7 @@ function ScriptTargetSelect({
     // unavailable, the saved target is kept visible instead.
     const disconnectedIds = HOST_APPS
         .map((a) => a.value)
+        // eslint-disable-next-line @typescript-eslint/prefer-nullish-coalescing
         .filter((id) => installedApps?.includes(id) || (!installedApps && id === scriptTargetApp))
         .filter((id) => !connectedApps.some((a) => a.appId === id));
     const knownTarget = !!scriptTargetApp
