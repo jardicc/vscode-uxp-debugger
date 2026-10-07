@@ -1,5 +1,46 @@
 # Changelog
 
+## [2.2.0](https://github.com/jardicc/vscode-uxp-debugger/compare/v2.1.0...v2.2.0) (2026-10-07)
+
+
+### New Features
+
+* adds warning for possible InDesign crash ([b036c23](https://github.com/jardicc/vscode-uxp-debugger/commit/b036c23c88e4101ad3d2f3fccc9d79d0905faadf))
+* improves way how launch.json config is generated ([59b4ca3](https://github.com/jardicc/vscode-uxp-debugger/commit/59b4ca3879718ba08e3b78da2dd122e8129f8912))
+* open script file by clicking its row ([ccbf629](https://github.com/jardicc/vscode-uxp-debugger/commit/ccbf629912247502daab5415d14a6813bbc44aaa))
+* Small improvements ([a8d97c5](https://github.com/jardicc/vscode-uxp-debugger/commit/a8d97c5c9ff46d28bb2320ffc8ccd0c00d76c2ef))
+
+
+### Bug Fixes
+
+* add missing newline at end of settings.json ([1ef0060](https://github.com/jardicc/vscode-uxp-debugger/commit/1ef0060c000f4c5d6d64bd5ca37434173b0ecc14))
+* improve handling of uninstalled script targets and update ScriptsSection to manage installed apps ([07038af](https://github.com/jardicc/vscode-uxp-debugger/commit/07038af69d079cff98e7a904b539b07e06136639))
+
+
+### Performance
+
+* improves startup time ([354a7be](https://github.com/jardicc/vscode-uxp-debugger/commit/354a7bed4fa93c74b18d3d99ae58e61524bf801e))
+
+
+### Changed
+
+* centralize scripts extensions ([e5c60b0](https://github.com/jardicc/vscode-uxp-debugger/commit/e5c60b02a5541629e6480bc09f0d79d56aee8e9e))
+* code cleaning ([ca50a9c](https://github.com/jardicc/vscode-uxp-debugger/commit/ca50a9c2f3df3474d5ea66e44285de15eb33ebb6))
+* enhance App component structure and introduce BrokerStatus components ([582391c](https://github.com/jardicc/vscode-uxp-debugger/commit/582391c850c7196a601d96da7477dba902fabe90))
+* enhance component structure by consolidating props and improving state management across App, AppsSection, PluginsSection, and ScriptsSection ([7e7a1e6](https://github.com/jardicc/vscode-uxp-debugger/commit/7e7a1e649ba68b8e75f3174ce3bca5bfc78ca56c))
+* implement script catalog for UXP script file types and host-specific extensions ([a15ff33](https://github.com/jardicc/vscode-uxp-debugger/commit/a15ff333d001771c62f0ae7b9afb6056bab5da7e))
+* implement ToggleIconButton component and update plugin/script rows to use it ([c6ab696](https://github.com/jardicc/vscode-uxp-debugger/commit/c6ab69662f9eb1f54ef3d10ac6e49316cc159b2e))
+* migrate common components to a dedicated directory and files ([c410f71](https://github.com/jardicc/vscode-uxp-debugger/commit/c410f71a3d3151b2fd2e57fbcd55f021b23b6dcf))
+* streamline path handling and improve code readability across components ([75391f3](https://github.com/jardicc/vscode-uxp-debugger/commit/75391f3a79e63ec261cdea767765068c77e2f5d2))
+
+
+### Documentation
+
+* adds known issue ([6031291](https://github.com/jardicc/vscode-uxp-debugger/commit/60312910c6aaa0b4dddea86aeb76eea5c2c365d0))
+* adds known issue ([be0717e](https://github.com/jardicc/vscode-uxp-debugger/commit/be0717e92976cfbc262a4872ed63baa9cd63ca18))
+* clarify script targeting and host app compatibility in README and documentation ([6c0fa14](https://github.com/jardicc/vscode-uxp-debugger/commit/6c0fa14ee4205b93ac3df8d49d29bd6343f77e5b))
+* update issue tracking description for host app startup hang ([41978b6](https://github.com/jardicc/vscode-uxp-debugger/commit/41978b64326a793170bb8963e9b9520e1f7913bc))
+
 ## [2.1.0](https://github.com/jardicc/vscode-uxp-debugger/compare/v2.0.2...v2.1.0) (2026-10-05)
 
 
