@@ -834,25 +834,25 @@
     "@types/node": "^20.11.0",
     "@types/react": "18.3.31",
     "@types/react-dom": "18.3.7",
-    "@types/vscode": "^1.99.0",
-    "@types/ws": "^8.5.10",
+    "@types/vscode": "^1.140.0",
+    "@types/ws": "^8.18.2",
     "@vscode/test-electron": "3.1.0",
     "@vscode/vsce": "^3.9.2",
-    "devtools-protocol": "^0.0.1684464",
+    "devtools-protocol": "^0.0.1710668",
     "esbuild": "^0.28.2",
-    "eslint": "^10.9.0",
+    "eslint": "^10.12.0",
     "mocha": "11.7.6",
     "typescript": "^6.0.3",
-    "typescript-eslint": "^8.67.0",
+    "typescript-eslint": "^8.71.1",
     "vitest": "^2.1.0"
   },
   "dependencies": {
     "@vscode/codicons": "^0.0.46-36",
-    "adm-zip": "^0.6.0",
+    "adm-zip": "^0.6.1",
     "clsx": "2.1.1",
     "react": "18.3.1",
     "react-dom": "18.3.1",
     "ts-blank-space": "0.9.0",
-    "ws": "^8.21.3"
+    "ws": "^8.22.0"
   }
 }
