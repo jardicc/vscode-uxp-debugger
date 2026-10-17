@@ -847,7 +847,7 @@
     "vitest": "^4.1.11"
   },
   "dependencies": {
-    "@vscode/codicons": "^0.0.46-36",
+    "@vscode/codicons": "^0.0.46-45",
     "adm-zip": "^0.6.1",
     "clsx": "2.1.1",
     "react": "18.3.1",
