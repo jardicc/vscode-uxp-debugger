@@ -1,5 +1,7 @@
 # UXP Debugger – VS Code Extension
 
+[![StandWithUkraine](https://raw.githubusercontent.com/vshymanskyy/StandWithUkraine/main/badges/StandWithUkraine.svg)](https://github.com/vshymanskyy/StandWithUkraine/blob/main/docs/README.md)
+
 Load, reload and debug **Adobe UXP plugins and scripts** (Photoshop, InDesign, Premiere Pro, Media Encoder) directly from VS Code — with full source-map support and **no Adobe UXP Developer Tools (UDT) required**.
 
 The extension hosts its own UDT-compatible service broker inside VS Code and announces it to Adobe applications over Vulcan IPC. Host applications connect straight to VS Code, which then loads your plugin and tunnels the Chrome DevTools Protocol to the built-in JS debugger.
