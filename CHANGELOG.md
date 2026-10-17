@@ -1,5 +1,12 @@
 # Changelog
 
+## [2.2.1](https://github.com/jardicc/vscode-uxp-debugger/compare/v2.2.0...v2.2.1) (2026-10-17)
+
+
+### Documentation
+
+* update readme ([#30](https://github.com/jardicc/vscode-uxp-debugger/issues/30)) ([e88b5b8](https://github.com/jardicc/vscode-uxp-debugger/commit/e88b5b80d1a1bc2b60caef0f144c75ac85a21a02))
+
 ## [2.2.0](https://github.com/jardicc/vscode-uxp-debugger/compare/v2.1.0...v2.2.0) (2026-10-07)
 
 
