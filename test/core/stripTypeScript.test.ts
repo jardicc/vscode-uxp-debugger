@@ -33,7 +33,7 @@ describe("stripTypeScript", () => {
     it("throws NonErasableTypeScriptError for parameter properties", () => {
         const ts = "class C {\n  constructor(private x: number) {}\n}\n";
 
-        expect(() => stripTypeScript(ts, "a/b/c.ts")).toThrowError(
+        expect(() => stripTypeScript(ts, "a/b/c.ts")).toThrow(
             NonErasableTypeScriptError,
         );
     });

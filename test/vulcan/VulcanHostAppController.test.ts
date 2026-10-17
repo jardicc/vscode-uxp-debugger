@@ -58,17 +58,19 @@ describe("VulcanHostAppController", () => {
         launchAppMock.mockImplementation((_sap, _focus, _args, cb) => cb(undefined, true));
 
         loadAddonMock.mockReturnValue({
-            VulcanControlAdapter: vi.fn().mockImplementation(() => ({
-                getSpecifiers: getSpecifiersMock,
-                getInstalledApps: getInstalledAppsMock,
-                isAppInstalled: isAppInstalledMock,
-                isAppRunning: isAppRunningMock,
-                isAppRunningByName: isAppRunningByNameMock,
-                getProcessId: getProcessIdMock,
-                getAppVersion: getAppVersionMock,
-                launchApp: launchAppMock,
-                _setLibraryPath: setLibraryPathMock,
-            })),
+            VulcanControlAdapter: vi.fn().mockImplementation(function () {
+                return {
+                    getSpecifiers: getSpecifiersMock,
+                    getInstalledApps: getInstalledAppsMock,
+                    isAppInstalled: isAppInstalledMock,
+                    isAppRunning: isAppRunningMock,
+                    isAppRunningByName: isAppRunningByNameMock,
+                    getProcessId: getProcessIdMock,
+                    getAppVersion: getAppVersionMock,
+                    launchApp: launchAppMock,
+                    _setLibraryPath: setLibraryPathMock,
+                };
+            }),
         });
 
         setPlatform("win32");

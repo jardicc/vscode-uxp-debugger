@@ -17,10 +17,12 @@ describe("VulcanAnnouncer", () => {
         setServerDetailsMock.mockClear();
         disconnectMock.mockClear();
         loadAddonMock.mockReturnValue({
-            VulcanAdapter: vi.fn().mockImplementation(() => ({
-                setServerDetails: setServerDetailsMock,
-                disconnect: disconnectMock,
-            })),
+            VulcanAdapter: vi.fn().mockImplementation(function () {
+                return {
+                    setServerDetails: setServerDetailsMock,
+                    disconnect: disconnectMock,
+                };
+            }),
         });
     });
 

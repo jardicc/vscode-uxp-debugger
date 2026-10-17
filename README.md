@@ -4,6 +4,10 @@ Load, reload and debug **Adobe UXP plugins and scripts** (Photoshop, InDesign, P
 
 The extension hosts its own UDT-compatible service broker inside VS Code and announces it to Adobe applications over Vulcan IPC. Host applications connect straight to VS Code, which then loads your plugin and tunnels the Chrome DevTools Protocol to the built-in JS debugger.
 
+| Debugging a plugin | Inspecting a plugin interface |
+| --- | --- |
+| [![UXP Debugger running in VS Code with a plugin paused at a breakpoint](docs/images/debugger-preview-1.png)](docs/images/debugger-preview-1.png) | [![Inspecting a UXP plugin interface with the built-in HTML and CSS inspector](docs/images/debugger-preview-2.png)](docs/images/debugger-preview-2.png) |
+
 ---
 
 ## Requirements
@@ -23,9 +27,8 @@ The extension hosts its own UDT-compatible service broker inside VS Code and ann
    (or **Add active manifest**, using the file open in the editor).
 4. **Start your Adobe application** (e.g. Photoshop).
 5. Run **`UXP: Load Plugin`**.
-   - On first use the extension checks the machine-global **developer mode** flag. If it is missing you get a consent dialog followed by an OS elevation prompt (it writes `{"developer": true}` to Adobe's `settings.json` — same as UDT does).
-   - The broker starts on port `14001`, announces itself, the host app connects and your plugin loads.
-6. Click **Debug** for the plugin in the UXP Devtools panel and set breakpoints.
+6. _On first use the extension checks the machine-global **developer mode** flag. If it is missing you get a consent dialog followed by an OS elevation prompt same as UDT does. So if you used UDT before you will never see that dialog._
+7. Click **Debug** for the plugin in the UXP Devtools panel and set breakpoints.
 
 > Tip: clicking **Debug** for an unloaded plugin offers **"Load and attach"** — steps 5 and 6 in one go.
 
@@ -39,6 +42,8 @@ debugging, inspection, Watch, and packaging. Its global registry is independent 
 current workspace, and every Command Palette entry below remains available. See
 [Control Panel](docs/CONTROL-PANEL.md) for the complete behavior and
 [App Discovery and Launch](docs/APP-DISCOVERY.md) for host status and startup.
+
+[![UXP Devtools control panel showing connected apps, plugins, and scripts](docs/images/debugger-panel.png)](docs/images/debugger-panel.png)
 
 ## GitHub Copilot and agent tools
 
