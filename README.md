@@ -4,9 +4,11 @@ Load, reload and debug **Adobe UXP plugins and scripts** (Photoshop, InDesign, P
 
 The extension hosts its own UDT-compatible service broker inside VS Code and announces it to Adobe applications over Vulcan IPC. Host applications connect straight to VS Code, which then loads your plugin and tunnels the Chrome DevTools Protocol to the built-in JS debugger.
 
-| Debugging a plugin | Inspecting a plugin interface |
-| --- | --- |
-| [![UXP Debugger running in VS Code with a plugin paused at a breakpoint](docs/images/debugger-preview-1.png)](docs/images/debugger-preview-1.png) | [![Inspecting a UXP plugin interface with the built-in HTML and CSS inspector](docs/images/debugger-preview-2.png)](docs/images/debugger-preview-2.png) |
+| Debugging a plugin |
+| --- |
+| [![UXP Debugger running in VS Code with a plugin paused at a breakpoint](docs/images/debugger-preview-1.png)](docs/images/debugger-preview-1.png) |
+| Inspecting a plugin user interface |
+| [![Inspecting a UXP plugin interface with the built-in HTML and CSS inspector](docs/images/debugger-preview-2.png)](docs/images/debugger-preview-2.png) |
 
 ---
 
@@ -43,7 +45,8 @@ current workspace, and every Command Palette entry below remains available. See
 [Control Panel](docs/CONTROL-PANEL.md) for the complete behavior and
 [App Discovery and Launch](docs/APP-DISCOVERY.md) for host status and startup.
 
-[![UXP Devtools control panel showing connected apps, plugins, and scripts](docs/images/debugger-panel.png)](docs/images/debugger-panel.png)
+<!-- markdownlint-disable-next-line MD033 -->
+<a href="docs/images/debugger-panel.png"><img src="docs/images/debugger-panel.png" alt="UXP Devtools control panel showing connected apps, plugins, and scripts" width="360"></a>
 
 ## GitHub Copilot and agent tools
 
