@@ -14,6 +14,14 @@ The extension hosts its own UDT-compatible service broker inside VS Code and ann
 
 ---
 
+## Video tutorial
+
+[![UXP Debugger video tutorial](https://img.youtube.com/vi/_f5EdNuN7YQ/maxresdefault.jpg)](https://www.youtube.com/watch?v=_f5EdNuN7YQ)
+
+Watch on YouTube: <https://www.youtube.com/watch?v=_f5EdNuN7YQ>
+
+---
+
 ## Requirements
 
 - **VS Code** 1.99 or newer (desktop; Windows x64, macOS x64, or macOS Apple silicon)
