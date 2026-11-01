@@ -25,10 +25,13 @@ async function waitFor(predicate: () => boolean, timeoutMs = 2_000): Promise<voi
     }
 }
 
-function connect(url: string): Promise<{ ws: WebSocket; received: string[] }> {
+function connect(
+    url: string,
+    options?: WebSocket.ClientOptions,
+): Promise<{ ws: WebSocket; received: string[] }> {
     return new Promise((resolve, reject) => {
         const received: string[] = [];
-        const ws = new WebSocket(url);
+        const ws = new WebSocket(url, options);
         ws.on("message", (data) => received.push(data.toString()));
         ws.on("open", () => resolve({ ws, received }));
         ws.on("error", reject);
@@ -183,5 +186,31 @@ describe("CdpProxyServer — multi-client multiplexing (panel + js-debug)", () =
         expect(forwarded.id).toBeGreaterThanOrEqual(1_000_000);
 
         panel.ws.close();
+    });
+
+    it("rejects js-debug WebSocket upgrades carrying a browser Origin header", async () => {
+        await expect(
+            connect(jsDebugUrl(), { origin: "https://evil.example" }),
+        ).rejects.toThrow(/403/);
+    });
+
+    it("rejects /panel WebSocket upgrades from an unauthorized browser Origin", async () => {
+        await expect(
+            connect(panelUrl(), { origin: "https://evil.example" }),
+        ).rejects.toThrow(/403/);
+    });
+
+    it("accepts /panel WebSocket upgrades from the self-hosted inspector origin", async () => {
+        const panel = await connect(panelUrl(), { origin: "http://127.0.0.1:14001" });
+        panel.ws.close();
+    });
+
+    it("rejects WebSocket upgrades with a non-loopback Host header", async () => {
+        await expect(
+            connect(jsDebugUrl(), { headers: { Host: "attacker.example:9222" } }),
+        ).rejects.toThrow(/403/);
+        await expect(
+            connect(panelUrl(), { headers: { Host: "attacker.example:9222" } }),
+        ).rejects.toThrow(/403/);
     });
 });

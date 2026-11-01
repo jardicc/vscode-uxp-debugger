@@ -8,6 +8,7 @@
  * id without any consumer noticing (ARCHITECTURE.md §5.4).
  */
 
+import { randomUUID } from "crypto";
 import { foldPathCase } from "../pathCase";
 import type { AppInfo } from "../protocol/types";
 
@@ -41,13 +42,12 @@ export interface PluginSession {
 }
 
 export class SessionRegistry {
-    private nextClientId = 1;
     private readonly byClientId_ = new Map<string, PluginSession>();
 
     add(input: Omit<PluginSession, "clientSessionId">): PluginSession {
         const session: PluginSession = {
             ...input,
-            clientSessionId: `uxp-session-${String(this.nextClientId++)}`,
+            clientSessionId: `uxp-session-${randomUUID()}`,
         };
         this.byClientId_.set(session.clientSessionId, session);
         return session;

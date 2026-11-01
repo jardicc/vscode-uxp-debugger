@@ -472,6 +472,13 @@ export class UxpBroker {
         socket: Duplex,
         head: Buffer,
     ): void {
+        if (!isLoopbackHost(req) || isBrowserOriginRequest(req)) {
+            this.log("upgrade: rejected WebSocket upgrade with non-loopback Host or browser Origin");
+            socket.write("HTTP/1.1 403 Forbidden\r\n\r\n");
+            socket.destroy();
+            return;
+        }
+
         const url = req.url ?? "/";
 
         if (url.startsWith(CDT_SOCKET_PREFIX)) {

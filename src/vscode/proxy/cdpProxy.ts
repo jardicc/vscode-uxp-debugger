@@ -3,7 +3,7 @@ import type { Duplex } from "stream";
 import * as vscode from "vscode";
 import type { Protocol } from "devtools-protocol";
 import WebSocket, { WebSocketServer } from "ws";
-import { isBrowserOriginRequest, isLoopbackHost } from "../../core/httpSecurity";
+import { isAllowedPanelUpgrade, isBrowserOriginRequest, isLoopbackHost } from "../../core/httpSecurity";
 import type { CdpEventBuffer } from "./cdpEventBuffer";
 import { CdpMessageRewriter } from "./cdpMessageRewriter";
 import type { CdpMessage, CdpPayload } from "./cdpTypes";
@@ -387,6 +387,13 @@ export class CdpProxyServer {
             return;
         }
 
+        if (!isLoopbackHost(_req) || isBrowserOriginRequest(_req)) {
+            this.log.appendLine("[CDP] Rejected WebSocket upgrade with non-loopback Host or browser Origin.");
+            socket.write("HTTP/1.1 403 Forbidden\r\n\r\n");
+            socket.destroy();
+            return;
+        }
+
         // Create a WebSocket server just for this single connection
         const wss = new WebSocketServer({ noServer: true });
 
@@ -493,6 +500,15 @@ export class CdpProxyServer {
         socket: Duplex,
         head: Buffer,
     ): void {
+        if (!isAllowedPanelUpgrade(req)) {
+            this.log.appendLine(
+                `[CDP][panel] Rejected WebSocket upgrade from unauthorized origin "${req.headers.origin ?? ""}".`,
+            );
+            socket.write("HTTP/1.1 403 Forbidden\r\n\r\n");
+            socket.destroy();
+            return;
+        }
+
         const wss = new WebSocketServer({ noServer: true });
         wss.handleUpgrade(req, socket, head, (panelWs) => {
             this.panelClients.add(panelWs);
