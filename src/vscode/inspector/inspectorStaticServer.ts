@@ -13,6 +13,23 @@ import { URL } from "url";
 
 export const INSPECTOR_STATIC_PATH_PREFIX = "/__uxp_debugger__/inspector/";
 
+/**
+ * Content-Security-Policy served on bundled DevTools frontend responses.
+ * Strips external Google domains (`appspot.com`, `googleapis.com`) and
+ * wildcard `frame-src *` from the upstream DevTools HTML entrypoint so the
+ * self-hosted inspector can only execute local scripts and connect to loopback
+ * CDP WebSocket endpoints.
+ */
+export const INSPECTOR_CSP = [
+    "default-src 'self' devtools: data:;",
+    "style-src 'self' 'unsafe-inline' devtools:;",
+    "object-src 'none';",
+    "script-src 'self';",
+    "img-src 'self' data: blob:;",
+    "frame-src 'self' data:;",
+    "connect-src 'self' data: devtools: ws://127.0.0.1:*;",
+].join(" ");
+
 const CONTENT_TYPES: Record<string, string> = {
     ".html": "text/html; charset=utf-8",
     ".js": "text/javascript; charset=utf-8",
@@ -66,6 +83,7 @@ function serveFile(rootDir: string, url: string, res: http.ServerResponse): void
             "Content-Type": contentType,
             "Content-Length": stat.size,
             "Cache-Control": "no-store",
+            "Content-Security-Policy": INSPECTOR_CSP,
         });
         fs.createReadStream(filePath).pipe(res);
     });

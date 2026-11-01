@@ -182,7 +182,6 @@ export class UxpInspectorPanel {
     }
 
     private getHtmlForWebview(): string {
-        const webview = this.panel.webview;
         // Native ws:// connection straight to the CDP proxy's `/panel` endpoint.
         const wsTarget = `127.0.0.1:${String(this.proxyPort)}${CdpProxyServer.PANEL_PATH}`;
         const frontendUrl = `${INSPECTOR_ENTRYPOINT}?ws=${encodeURIComponent(wsTarget)}&panel=elements`;
@@ -197,16 +196,10 @@ export class UxpInspectorPanel {
     #devtools-frame { width: 100%; height: 100%; border: 0; }
   </style>
   <meta http-equiv="Content-Security-Policy"
-    content="default-src;
-    img-src 'self' data: ${webview.cspSource};
-    style-src 'self' 'unsafe-inline' ${webview.cspSource};
-    script-src 'self' 'unsafe-eval' ${webview.cspSource};
-    frame-src 'self' ${webview.cspSource} ${INSPECTOR_ORIGIN};
-    connect-src 'self' data: ${webview.cspSource};
-  ">
+    content="default-src 'none'; style-src 'unsafe-inline'; frame-src ${INSPECTOR_ORIGIN};">
 </head>
 <body>
-  <iframe id="devtools-frame" allow="clipboard-read; clipboard-write *"
+  <iframe id="devtools-frame" allow="clipboard-read ${INSPECTOR_ORIGIN}; clipboard-write ${INSPECTOR_ORIGIN}"
     frameborder="0" src="${frontendUrl}"></iframe>
 </body>
 </html>`;
