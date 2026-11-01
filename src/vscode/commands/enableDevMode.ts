@@ -9,9 +9,8 @@
  */
 
 import { spawn } from "child_process";
-import * as path from "path";
 import * as vscode from "vscode";
-import { getDevSettingsPath, isDevModeEnabled } from "../../core/devmode/devMode";
+import { buildElevationCommand, getDevSettingsPath, isDevModeEnabled } from "../../core/devmode/devMode";
 import { devModeConsentDialog } from "../ui/dialogs";
 
 /**
@@ -77,28 +76,13 @@ function runElevatedEnableScript(
     extensionPath: string,
     output: vscode.OutputChannel,
 ): Promise<void> {
-    const scriptsDir = path.join(extensionPath, "native", "devtools-scripts");
-
     let command: string;
     let args: string[];
-    if (process.platform === "win32") {
-        const batPath = path.join(scriptsDir, "win32.bat");
-        command = "powershell.exe";
-        args = [
-            "-NoProfile",
-            "-Command",
-            `Start-Process -FilePath '${batPath}' -ArgumentList 'true' -Verb runas -Wait`,
-        ];
+    try {
+        ({ command, args } = buildElevationCommand(extensionPath));
     }
-    else if (process.platform === "darwin") {
-        const shPath = path.join(scriptsDir, "mac.sh");
-        command = "osascript";
-        args = ["-e", `do shell script "sh \\"${shPath}\\" true" with administrator privileges`];
-    }
-    else {
-        return Promise.reject(
-            new Error(`UXP developer mode is not supported on platform "${process.platform}"`),
-        );
+    catch (err) {
+        return Promise.reject(err instanceof Error ? err : new Error(String(err)));
     }
 
     output.appendLine(`Running elevated developer-mode script: ${command} ${args.join(" ")}`);
