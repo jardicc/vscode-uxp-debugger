@@ -6,7 +6,7 @@
  */
 
 import { requireStringField, optionalStringField, optionalBooleanField, type HookResult } from "./hooksHttp";
-import { loadErrorStatus } from "./hookErrors";
+import { loadErrorStatus, notRegisteredResult } from "./hookErrors";
 import { describeLoadError } from "../tools/toolErrors";
 import type { HookDependencies } from "./hooksTypes";
 
@@ -17,6 +17,10 @@ export async function handleLoad(
     const manifestPath = requireStringField(input, "manifestPath");
     const breakOnLoad = optionalBooleanField(input, "breakOnLoad");
     const appId = optionalStringField(input, "appId");
+
+    if (!deps.pluginRegistry.pluginByManifest(manifestPath)) {
+        return notRegisteredResult(manifestPath);
+    }
 
     try {
         await deps.service.ensureStarted();

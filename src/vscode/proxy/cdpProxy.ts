@@ -3,6 +3,7 @@ import type { Duplex } from "stream";
 import * as vscode from "vscode";
 import type { Protocol } from "devtools-protocol";
 import WebSocket, { WebSocketServer } from "ws";
+import { isBrowserOriginRequest, isLoopbackHost } from "../../core/httpSecurity";
 import type { CdpEventBuffer } from "./cdpEventBuffer";
 import { CdpMessageRewriter } from "./cdpMessageRewriter";
 import type { CdpMessage, CdpPayload } from "./cdpTypes";
@@ -321,6 +322,11 @@ export class CdpProxyServer {
         res: http.ServerResponse,
         targetId: string,
     ): void {
+        if (!isLoopbackHost(req) || isBrowserOriginRequest(req)) {
+            res.writeHead(403, { "Content-Type": "application/json", Connection: "close" });
+            res.end(JSON.stringify({ ok: false, error: "Forbidden." }));
+            return;
+        }
         const url = req.url ?? "/";
         res.writeHead(200, { "Content-Type": "application/json" });
 

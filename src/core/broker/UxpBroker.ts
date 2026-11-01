@@ -29,6 +29,7 @@ import { type AppInfo, CDT_SOCKET_PREFIX, type UxpPluginManifest } from "../prot
 import { AppConnection, DEFAULT_TIMEOUTS, type HostLogEvent, type TimeoutConfig } from "./AppConnection";
 import { CdtTunnelManager } from "./CdtTunnel";
 import { BROKER_SERVICE_MARKER, type BrokerIdentity, IDENTIFY_PATH } from "./identify";
+import { isBrowserOriginRequest, isLoopbackHost } from "../httpSecurity";
 import { type PluginSession, SessionRegistry } from "./SessionRegistry";
 import { TAKEOVER_PATH } from "./takeover";
 
@@ -402,7 +403,17 @@ export class UxpBroker {
     // -------------------------------------------------------------------------
 
     private handleHttpRequest(req: http.IncomingMessage, res: http.ServerResponse): void {
+        if (!isLoopbackHost(req)) {
+            res.writeHead(403, { "Content-Type": "application/json", Connection: "close" });
+            res.end(JSON.stringify({ ok: false, error: "Forbidden Host header." }));
+            return;
+        }
         const url = req.url ?? "/";
+        if (!url.startsWith("/__uxp_debugger__/inspector/") && isBrowserOriginRequest(req)) {
+            res.writeHead(403, { "Content-Type": "application/json", Connection: "close" });
+            res.end(JSON.stringify({ ok: false, error: "Cross-origin requests are not allowed." }));
+            return;
+        }
         if (req.method === "POST" && url.startsWith(TAKEOVER_PATH)) {
             void this.handleTakeoverRequest(res);
             return;

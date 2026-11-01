@@ -11,9 +11,16 @@ import {
 } from "../../src/vscode/hooks/hooksHttp";
 
 /** Minimal fake `http.IncomingMessage` — just an EventEmitter, which is all `readJsonBody` needs. */
-function fakeRequest(chunks: string[]): http.IncomingMessage {
-    const emitter = new EventEmitter() as EventEmitter & { destroy: () => void };
+function fakeRequest(
+    chunks: string[],
+    headers: http.IncomingHttpHeaders = { "content-type": "application/json" },
+): http.IncomingMessage {
+    const emitter = new EventEmitter() as EventEmitter & {
+        destroy: () => void;
+        headers: http.IncomingHttpHeaders;
+    };
     emitter.destroy = () => {};
+    emitter.headers = headers;
     queueMicrotask(() => {
         for (const chunk of chunks) {
             emitter.emit("data", Buffer.from(chunk, "utf8"));
@@ -29,8 +36,33 @@ describe("readJsonBody", () => {
         expect(body).toEqual({ manifestPath: "a.json" });
     });
 
-    it("resolves an empty body to {}", async () => {
-        expect(await readJsonBody(fakeRequest([]))).toEqual({});
+    it("accepts Content-Type with charset parameter", async () => {
+        const body = await readJsonBody(
+            fakeRequest(["{\"manifestPath\":\"a.json\"}"], { "content-type": "application/json; charset=utf-8" }),
+        );
+        expect(body).toEqual({ manifestPath: "a.json" });
+    });
+
+    it("resolves an empty body to {} even without Content-Type", async () => {
+        expect(await readJsonBody(fakeRequest([], {}))).toEqual({});
+    });
+
+    it("rejects a non-empty body with text/plain Content-Type with a 415 HookRequestError", async () => {
+        await expect(
+            readJsonBody(fakeRequest(["{\"manifestPath\":\"a.json\"}"], { "content-type": "text/plain;charset=UTF-8" })),
+        ).rejects.toMatchObject({
+            status: 415,
+            name: "HookRequestError",
+        });
+    });
+
+    it("rejects a non-empty body with missing Content-Type with a 415 HookRequestError", async () => {
+        await expect(
+            readJsonBody(fakeRequest(["{\"manifestPath\":\"a.json\"}"], {})),
+        ).rejects.toMatchObject({
+            status: 415,
+            name: "HookRequestError",
+        });
     });
 
     it("rejects invalid JSON with a 400 HookRequestError", async () => {
@@ -86,6 +118,22 @@ describe("optionalStringField / optionalBooleanField", () => {
     });
 });
 
+vi.mock("vscode", () => ({
+    window: {
+        showWarningMessage: vi.fn(),
+        showErrorMessage: vi.fn(),
+    },
+    workspace: {
+        onDidChangeConfiguration: vi.fn(),
+    },
+}));
+
+import { handleLoad } from "../../src/vscode/hooks/loadHook";
+import { handleRefresh } from "../../src/vscode/hooks/refreshHook";
+import { handleReload } from "../../src/vscode/hooks/reloadHook";
+import { handleUnload } from "../../src/vscode/hooks/unloadHook";
+import type { HookDependencies } from "../../src/vscode/hooks/hooksTypes";
+
 describe("sendJson", () => {
     it("writes the status code and JSON body, closing the connection", () => {
         const res = {
@@ -100,5 +148,50 @@ describe("sendJson", () => {
             Connection: "close",
         });
         expect(res.end).toHaveBeenCalledWith(JSON.stringify({ ok: true }));
+    });
+});
+
+describe("hook handlers — plugin registration guard", () => {
+    function unregisteredDeps(): { deps: HookDependencies; ensureStarted: ReturnType<typeof vi.fn> } {
+        const ensureStarted = vi.fn();
+        const deps = {
+            service: { ensureStarted },
+            pluginRegistry: {
+                pluginByManifest: vi.fn().mockReturnValue(undefined),
+            },
+        } as unknown as HookDependencies;
+        return { deps, ensureStarted };
+    }
+
+    it("rejects load for an unregistered manifest with 404 before starting the broker", async () => {
+        const { deps, ensureStarted } = unregisteredDeps();
+        const result = await handleLoad({ manifestPath: "C:\\unregistered\\manifest.json" }, deps);
+        expect(result.status).toBe(404);
+        expect(result.body.ok).toBe(false);
+        expect(ensureStarted).not.toHaveBeenCalled();
+    });
+
+    it("rejects reload for an unregistered manifest with 404 before starting the broker", async () => {
+        const { deps, ensureStarted } = unregisteredDeps();
+        const result = await handleReload({ manifestPath: "C:\\unregistered\\manifest.json" }, deps);
+        expect(result.status).toBe(404);
+        expect(result.body.ok).toBe(false);
+        expect(ensureStarted).not.toHaveBeenCalled();
+    });
+
+    it("rejects refresh for an unregistered manifest with 404 before starting the broker", async () => {
+        const { deps, ensureStarted } = unregisteredDeps();
+        const result = await handleRefresh({ manifestPath: "C:\\unregistered\\manifest.json" }, deps);
+        expect(result.status).toBe(404);
+        expect(result.body.ok).toBe(false);
+        expect(ensureStarted).not.toHaveBeenCalled();
+    });
+
+    it("rejects unload for an unregistered manifest with 404 before starting the broker", async () => {
+        const { deps, ensureStarted } = unregisteredDeps();
+        const result = await handleUnload({ manifestPath: "C:\\unregistered\\manifest.json" }, deps);
+        expect(result.status).toBe(404);
+        expect(result.body.ok).toBe(false);
+        expect(ensureStarted).not.toHaveBeenCalled();
     });
 });

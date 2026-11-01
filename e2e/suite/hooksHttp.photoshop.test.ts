@@ -68,6 +68,10 @@ describeLive("Build-tool REST hooks (live Photoshop)", function () {
         await api.service.ensureStarted();
     });
 
+    beforeEach(async () => {
+        await api.pluginRegistry.addPlugin(manifestPath);
+    });
+
     afterEach(async () => {
         await unloadAllSessions(api, manifestPath);
         await api.pluginRegistry.removePlugin(manifestPath);
@@ -130,8 +134,6 @@ describeLive("Build-tool REST hooks (live Photoshop)", function () {
         const notRegistered = await getHook("watch", { manifestPath: unregisteredPath });
         assert.strictEqual(notRegistered.status, 404);
 
-        await api.pluginRegistry.addPlugin(manifestPath);
-
         const initial = await getHook("watch", { manifestPath });
         assert.strictEqual(initial.status, 200);
         assert.strictEqual(initial.body.watch, false);
@@ -159,7 +161,6 @@ describeLive("Build-tool REST hooks (live Photoshop)", function () {
     it("pack builds a real .ccx archive on disk (no Photoshop needed for this route)", async () => {
         const outputPath = path.join(fs.mkdtempSync(path.join(os.tmpdir(), "uxp-e2e-pack-")), "fixture.ccx");
         try {
-            await api.pluginRegistry.addPlugin(manifestPath);
             const pack = await postHook("pack", { manifestPath, outputPath });
             assert.strictEqual(pack.status, 200, JSON.stringify(pack.body));
             assert.strictEqual(pack.body.ok, true);

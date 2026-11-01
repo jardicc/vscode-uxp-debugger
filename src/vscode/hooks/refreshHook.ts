@@ -7,6 +7,7 @@
  */
 
 import { requireStringField, optionalStringField, type HookResult } from "./hooksHttp";
+import { notRegisteredResult } from "./hookErrors";
 import { resolveSessionsForManifest } from "../tools/toolSessionResolution";
 import type { HookDependencies } from "./hooksTypes";
 
@@ -16,6 +17,10 @@ export async function handleRefresh(
 ): Promise<HookResult> {
     const manifestPath = requireStringField(input, "manifestPath");
     const sessionId = optionalStringField(input, "sessionId");
+
+    if (!deps.pluginRegistry.pluginByManifest(manifestPath)) {
+        return notRegisteredResult(manifestPath);
+    }
 
     await deps.service.ensureStarted();
 
