@@ -1,6 +1,11 @@
 import * as path from "path";
 import type * as vscode from "vscode";
-import { packPluginFolder, resolveHostOverride, validateManifestForPack } from "../../core/pack/packPlugin";
+import {
+    packPluginFolder,
+    resolveHostOverride,
+    validateManifestForPack,
+    validatePackOutputPath,
+} from "../../core/pack/packPlugin";
 import { textResult } from "./toolResult";
 
 interface PackPluginInput {
@@ -19,12 +24,12 @@ export class UxpPackPluginTool implements vscode.LanguageModelTool<PackPluginInp
     prepareInvocation(
         options: vscode.LanguageModelToolInvocationPrepareOptions<PackPluginInput>,
     ): vscode.PreparedToolInvocation {
-        const { outputPath } = options.input;
+        const { manifestPath, outputPath } = options.input;
         return {
-            invocationMessage: `Packing the plugin to ${outputPath}…`,
+            invocationMessage: `Packing the plugin from ${manifestPath} to ${outputPath}…`,
             confirmationMessages: {
                 title: "Pack UXP Plugin",
-                message: `This writes a new \`.ccx\` archive to \`${outputPath}\`, overwriting it if it already exists.`,
+                message: `This packs the plugin folder at \`${manifestPath}\` and writes a new \`.ccx\` archive to \`${outputPath}\`, overwriting it if it already exists.`,
             },
         };
     }
@@ -34,6 +39,13 @@ export class UxpPackPluginTool implements vscode.LanguageModelTool<PackPluginInp
         options: vscode.LanguageModelToolInvocationOptions<PackPluginInput>,
     ): Promise<vscode.LanguageModelToolResult> {
         const { manifestPath, outputPath, host } = options.input;
+
+        try {
+            validatePackOutputPath(outputPath);
+        }
+        catch (err) {
+            return textResult(err instanceof Error ? err.message : String(err));
+        }
 
         let parsed;
         try {

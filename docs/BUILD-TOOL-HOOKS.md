@@ -169,8 +169,9 @@ not an error.
 
 ### `POST /pack` — build the distributable `.ccx`
 
-Validates `manifest.json`, then zips the plugin folder (no exclusion rules
-— the whole folder is packed as-is, same as the panel's "Pack…" action).
+Validates `manifest.json`, then zips the plugin folder (excluding `.git`,
+`.DS_Store`, `.env*`, and `outputPath` itself, same as the panel's "Pack…"
+action).
 
 Only plugins **already registered in the panel's list** can be packed, and
 `outputPath` **must end with `.ccx`** — this endpoint is unauthenticated

@@ -6,7 +6,12 @@
  */
 
 import * as path from "path";
-import { packPluginFolder, resolveHostOverride, validateManifestForPack } from "../../core/pack/packPlugin";
+import {
+    packPluginFolder,
+    resolveHostOverride,
+    validateManifestForPack,
+    validatePackOutputPath,
+} from "../../core/pack/packPlugin";
 import { requireStringField, optionalStringField, type HookResult } from "./hooksHttp";
 import { notRegisteredResult } from "./hookErrors";
 import type { HookDependencies } from "./hooksTypes";
@@ -21,10 +26,13 @@ export function handlePack(input: Record<string, unknown>, deps: HookDependencie
     if (!deps.pluginRegistry.pluginByManifest(manifestPath)) {
         return notRegisteredResult(manifestPath);
     }
-    if (path.extname(outputPath).toLowerCase() !== ".ccx") {
+    try {
+        validatePackOutputPath(outputPath);
+    }
+    catch (err) {
         return {
             status: 400,
-            body: { ok: false, error: `"outputPath" must end with .ccx (got "${outputPath}").` },
+            body: { ok: false, error: err instanceof Error ? err.message : String(err) },
         };
     }
 

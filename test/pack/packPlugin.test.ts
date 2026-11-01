@@ -2,7 +2,17 @@ import AdmZip from "adm-zip";
 import * as fs from "fs";
 import * as os from "os";
 import * as path from "path";
-import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+
+vi.mock("vscode", () => ({
+    LanguageModelTextPart: class LanguageModelTextPart {
+        constructor(readonly value: string) {}
+    },
+    LanguageModelToolResult: class LanguageModelToolResult {
+        constructor(readonly content: unknown[]) {}
+    },
+}));
+
 import { ManifestValidationError } from "../../src/core/errors";
 import {
     defaultPackFileName,
@@ -11,10 +21,12 @@ import {
     resolveHostOverride,
     sanitizeFileNamePart,
     validateManifestForPack,
+    validatePackOutputPath,
     withSingleHost,
 } from "../../src/core/pack/packPlugin";
 import type { UxpPluginManifest } from "../../src/core/protocol/types";
 import type { ParsedManifest } from "../../src/core/manifest/manifest";
+import { UxpPackPluginTool } from "../../src/vscode/tools/uxpPackPluginTool";
 
 describe("sanitizeFileNamePart", () => {
     it("replaces illegal file name characters", () => {
@@ -169,7 +181,7 @@ describe("validateManifestForPack / packPluginFolder", () => {
         expect(() => validateManifestForPack(manifestPath)).toThrow(ManifestValidationError);
     });
 
-    it("zips the entire plugin folder with no exclusions", () => {
+    it("zips the plugin folder while excluding .git, .DS_Store, .env*, and outputPath", () => {
         writeManifest({
             id: "com.example.demo",
             name: "Demo",
@@ -181,16 +193,36 @@ describe("validateManifestForPack / packPluginFolder", () => {
         fs.mkdirSync(path.join(dir, "node_modules"));
         fs.writeFileSync(path.join(dir, "node_modules", "dep.js"), "// dep", "utf-8");
 
-        const outputPath = path.join(dir, "..", "packed.ccx");
-        packPluginFolder(dir, outputPath);
+        // Excluded entries
+        fs.mkdirSync(path.join(dir, ".git", "objects"), { recursive: true });
+        fs.writeFileSync(path.join(dir, ".git", "config"), "[core]", "utf-8");
+        fs.writeFileSync(path.join(dir, ".DS_Store"), "mac metadata", "utf-8");
+        fs.writeFileSync(path.join(dir, ".env"), "SECRET=1", "utf-8");
+        fs.writeFileSync(path.join(dir, ".env.local"), "SECRET=2", "utf-8");
+        fs.writeFileSync(path.join(dir, ".env.example"), "SECRET=", "utf-8");
 
-        const zip = new AdmZip(outputPath);
+        // Pre-existing output archive inside pluginDir itself
+        const outputInPluginDir = path.join(dir, "bundle.ccx");
+        fs.writeFileSync(outputInPluginDir, "old archive", "utf-8");
+
+        packPluginFolder(dir, outputInPluginDir);
+
+        const zip = new AdmZip(outputInPluginDir);
         const entryNames = zip.getEntries().map((e) => e.entryName.replace(/\\/g, "/"));
         expect(entryNames).toContain("manifest.json");
         expect(entryNames).toContain("index.html");
         expect(entryNames).toContain("node_modules/dep.js");
+        expect(entryNames).not.toContain(".DS_Store");
+        expect(entryNames).not.toContain(".env");
+        expect(entryNames).not.toContain(".env.local");
+        expect(entryNames).not.toContain(".env.example");
+        expect(entryNames).not.toContain("bundle.ccx");
+        expect(entryNames.some((n) => n === ".git" || n.startsWith(".git/"))).toBe(false);
+    });
 
-        fs.rmSync(outputPath, { force: true });
+    it("rejects outputPath values that do not end with .ccx", () => {
+        expect(() => validatePackOutputPath("C:\\out\\plugin.zip")).toThrow(/must end with \.ccx/);
+        expect(() => packPluginFolder(dir, path.join(dir, "plugin.txt"))).toThrow(/must end with \.ccx/);
     });
 
     it("rewrites manifest.json in the archive when a manifestJsonOverride is given", () => {
@@ -218,5 +250,35 @@ describe("validateManifestForPack / packPluginFolder", () => {
         expect(JSON.parse(fs.readFileSync(path.join(dir, "manifest.json"), "utf-8")).host).toHaveLength(2);
 
         fs.rmSync(outputPath, { force: true });
+    });
+});
+
+describe("UxpPackPluginTool", () => {
+    const tool = new UxpPackPluginTool();
+
+    it("includes both manifestPath and outputPath in prepareInvocation", () => {
+        const prepared = tool.prepareInvocation({
+            input: {
+                manifestPath: "C:\\plugin\\manifest.json",
+                outputPath: "C:\\out\\plugin.ccx",
+            },
+        });
+
+        expect(prepared.invocationMessage).toContain("C:\\plugin\\manifest.json");
+        expect(prepared.invocationMessage).toContain("C:\\out\\plugin.ccx");
+        expect(String(prepared.confirmationMessages?.message)).toContain("C:\\plugin\\manifest.json");
+        expect(String(prepared.confirmationMessages?.message)).toContain("C:\\out\\plugin.ccx");
+    });
+
+    it("rejects outputPath without a .ccx extension before reading manifest.json", async () => {
+        const result = await tool.invoke({
+            input: {
+                manifestPath: "C:\\nonexistent\\manifest.json",
+                outputPath: "C:\\out\\overwrite.js",
+            },
+        } as Parameters<typeof tool.invoke>[0]);
+
+        const text = (result as unknown as { content: { value: string }[] }).content[0].value;
+        expect(text).toContain("must end with .ccx");
     });
 });
