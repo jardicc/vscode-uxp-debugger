@@ -28,7 +28,7 @@ describe("PluginRegistry", () => {
         const registry = new PluginRegistry(new FakeMemento());
         expect(registry.snapshot.plugins).toEqual([]);
         expect(registry.snapshot.scripts).toEqual([]);
-        expect(registry.snapshot.breakOnLoad).toEqual({ plugins: false, scripts: false });
+        expect(registry.snapshot.breakOnLoad).toEqual({ plugins: false });
         expect(registry.snapshot.scriptTargetApp).toBeUndefined();
     });
 
@@ -113,7 +113,7 @@ describe("PluginRegistry", () => {
         let fired = 0;
         registry.onDidChange.on(() => fired++);
         await registry.addPlugin("C:\\one\\manifest.json");
-        await registry.setBreakOnLoad("scripts", true);
+        await registry.setBreakOnLoad("plugins", true);
         await registry.removePlugin("C:\\one\\manifest.json");
         expect(fired).toBe(3);
     });

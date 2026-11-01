@@ -301,7 +301,9 @@ export function activate(context: vscode.ExtensionContext): UxpDebuggerTestApi {
         await setCompactViewContext(false);
     });
 
-    register("uxp._exp_hostAppMethods", () => expHostAppMethodsCommand(service, output));
+    if (context.extensionMode === vscode.ExtensionMode.Development) {
+        register("uxp._exp_hostAppMethods", () => expHostAppMethodsCommand(service, output));
+    }
 
     // Start/Stop UXP Debugger (view/title icon pair + Command Palette), same
     // two-command-plus-context-key pattern as the compact-view toggle above.

@@ -244,7 +244,6 @@ interface RegistryData {
     }>;
     breakOnLoad: {
         plugins: boolean;
-        scripts: boolean;
     };
     scriptTargetApp?: string;
     compactView: boolean;
@@ -252,9 +251,7 @@ interface RegistryData {
 ```
 
 Version 1 contained the removed project-container model. It is intentionally not migrated;
-data with an old or unknown schema version resets to the version 2 defaults. The
-`breakOnLoad.scripts` field remains in the stored schema for compatibility but the current
-Scripts UI does not expose or consume it.
+data with an old or unknown schema version resets to the version 2 defaults.
 
 Plugin names, ids, host badges, manifest errors, workspace matches, and all live state are
 derived for each snapshot rather than persisted. Path identity is case-folded on Windows

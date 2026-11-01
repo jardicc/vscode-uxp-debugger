@@ -7,11 +7,6 @@ import type { CdpEventBuffer } from "./cdpEventBuffer";
 import { CdpMessageRewriter } from "./cdpMessageRewriter";
 import type { CdpMessage, CdpPayload } from "./cdpTypes";
 
-interface CdpDiscoveryEntry {
-    id?: unknown;
-    webSocketDebuggerUrl?: unknown;
-}
-
 // ---------------------------------------------------------------------------
 // CDP Proxy Server
 // ---------------------------------------------------------------------------
@@ -211,19 +206,8 @@ export class CdpProxyServer {
    * The proxy will accept exactly one WebSocket connection from js-debug,
    * and forward traffic to/from the UXP target.
    */
-    async start(): Promise<number> {
-    // Determine target ID based on connection type.
-        let targetId: string;
-        if (this.targetWsUrl.includes("/socket/cdt/")) {
-            // Broker CDT endpoint – extract session ID from URL path.
-            // /json/list is not available on the broker port (returns {}).
-            targetId = this.targetWsUrl.split("/").pop() ?? "uxp-target";
-            this.log.appendLine(`Broker CDT mode – using session ID as target: ${targetId}`);
-        }
-        else {
-            // Direct plugin port – fetch real target ID from /json/list.
-            targetId = await this.fetchTargetId();
-        }
+    start(): Promise<number> {
+        const targetId = this.targetWsUrl.split("/").pop() ?? "uxp-target";
         this.log.appendLine(`Using target ID: ${targetId}`);
 
         const startServerRes = new Promise<number>((resolve, reject) => {
@@ -965,62 +949,6 @@ export class CdpProxyServer {
                 this.reconnectToTarget(reachedOpen ? 1 : attempt + 1);
             });
         }, CdpProxyServer.RECONNECT_DELAY_MS);
-    }
-
-    // -----------------------------------------------------------------------
-    // Target ID fetching
-    // -----------------------------------------------------------------------
-
-    /**
-   * Fetch `/json/list` from the real UXP host and return the `id` of the
-   * matching target entry. Rejects if the ID cannot be determined.
-   */
-    private fetchTargetId(): Promise<string> {
-        const parsed = new URL(this.targetWsUrl);
-        const listUrl = `http://${parsed.hostname}:${parsed.port}/json/list`;
-
-        return new Promise<string>((resolve, reject) => {
-            const req = http.get(listUrl, { timeout: 2000 }, (res) => {
-                if (res.statusCode !== 200) {
-                    res.resume();
-                    reject(new Error(`/json/list returned HTTP ${String(res.statusCode)}`));
-                    return;
-                }
-                const chunks: Buffer[] = [];
-                res.on("data", (chunk: Buffer) => chunks.push(chunk));
-                res.on("end", () => {
-                    try {
-                        const entries = JSON.parse(Buffer.concat(chunks).toString("utf-8")) as unknown;
-                        if (Array.isArray(entries)) {
-                            // Try to find the entry whose webSocketDebuggerUrl matches ours
-                            const discoveryEntries = entries.filter(
-                                (entry): entry is CdpDiscoveryEntry => entry !== null && typeof entry === "object",
-                            );
-                            const match = discoveryEntries.find(
-                                (entry) => entry.webSocketDebuggerUrl === this.targetWsUrl,
-                            );
-                            const entry = match ?? discoveryEntries[0];
-                            if (typeof entry.id === "string") {
-                                resolve(entry.id);
-                                return;
-                            }
-                        }
-                    }
-                    catch { /* parse error */ }
-                    reject(new Error("Could not determine target ID from /json/list"));
-                });
-                res.on("error", (err) => {
-                    reject(err);
-                });
-            });
-            req.on("timeout", () => {
-                req.destroy();
-                reject(new Error("/json/list request timed out"));
-            });
-            req.on("error", (err) => {
-                reject(err);
-            });
-        });
     }
 
     // -----------------------------------------------------------------------

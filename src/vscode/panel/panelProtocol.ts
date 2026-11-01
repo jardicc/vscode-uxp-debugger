@@ -56,7 +56,7 @@ export type PanelAction
         | { kind: "addScriptPick" }
         | { kind: "addActiveScript" }
         | { kind: "removeScript"; scriptPath: string }
-        | { kind: "setBreakOnLoad"; scope: "plugins" | "scripts"; value: boolean }
+        | { kind: "setBreakOnLoad"; scope: "plugins"; value: boolean }
         | { kind: "setScriptTargetApp"; appId: string | undefined }
   /** Persists §5.2; the watch feature itself is a v1 stub. */
         | { kind: "setWatch"; target: TargetRef; value: boolean }

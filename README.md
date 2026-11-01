@@ -142,12 +142,6 @@ file extension always decides which apps are compatible (see
 Use the **Create launch.json configuration** button on a plugin (`…` menu) or script row in the
 UXP Devtools panel to generate these entries with the known values filled in.
 
-## Settings
-
-| Setting | Description |
-| --- | --- |
-| `uxp.manifests` | Workspace-relative paths to plugin `manifest.json` files. Kept in sync with the plugin list in the UXP Devtools panel, so a project can ship its plugin registration in `.vscode/settings.json`. |
-
 ---
 
 ## Script debugging notes

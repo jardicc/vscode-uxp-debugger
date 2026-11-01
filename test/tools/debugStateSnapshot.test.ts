@@ -7,7 +7,7 @@ function baseRegistry(overrides: Partial<RegistryData> = {}): RegistryData {
         v: 2,
         plugins: [],
         scripts: [],
-        breakOnLoad: { plugins: false, scripts: false },
+        breakOnLoad: { plugins: false },
         compactView: false,
         ...overrides,
     };
