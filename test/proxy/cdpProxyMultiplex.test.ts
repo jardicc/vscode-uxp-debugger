@@ -213,4 +213,42 @@ describe("CdpProxyServer — multi-client multiplexing (panel + js-debug)", () =
             connect(panelUrl(), { headers: { Host: "attacker.example:9222" } }),
         ).rejects.toThrow(/403/);
     });
+
+    it("closes the previous js-debug client WebSocket when a new client connects", async () => {
+        const firstClient = await connect(jsDebugUrl());
+        let firstClosed = false;
+        firstClient.ws.on("close", () => {
+            firstClosed = true;
+        });
+
+        const secondClient = await connect(jsDebugUrl());
+        await waitFor(() => firstClosed);
+
+        expect(firstClient.ws.readyState).toBe(WebSocket.CLOSED);
+        expect(secondClient.ws.readyState).toBe(WebSocket.OPEN);
+
+        secondClient.ws.close();
+    });
+
+    it("cancels a pending reconnect timer when a new client triggers connectToTarget during the backoff window", async () => {
+        const firstClient = await connect(jsDebugUrl());
+        await waitFor(() => targetConnections === 1 && targetSocket !== undefined);
+
+        // Drop the target connection to schedule the 1500ms reconnect timer.
+        targetSocket!.close();
+        await waitFor(() => targetSocket?.readyState === WebSocket.CLOSED);
+
+        // Before the 1500ms timer fires, connect a panel client, which triggers
+        // connectToTarget() immediately.
+        const panel = await connect(panelUrl());
+        await waitFor(() => targetConnections === 2);
+
+        // Wait past the 1500ms reconnect delay — the cancelled timer must NOT
+        // open a third target connection.
+        await new Promise((r) => setTimeout(r, 1_700));
+        expect(targetConnections).toBe(2);
+
+        firstClient.ws.close();
+        panel.ws.close();
+    });
 });

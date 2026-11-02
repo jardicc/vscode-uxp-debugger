@@ -407,6 +407,40 @@ describe("CdpMessageRewriter — Runtime.evaluate context handling (rewriteFromC
         expect(result.params.uniqueContextId).toBe("ctx-1");
         expect(result.params.contextId).toBeUndefined();
     });
+
+    it("clears pendingContextMessages and pendingEvaluateIds when markNewClient is called", () => {
+        const { rewriter, sendToTarget } = makeRewriter();
+
+        // First client queues a Runtime.evaluate before an execution context exists.
+        expect(
+            rewriter.rewriteFromClient(
+                JSON.stringify({ id: 5, method: "Runtime.evaluate", params: { expression: "stale()" } }),
+            ),
+        ).toBeNull();
+
+        // A new client attaches (Restart) before the context arrives.
+        rewriter.markNewClient();
+
+        // When the context finally arrives, the stale evaluate from the old client must NOT be flushed.
+        rewriter.rewriteFromTarget(
+            JSON.stringify({ method: "Runtime.executionContextCreated", params: { context: { uniqueId: "ctx-fresh" } } }),
+        );
+        expect(sendToTarget).not.toHaveBeenCalled();
+
+        // And an error reply with id=5 for the new client (e.g. a non-evaluate request) must not be
+        // rewritten as a synthetic Runtime.evaluate error result.
+        const nonEvalError = JSON.stringify({ id: 5, error: { code: -32000, message: "Some other error" } });
+        expect(rewriter.rewriteFromTarget(nonEvalError)).toBe(nonEvalError);
+    });
+
+    it("rejects in-flight sendRawRequestToTarget waiters when dispose() is called", async () => {
+        const { rewriter } = makeRewriter();
+        const pending = rewriter.sendRawRequestToTarget("Runtime.evaluate", { expression: "1+1" }, 30_000);
+
+        rewriter.dispose();
+
+        await expect(pending).rejects.toThrow(/stopped before the UXP target replied/);
+    });
 });
 
 describe("CdpMessageRewriter — breakpoint bookkeeping across client reattaches", () => {

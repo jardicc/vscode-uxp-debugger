@@ -237,6 +237,8 @@ export class CdpMessageRewriter {
     markNewClient(): void {
         this.hasReplayedForCurrentClient = false;
         this.targetPausedForClient = false;
+        this.pendingContextMessages.length = 0;
+        this.pendingEvaluateIds.clear();
 
         if (this.liveBreakpointIds.size > 0) {
             this.log.appendLine(
@@ -283,7 +285,12 @@ export class CdpMessageRewriter {
             this.deferredContextTimer = undefined;
             this.deferredContextMessages.length = 0;
         }
+        for (const waiter of this.internalRequestWaiters.values()) {
+            waiter.reject(new Error("The CDP proxy was stopped before the UXP target replied."));
+        }
+        this.internalRequestWaiters.clear();
         this.pendingContextMessages.length = 0;
+        this.pendingEvaluateIds.clear();
         this.lastExecutionContextCreatedRaw = undefined;
         this.scriptParsedCache.clear();
         this.liveBreakpointIds.clear();

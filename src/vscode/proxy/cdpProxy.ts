@@ -57,9 +57,11 @@ export class CdpProxyServer {
     private readonly targetWsUrl: string;
     private readonly targetLabel: string;
     private readonly log: vscode.OutputChannel;
+    private readonly wss = new WebSocketServer({ noServer: true });
     private httpServer: http.Server | undefined;
     private targetWs: WebSocket | undefined;
     private clientWs: WebSocket | undefined;
+    private reconnectTimer: ReturnType<typeof setTimeout> | undefined;
 
     /** Connected DevTools-panel clients (HTML inspector webviews). */
     private readonly panelClients = new Set<WebSocket>();
@@ -289,6 +291,10 @@ export class CdpProxyServer {
    */
     async stop(): Promise<void> {
         this.stopping = true;
+        if (this.reconnectTimer) {
+            clearTimeout(this.reconnectTimer);
+            this.reconnectTimer = undefined;
+        }
         this.rewriter.dispose();
         this.clientWs?.close();
         for (const panelWs of this.panelClients) {
@@ -297,6 +303,7 @@ export class CdpProxyServer {
         this.panelClients.clear();
         this.panelPendingRequests.clear();
         this.targetWs?.close();
+        this.wss.close();
         return new Promise<void>((resolve) => {
             if (this.httpServer) {
                 this.httpServer.close(() => {
@@ -394,10 +401,10 @@ export class CdpProxyServer {
             return;
         }
 
-        // Create a WebSocket server just for this single connection
-        const wss = new WebSocketServer({ noServer: true });
-
-        wss.handleUpgrade(_req, socket, head, (clientWs) => {
+        this.wss.handleUpgrade(_req, socket, head, (clientWs) => {
+            if (this.clientWs && this.clientWs !== clientWs) {
+                this.clientWs.close();
+            }
             this.clientWs = clientWs;
             this.log.appendLine("js-debug connected to CDP proxy.");
             this.rewriter.markNewClient();
@@ -424,6 +431,11 @@ export class CdpProxyServer {
 
             // ------ Forward: js-debug (client) → UXP target ------
             clientWs.on("message", (data) => {
+                // Ignore any buffered frames from a previous client socket that was
+                // already replaced by a newer js-debug connection (e.g. during Restart).
+                if (this.clientWs !== clientWs) {
+                    return;
+                }
                 // WebSocket.RawData provides a meaningful text conversion for received frames.
                 // eslint-disable-next-line @typescript-eslint/no-base-to-string
                 const raw = data.toString();
@@ -468,6 +480,9 @@ export class CdpProxyServer {
             });
 
             clientWs.on("close", () => {
+                if (this.clientWs === clientWs) {
+                    this.clientWs = undefined;
+                }
                 this.log.appendLine("js-debug WebSocket closed.");
                 // Do NOT close the UXP target connection here — a "Restart" swaps
                 // js-debug's client WebSocket but expects the same target/session
@@ -509,8 +524,7 @@ export class CdpProxyServer {
             return;
         }
 
-        const wss = new WebSocketServer({ noServer: true });
-        wss.handleUpgrade(req, socket, head, (panelWs) => {
+        this.wss.handleUpgrade(req, socket, head, (panelWs) => {
             this.panelClients.add(panelWs);
             this.log.appendLine(
                 `Inspector panel connected to CDP proxy (${String(this.panelClients.size)} panel client(s)).`,
@@ -695,6 +709,10 @@ export class CdpProxyServer {
    * operations like `location.reload()` don't kill the debug session.
    */
     private connectToTarget(): void {
+        if (this.reconnectTimer) {
+            clearTimeout(this.reconnectTimer);
+            this.reconnectTimer = undefined;
+        }
         this.targetOpen = false;
         this.targetConnecting = true;
         this.targetWs = new WebSocket(this.targetWsUrl);
@@ -944,8 +962,12 @@ export class CdpProxyServer {
             + `in ${String(CdpProxyServer.RECONNECT_DELAY_MS)}ms…`,
         );
 
-        setTimeout(() => {
-            if (this.stopping) {
+        if (this.reconnectTimer) {
+            clearTimeout(this.reconnectTimer);
+        }
+        this.reconnectTimer = setTimeout(() => {
+            this.reconnectTimer = undefined;
+            if (this.stopping || this.targetOpen || this.targetConnecting) {
                 return;
             }
             this.connectToTarget();
