@@ -84,6 +84,22 @@ describe("CdpMessageRewriter — source map / script URL rewriting (rewriteFromT
         expect(map.sources).toEqual(["file:///a:/VS-projects/uxp-debugger2/e2e/fixtures/plugin/index.js"]);
     });
 
+    it("resolves a raw macOS POSIX scriptParsed url (Plugin/runScript shape) without four slashes or doubled paths", () => {
+        const pluginDir = "/Users/alice/scripts";
+        const { rewriter } = makeRewriter(pluginDir);
+        const raw = scriptParsed({
+            url: "/Users/alice/scripts/test.psjs",
+            sourceMapURL: "",
+            endLine: 10,
+        });
+
+        const result = JSON.parse(rewriter.rewriteFromTarget(raw)!);
+
+        expect(result.params.url).toBe("file:///Users/alice/scripts/test.psjs");
+        const map = decodeInlineSourceMap(result.params.sourceMapURL);
+        expect(map.sources).toEqual(["file:///Users/alice/scripts/test.psjs"]);
+    });
+
     it("rewrites the inline sourceMapURL's sourceRoot using the script's own subdirectory", () => {
         const { rewriter } = makeRewriter("A:/plugins/my-plugin");
         const raw = scriptParsed({

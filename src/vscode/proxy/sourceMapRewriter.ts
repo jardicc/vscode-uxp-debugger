@@ -1,6 +1,10 @@
 import * as fs from "fs";
 import * as path from "path";
 import type * as vscode from "vscode";
+import { foldPathCase } from "../../core/pathCase";
+import { toFileUrl } from "../../core/stripTypeScript";
+
+export { toFileUrl };
 
 // ---------------------------------------------------------------------------
 // Source-map & URL rewriting (pure functions)
@@ -17,14 +21,38 @@ interface SourceMapV3 {
     file?: string;
 }
 
+/**
+ * If `url` is already an absolute path inside `pluginDir` (for example when UXP
+ * reports a raw OS path like `/Users/alice/scripts/test.psjs` or
+ * `C:\scripts\test.psjs` in `Debugger.scriptParsed.url`), strips the `pluginDir`
+ * prefix and returns the remainder as a forward-slash relative path. Returns
+ * `undefined` when `url` is not prefixed by `pluginDir`.
+ */
+function stripPluginDirPrefix(url: string, pluginDir: string): string | undefined {
+    const cleanUrl = url.replace(/\\/g, "/");
+    const cleanBase = pluginDir.replace(/\\/g, "/").replace(/\/+$/, "");
+    if (!cleanBase) {
+        return undefined;
+    }
+    const foldedUrl = foldPathCase(cleanUrl);
+    const foldedBase = foldPathCase(cleanBase);
+    if (foldedUrl === foldedBase) {
+        return "";
+    }
+    if (foldedUrl.startsWith(foldedBase + "/")) {
+        return cleanUrl.slice(cleanBase.length + 1);
+    }
+    return undefined;
+}
+
 /** Sets `map.sourceRoot` (in place) to a `file://` URL under `pluginDir/scriptSubdir`. */
 function setSourceRootForPluginDir(
     map: SourceMapV3,
     pluginDir: string,
     scriptSubdir: string,
 ): { oldRoot: string | undefined; newRoot: string } {
-    const baseDir = pluginDir.replace(/\\/g, "/") + (scriptSubdir ? "/" + scriptSubdir : "");
-    const root = "file:///" + baseDir + "/";
+    const baseDir = pluginDir.replace(/\\/g, "/").replace(/\/+$/, "") + (scriptSubdir ? "/" + scriptSubdir : "");
+    const root = toFileUrl(baseDir) + "/";
     const oldRoot = map.sourceRoot;
     map.sourceRoot = root;
     return { oldRoot, newRoot: root };
@@ -145,8 +173,8 @@ export function resolveScriptFileUrl(url: string, pluginDir: string): string {
     // a wrong/garbage path when that assumption doesn't hold.
         const relative = stripOpaqueScheme(url).replace(/^\/+/, "");
         if (fs.existsSync(path.join(pluginDir, relative))) {
-            const baseDir = pluginDir.replace(/\\/g, "/");
-            return "file:///" + baseDir + (relative ? "/" + relative : "");
+            const baseDir = pluginDir.replace(/\\/g, "/").replace(/\/+$/, "");
+            return toFileUrl(baseDir + (relative ? "/" + relative : ""));
         }
         return url;
     }
@@ -157,11 +185,24 @@ export function resolveScriptFileUrl(url: string, pluginDir: string): string {
     // UXP sometimes reports the script's raw absolute OS path instead of a
     // uxp:// url (observed on Windows: "a:\...\index.js") — already absolute,
     // just needs a file:// prefix, not joining with pluginDir below.
-        return "file:///" + url.replace(/\\/g, "/");
+        return toFileUrl(url);
+    }
+    // On macOS, a raw OS script path starts with "/" (e.g. "/Users/alice/scripts/test.psjs"),
+    // which is indistinguishable by prefix alone from a root-relative path ("/index.js")
+    // produced by normalizeScriptUrl. If it already starts with pluginDir (or exists
+    // on disk as an absolute POSIX path when not present under pluginDir), treat it as
+    // an already-absolute path instead of joining it onto pluginDir a second time.
+    const strippedFromPluginDir = stripPluginDirPrefix(url, pluginDir);
+    if (strippedFromPluginDir !== undefined) {
+        const baseDir = pluginDir.replace(/\\/g, "/").replace(/\/+$/, "");
+        return toFileUrl(baseDir + (strippedFromPluginDir ? "/" + strippedFromPluginDir : ""));
+    }
+    if (url.startsWith("/") && url !== "/" && !fs.existsSync(path.join(pluginDir, url.replace(/^\/+/, ""))) && fs.existsSync(url)) {
+        return toFileUrl(url);
     }
     const relative = url.replace(/^\.?\/+/, "");
-    const baseDir = pluginDir.replace(/\\/g, "/");
-    return "file:///" + baseDir + (relative ? "/" + relative : "");
+    const baseDir = pluginDir.replace(/\\/g, "/").replace(/\/+$/, "");
+    return toFileUrl(baseDir + (relative ? "/" + relative : ""));
 }
 
 /**
@@ -182,7 +223,7 @@ export function resolveScriptFileUrl(url: string, pluginDir: string): string {
  * already does for `.ts` scripts (see `buildIdentitySourceMap` there).
  */
 export function buildIdentitySourceMapUrl(absoluteFilePath: string, lineCount: number): string {
-    const sourceUrl = "file:///" + absoluteFilePath.replace(/\\/g, "/");
+    const sourceUrl = toFileUrl(absoluteFilePath);
     // VLQ segments: [genColumn=0, sourceIndexDelta=0, sourceLineDelta, sourceColumn=0].
     const lines = Array.from({ length: Math.max(lineCount, 1) }, (_, i) => (i === 0 ? "AAAA" : "AACA"));
     return encodeInlineSourceMap({
@@ -237,8 +278,14 @@ function parseSourceMap(json: string): SourceMapV3 {
  * by `normalizeScriptUrl`, or a plain relative path) — used as the first
  * candidate and final fallback in `resolveVerifiedSubdir`.
  */
-export function deriveNaiveSubdir(url: string): string {
-    const cleanUrl = path.posix.normalize(url);
+export function deriveNaiveSubdir(url: string, pluginDir?: string): string {
+    if (pluginDir !== undefined) {
+        const stripped = stripPluginDirPrefix(url, pluginDir);
+        if (stripped !== undefined) {
+            return stripped ? deriveNaiveSubdir("/" + stripped) : "";
+        }
+    }
+    const cleanUrl = path.posix.normalize(url.replace(/\\/g, "/"));
     const dir = path.posix.dirname(cleanUrl);
     return dir === "/" || dir === "." ? "" : dir.replace(/^\//, "");
 }
@@ -251,45 +298,21 @@ export function deriveNaiveSubdir(url: string): string {
  * part of the relative path, not something to discard), and finally the
  * plugin root itself as a last resort.
  */
-function buildSubdirCandidates(url: string): string[] {
-    const candidates = [deriveNaiveSubdir(url)];
+function buildSubdirCandidates(url: string, pluginDir: string): string[] {
+    const candidates = [deriveNaiveSubdir(url, pluginDir)];
     if (isOpaqueCustomScheme(url)) {
-        candidates.push(deriveNaiveSubdir(stripOpaqueScheme(url)));
+        candidates.push(deriveNaiveSubdir(stripOpaqueScheme(url), pluginDir));
     }
     candidates.push("");
     return [...new Set(candidates)];
 }
 
-/**
- * Resolves the subdirectory (relative to `pluginDir`) that a script's
- * *original* source files actually live under, verifying candidates against
- * the real filesystem instead of trusting `url`'s shape alone.
- *
- * Why this exists: `Debugger.scriptParsed.url` isn't always a well-behaved
- * `uxp://` or root-relative path — some bundlers report scripts under a
- * custom scheme (e.g. `uxp-script://assets/index.js`, emitted by
- * vite-uxp-plugin's `debugger: "udt"` build mode) whose "host" segment is
- * actually part of the relative path. Naively running `path.posix.dirname`
- * on such a url produces a garbage subdirectory, which then corrupts
- * `sourceRoot` and makes every `sources` entry resolve to the wrong file
- * (e.g. `dist/src/main.tsx` — a read-only, CDP-fetched preview — instead of
- * the real, editable `src/main.tsx`).
- *
- * `relativePathsToVerify` should be a small sample of paths that are
- * expected to resolve to real files once the correct subdir is found (e.g.
- * a source map's `sources` entries, or an external `.map` file's own name).
- * Each candidate subdir is scored by how many samples resolve to a file
- * that actually exists on disk; the first perfect-score candidate wins, and
- * the best-scoring one is used otherwise. If NO sample paths are available,
- * or none of them exist anywhere, this falls back to the naive guess —
- * exactly today's behavior — so already-working url shapes never regress.
- */
 export function resolveVerifiedSubdir(
     url: string,
     pluginDir: string,
     relativePathsToVerify: string[],
 ): string {
-    const fallback = deriveNaiveSubdir(url);
+    const fallback = deriveNaiveSubdir(url, pluginDir);
     if (relativePathsToVerify.length === 0) {
         return fallback;
     }
@@ -301,7 +324,7 @@ export function resolveVerifiedSubdir(
 
     let best = fallback;
     let bestScore = -1;
-    for (const candidate of buildSubdirCandidates(url)) {
+    for (const candidate of buildSubdirCandidates(url, pluginDir)) {
         const baseDir = path.join(pluginDir, candidate);
         const score = samples.reduce(
             (count, sample) => count + (fs.existsSync(path.resolve(baseDir, sample)) ? 1 : 0),

@@ -96,6 +96,30 @@ describe("resolveScriptFileUrl", () => {
         ).toBe("file:///a:/VS-projects/uxp-debugger2/e2e/fixtures/plugin/index.js");
     });
 
+    it("resolves a POSIX root-relative url under a POSIX pluginDir with three slashes (not four)", () => {
+        expect(resolveScriptFileUrl("/index.js", "/Users/alice/plugins/my-plugin")).toBe(
+            "file:///Users/alice/plugins/my-plugin/index.js",
+        );
+    });
+
+    it("resolves a raw POSIX absolute script path inside pluginDir without doubling pluginDir", () => {
+        expect(
+            resolveScriptFileUrl(
+                "/Users/alice/scripts/test.psjs",
+                "/Users/alice/scripts",
+            ),
+        ).toBe("file:///Users/alice/scripts/test.psjs");
+    });
+
+    it("resolves a raw POSIX absolute script path in a nested subdirectory of pluginDir without doubling", () => {
+        expect(
+            resolveScriptFileUrl(
+                "/Users/alice/plugin/dist/bundle.js",
+                "/Users/alice/plugin",
+            ),
+        ).toBe("file:///Users/alice/plugin/dist/bundle.js");
+    });
+
     it("leaves already-absolute urls (file:, http(s):) untouched", () => {
         expect(resolveScriptFileUrl("file:///C:/plugins/my-plugin/index.js", "A:/plugins/my-plugin")).toBe(
             "file:///C:/plugins/my-plugin/index.js",
@@ -138,6 +162,12 @@ describe("deriveNaiveSubdir", () => {
     it("returns an empty string for a script at the plugin root", () => {
         expect(deriveNaiveSubdir("/index.js")).toBe("");
         expect(deriveNaiveSubdir("./index.js")).toBe("");
+    });
+
+    it("strips pluginDir prefix when url is a raw POSIX or Windows path inside pluginDir", () => {
+        expect(deriveNaiveSubdir("/Users/alice/scripts/test.psjs", "/Users/alice/scripts")).toBe("");
+        expect(deriveNaiveSubdir("/Users/alice/plugin/dist/bundle.js", "/Users/alice/plugin")).toBe("dist");
+        expect(deriveNaiveSubdir("A:\\plugin\\dist\\bundle.js", "A:\\plugin")).toBe("dist");
     });
 });
 
@@ -191,6 +221,10 @@ describe("buildIdentitySourceMapUrl", () => {
     it("produces at least one mapped line even for a zero/negative line count", () => {
         const map = decodeInlineSourceMap(buildIdentitySourceMapUrl("A:/plugins/my-plugin/index.js", 0));
         expect((map.mappings as string).split(";")).toEqual(["AAAA"]);
+    });
+    it("produces a valid triple-slash file:/// sourceUrl for POSIX absolute paths", () => {
+        const map = decodeInlineSourceMap(buildIdentitySourceMapUrl("/Users/alice/plugins/my-plugin/index.js", 2));
+        expect(map.sources).toEqual(["file:///Users/alice/plugins/my-plugin/index.js"]);
     });
 });
 
@@ -350,16 +384,27 @@ describe("rewriteInlineSourceMapRoot", () => {
         expect(decodeInlineSourceMap(result).sourceRoot).toBe("file:///A:/plugins/p/assets/sub/deep/");
     });
 
-    it("produces a quadruple-slash root when pluginDir is itself posix-absolute (documented quirk)", () => {
-    // pluginDir starting with "/" is not de-duplicated against the fixed
-    // "file:///" prefix — this repo only ever passes Windows-style drive
-    // paths in practice, so this is captured as a known quirk, not "fixed".
+    it("produces a canonical triple-slash root when pluginDir is posix-absolute", () => {
         const log = fakeLog();
         const dataUrl = buildInlineSourceMap({ version: 3, sources: [], mappings: "" });
 
-        const result = rewriteInlineSourceMapRoot(dataUrl, "/plugins/p", "/index.js", log);
+        const result = rewriteInlineSourceMapRoot(dataUrl, "/Users/alice/plugins/p", "/index.js", log);
 
-        expect(decodeInlineSourceMap(result).sourceRoot).toBe("file:////plugins/p/");
+        expect(decodeInlineSourceMap(result).sourceRoot).toBe("file:///Users/alice/plugins/p/");
+    });
+
+    it("does not double pluginDir in sourceRoot when scriptUrl is a raw POSIX path inside pluginDir", () => {
+        const log = fakeLog();
+        const dataUrl = buildInlineSourceMap({ version: 3, sources: ["test.ts"], mappings: "AAAA" });
+
+        const result = rewriteInlineSourceMapRoot(
+            dataUrl,
+            "/Users/alice/scripts",
+            "/Users/alice/scripts/test.js",
+            log,
+        );
+
+        expect(decodeInlineSourceMap(result).sourceRoot).toBe("file:///Users/alice/scripts/");
     });
 });
 
