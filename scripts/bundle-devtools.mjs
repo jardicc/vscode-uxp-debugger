@@ -90,3 +90,16 @@ await build({
     },
   ],
 });
+
+// Clipboard bridge loaded by uxp_inspector_app.html inside the DevTools iframe. The copy step above skips .js
+// files, so it has to be bundled into the output directory explicitly.
+await build({
+  absWorkingDir: repoRoot,
+  entryPoints: [path.join(repoRoot, "src", "vscode", "inspector", "frame", "clipboardBridge.ts")],
+  outfile: path.join(outputDir, "uxp_clipboard_bridge.js"),
+  bundle: true,
+  format: "iife",
+  platform: "browser",
+  target: "es2022",
+  minify: true,
+});

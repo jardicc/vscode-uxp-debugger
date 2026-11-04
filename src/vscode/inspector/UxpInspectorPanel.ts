@@ -1,6 +1,7 @@
 // Adapted from microsoft/vscode-edge-devtools (src/devtoolsPanel.ts).
 // Copyright (c) Microsoft Corporation. Licensed under the MIT License.
 
+import * as crypto from "crypto";
 import * as path from "path";
 import * as vscode from "vscode";
 import type { PluginSession } from "../../core/broker/SessionRegistry";
@@ -8,6 +9,7 @@ import { TypedEvent } from "../../core/events";
 import { DEFAULT_BROKER_PORT } from "../../core/protocol/types";
 import type { CdpProxyRegistry } from "../proxy/CdpProxyRegistry";
 import { CdpProxyServer } from "../proxy/cdpProxy";
+import { CLIPBOARD_WRITE_MESSAGE, isClipboardWriteMessage } from "./clipboardBridgeMessage";
 import { INSPECTOR_STATIC_PATH_PREFIX } from "./inspectorStaticServer";
 
 /**
@@ -141,6 +143,19 @@ export class UxpInspectorPanel {
             this.dispose();
         }, this, this.disposables);
 
+        // The DevTools iframe can't write to the clipboard itself (cross-origin
+        // frame in a webview; on macOS VS Code never sees its Cmd+C), so its
+        // clipboard bridge sends the text up here.
+        this.panel.webview.onDidReceiveMessage(
+            (msg: unknown) => {
+                if (isClipboardWriteMessage(msg)) {
+                    void vscode.env.clipboard.writeText(msg.text);
+                }
+            },
+            this,
+            this.disposables,
+        );
+
         // Re-render (new theme param) when the user switches color themes.
         vscode.workspace.onDidChangeConfiguration(
             (e) => {
@@ -186,6 +201,7 @@ export class UxpInspectorPanel {
         // Native ws:// connection straight to the CDP proxy's `/panel` endpoint.
         const wsTarget = `127.0.0.1:${String(this.proxyPort)}${CdpProxyServer.PANEL_PATH}`;
         const frontendUrl = `${INSPECTOR_ENTRYPOINT}?ws=${encodeURIComponent(wsTarget)}&panel=elements`;
+        const nonce = crypto.randomBytes(16).toString("base64");
 
         return `<!doctype html>
 <html>
@@ -200,7 +216,7 @@ export class UxpInspectorPanel {
     content="default-src;
     img-src 'self' data: ${webview.cspSource};
     style-src 'self' 'unsafe-inline' ${webview.cspSource};
-    script-src 'self' 'unsafe-eval' ${webview.cspSource};
+    script-src 'self' 'unsafe-eval' 'nonce-${nonce}' ${webview.cspSource};
     frame-src 'self' ${webview.cspSource} ${INSPECTOR_ORIGIN};
     connect-src 'self' data: ${webview.cspSource};
   ">
@@ -208,6 +224,22 @@ export class UxpInspectorPanel {
 <body>
   <iframe id="devtools-frame" allow="clipboard-read; clipboard-write *"
     frameborder="0" src="${frontendUrl}"></iframe>
+  <script nonce="${nonce}">
+    (function () {
+      const vscode = acquireVsCodeApi();
+      const inspectorOrigin = ${JSON.stringify(INSPECTOR_ORIGIN)};
+      const clipboardWriteMessage = ${JSON.stringify(CLIPBOARD_WRITE_MESSAGE)};
+      // Forward clipboard writes from the DevTools iframe's clipboard bridge.
+      window.addEventListener("message", (event) => {
+        const data = event.data;
+        if (event.origin !== inspectorOrigin || !data || data.type !== clipboardWriteMessage
+          || typeof data.text !== "string") {
+          return;
+        }
+        vscode.postMessage({ type: clipboardWriteMessage, text: data.text });
+      });
+    })();
+  </script>
 </body>
 </html>`;
     }
