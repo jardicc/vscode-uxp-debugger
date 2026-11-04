@@ -3,7 +3,7 @@ import type { PauseTracker } from "../debug/pauseTracker";
 import type { UxpDebugSessionManager } from "../debug/UxpDebugSessionManager";
 import { raceWithTimeout, textResult } from "./toolResult";
 import { tryResolveAttachedSessionId } from "./toolSessionResolution";
-import { type DapVariable, positiveInteger, toVariableSummary } from "./variableInspection";
+import { positiveInteger, toVariableSummary } from "./variableInspection";
 
 interface GetVariableChildrenInput {
     variablesReference: number;
@@ -11,10 +11,6 @@ interface GetVariableChildrenInput {
     filter?: "named" | "indexed";
     start?: number;
     count?: number;
-}
-
-interface VariablesResponse {
-    variables?: DapVariable[];
 }
 
 /** Expands a DAP variable handle from the current paused state without evaluating code. */
@@ -75,7 +71,7 @@ export class UxpGetVariableChildrenTool implements vscode.LanguageModelTool<GetV
                     ...(filter ? { filter } : {}),
                     start,
                     count,
-                }) as Promise<VariablesResponse>,
+                }),
                 UxpGetVariableChildrenTool.REQUEST_TIMEOUT_MS,
                 "Timed out waiting for the debug adapter's variables response.",
             );

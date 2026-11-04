@@ -822,6 +822,7 @@
     "@types/react-dom": "18.3.7",
     "@types/vscode": "^1.99.0",
     "@types/ws": "^8.18.2",
+    "@vscode/debugprotocol": "1.68.0",
     "@vscode/test-electron": "3.1.0",
     "@vscode/vsce": "^3.9.2",
     "devtools-protocol": "^0.0.1684464",

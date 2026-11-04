@@ -6,6 +6,7 @@
  * cleanup, and DAP message tracking.
  */
 
+import type { DebugProtocol } from "@vscode/debugprotocol";
 import * as assert from "assert";
 import * as path from "path";
 import * as vscode from "vscode";
@@ -258,7 +259,7 @@ export async function assertCanEvaluate(
                 `customRequest("evaluate") for "${expression}"`,
             );
             assert.strictEqual(
-                response?.result,
+                response.result,
                 expectedResult,
                 `evaluating "${expression}" returned an unexpected result — the CDP proxy is likely not `
                 + "forwarding to the real UXP target.",
@@ -338,7 +339,7 @@ export function waitForBreakpointHit(timeoutMs = 15_000): Promise<number> & { di
             if (direction !== "send") {
                 return;
             }
-            const m = message as { type?: string; event?: string; body?: { reason?: string; threadId?: number } };
+            const m = message as Partial<DebugProtocol.StoppedEvent>;
             if (m.type === "event" && m.event === "stopped" && m.body?.reason === "breakpoint") {
                 clearTimeout(timer);
                 disposable?.dispose();
@@ -362,7 +363,7 @@ export async function stackTraceWithRetry(
     vsSession: vscode.DebugSession,
     threadId: number,
     timeoutMs = 15_000,
-): Promise<{ stackFrames: { line: number; source?: { path?: string } }[] }> {
+): Promise<DebugProtocol.StackTraceResponse["body"]> {
     const start = Date.now();
     let lastErr: unknown;
     while (Date.now() - start < timeoutMs) {

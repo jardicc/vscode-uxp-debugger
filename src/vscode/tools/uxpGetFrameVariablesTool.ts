@@ -4,8 +4,6 @@ import type { UxpDebugSessionManager } from "../debug/UxpDebugSessionManager";
 import { raceWithTimeout, textResult } from "./toolResult";
 import { tryResolveAttachedSessionId } from "./toolSessionResolution";
 import {
-    type DapScope,
-    type DapVariable,
     positiveInteger,
     scopeSortRank,
     toVariableSummary,
@@ -16,14 +14,6 @@ interface GetFrameVariablesInput {
     sessionId?: string;
     includeExpensive?: boolean;
     maxVariablesPerScope?: number;
-}
-
-interface ScopesResponse {
-    scopes?: DapScope[];
-}
-
-interface VariablesResponse {
-    variables?: DapVariable[];
 }
 
 /** Reads a paused frame's scopes and top-level variables without evaluating code. */
@@ -84,12 +74,12 @@ export class UxpGetFrameVariablesTool implements vscode.LanguageModelTool<GetFra
         this.output.appendLine(`[uxp_get_frame_variables] session=${sessionId} frameId=${String(frameId)}`);
         try {
             const scopeReply = await raceWithTimeout(
-                dapSession.customRequest("scopes", { frameId }) as Promise<ScopesResponse>,
+                dapSession.customRequest("scopes", { frameId }),
                 UxpGetFrameVariablesTool.REQUEST_TIMEOUT_MS,
                 "Timed out waiting for the debug adapter's scopes response.",
             );
             const scopes = (Array.isArray(scopeReply.scopes) ? scopeReply.scopes : [])
-                .filter((scope) => options.input.includeExpensive === true || scope.expensive !== true)
+                .filter((scope) => options.input.includeExpensive === true || !scope.expensive)
                 .sort((left, right) => scopeSortRank(left) - scopeSortRank(right));
 
             const summaries = [];
@@ -103,18 +93,18 @@ export class UxpGetFrameVariablesTool implements vscode.LanguageModelTool<GetFra
                                 variablesReference,
                                 start: 0,
                                 count: maxVariables,
-                            }) as Promise<VariablesResponse>,
+                            }),
                             UxpGetFrameVariablesTool.REQUEST_TIMEOUT_MS,
                             `Timed out waiting for variables in scope "${typeof scope.name === "string" ? scope.name : ""}".`,
                         )
-                    : {};
+                    : { variables: [] };
                 const variables = Array.isArray(variableReply.variables) ? variableReply.variables : [];
                 summaries.push({
                     name: typeof scope.name === "string" ? scope.name : "",
                     ...(typeof scope.presentationHint === "string"
                         ? { presentationHint: scope.presentationHint }
                         : {}),
-                    expensive: scope.expensive === true,
+                    expensive: scope.expensive,
                     variablesReference,
                     ...(typeof scope.namedVariables === "number" ? { namedVariables: scope.namedVariables } : {}),
                     ...(typeof scope.indexedVariables === "number" ? { indexedVariables: scope.indexedVariables } : {}),

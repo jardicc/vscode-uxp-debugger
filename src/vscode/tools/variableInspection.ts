@@ -1,21 +1,8 @@
-export interface DapVariable {
-    name?: unknown;
-    value?: unknown;
-    type?: unknown;
-    evaluateName?: unknown;
-    variablesReference?: unknown;
-    namedVariables?: unknown;
-    indexedVariables?: unknown;
-}
+import type { DebugProtocol } from "@vscode/debugprotocol";
 
-export interface DapScope {
-    name?: unknown;
-    presentationHint?: unknown;
-    variablesReference?: unknown;
-    namedVariables?: unknown;
-    indexedVariables?: unknown;
-    expensive?: unknown;
-}
+export type DapVariable = Partial<DebugProtocol.Variable>;
+
+export type DapScope = Partial<DebugProtocol.Scope>;
 
 export interface VariableSummary {
     name: string;

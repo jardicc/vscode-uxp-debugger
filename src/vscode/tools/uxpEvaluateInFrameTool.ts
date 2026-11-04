@@ -57,7 +57,7 @@ export class UxpEvaluateInFrameTool implements vscode.LanguageModelTool<Evaluate
             `[uxp_evaluate_in_frame] session=${sessionId} frameId=${String(frameId)} expression=${expression}`,
         );
         try {
-            const result: unknown = await raceWithTimeout(
+            const result = await raceWithTimeout(
                 dapSession.customRequest("evaluate", { expression, frameId, context: "repl" }),
                 UxpEvaluateInFrameTool.EVALUATE_TIMEOUT_MS,
                 `Timed out after ${String(UxpEvaluateInFrameTool.EVALUATE_TIMEOUT_MS)}ms waiting for the debug adapter's `

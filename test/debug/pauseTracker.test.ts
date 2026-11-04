@@ -1,10 +1,18 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-vi.mock("vscode", () => ({}));
+const { registerDebugAdapterTrackerFactory } = vi.hoisted(() => ({
+    registerDebugAdapterTrackerFactory: vi.fn(),
+}));
+vi.mock("vscode", () => ({
+    debug: {
+        registerDebugAdapterTrackerFactory,
+    },
+}));
 
 import type * as vscode from "vscode";
 import { type CancellationTokenLike, type PauseSnapshot, PauseTracker } from "../../src/vscode/debug/pauseTracker";
-import { probePauseSnapshot } from "../../src/vscode/debug/pauseTrackerRegistration";
+import { probePauseSnapshot, registerPauseTracker } from "../../src/vscode/debug/pauseTrackerRegistration";
+import { UXP_SESSION_KEY } from "../../src/vscode/debug/uxpSessionChain";
 
 /** A fake `vscode.CancellationToken` — never cancelled unless `.cancel()` is called. */
 function fakeToken(): CancellationTokenLike & { cancel(): void } {
@@ -172,5 +180,53 @@ describe("probePauseSnapshot", () => {
 
         const result = await probePauseSnapshot(session);
         expect(result).toBeUndefined();
+    });
+});
+
+describe("registerPauseTracker", () => {
+    beforeEach(() => {
+        vi.useFakeTimers();
+        registerDebugAdapterTrackerFactory.mockReset();
+        registerDebugAdapterTrackerFactory.mockReturnValue({ dispose: () => undefined });
+    });
+
+    afterEach(() => {
+        vi.useRealTimers();
+    });
+
+    it("aborts in-flight stackTrace retries without logging an error when the session stops", async () => {
+        const tracker = new PauseTracker();
+        const lines: string[] = [];
+        const output = { appendLine: (line: string) => lines.push(line) } as unknown as vscode.OutputChannel;
+
+        registerPauseTracker(tracker, output);
+        const factory = registerDebugAdapterTrackerFactory.mock.calls[0][1] as vscode.DebugAdapterTrackerFactory;
+
+        // First stackTrace never replies; if not aborted on session stop,
+        // subsequent retries would fire after the 2000ms timeout and fail.
+        const customRequest = vi.fn(() => new Promise<never>(() => undefined));
+        const session = {
+            id: "dap-child-1",
+            configuration: { [UXP_SESSION_KEY]: "uxp-session-1" },
+            customRequest,
+        } as unknown as vscode.DebugSession;
+
+        const adapterTracker = factory.createDebugAdapterTracker(session) as vscode.DebugAdapterTracker;
+        adapterTracker.onDidSendMessage?.({
+            type: "event",
+            event: "stopped",
+            body: { reason: "breakpoint", threadId: 1 },
+        });
+
+        expect(customRequest).toHaveBeenCalledTimes(1);
+
+        // Session ends while the first stackTrace request is still pending.
+        adapterTracker.onWillStopSession?.();
+
+        await vi.advanceTimersByTimeAsync(10_000);
+
+        expect(customRequest).toHaveBeenCalledTimes(1);
+        expect(lines.some((line) => line.includes("failed to build a pause snapshot"))).toBe(false);
+        expect(tracker.getSnapshot("uxp-session-1")).toBeUndefined();
     });
 });
