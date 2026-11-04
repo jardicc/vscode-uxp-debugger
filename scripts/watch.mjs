@@ -60,6 +60,14 @@ const contexts = await Promise.all([
   }),
   context({
     ...common,
+    entryPoints: ["src/vscode/inspector/frame/clipboardBridge.ts"],
+    outfile: "dist/devtools/uxp_clipboard_bridge.js",
+    format: "iife",
+    platform: "browser",
+    target: "es2022",
+  }),
+  context({
+    ...common,
     entryPoints: ["src/vscode/panel/webview/index.tsx"],
     outfile: "dist/panel.js",
     format: "iife",
