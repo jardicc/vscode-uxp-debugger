@@ -13,10 +13,10 @@
  * never touches native code.
  */
 
+import { compareVersions } from "compare-versions";
 import { type HostAppDescriptor, satisfiesMinVersion } from "./hostAppCatalog";
 import type { IHostAppController, LaunchResult } from "./IHostAppController";
 import { loadAddon, type VulcanControlAdapterNative } from "./addonLoader";
-import { compareVersions } from "../manifest/appMatching";
 
 let controlAdapterInstantiated = false;
 

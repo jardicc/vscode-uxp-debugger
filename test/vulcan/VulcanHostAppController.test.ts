@@ -271,11 +271,29 @@ describe("satisfiesMinVersion", () => {
     });
 
     it("returns the first non-zero segment difference (later segments ignored)", () => {
-    // major matches (0), minor is lower (-1) -> fails even though patch is huge
+        // major matches (0), minor is lower (-1) -> fails even though patch is huge
         expect(satisfiesMinVersion("23.1.999", "23.2.0")).toBe(false);
     });
 
     it("a non-numeric segment after an equal prefix poisons the result to false", () => {
         expect(satisfiesMinVersion("26.0.0-beta", "26.0.0")).toBe(false);
+    });
+    it("rejects an installed version with fewer segments when minVersion has a non-zero trailing segment", () => {
+        expect(satisfiesMinVersion("15.4", "15.4.1")).toBe(false);
+        expect(satisfiesMinVersion("15", "15.0.1")).toBe(false);
+    });
+
+    it("accepts an installed version with fewer segments when minVersion has zero trailing segments", () => {
+        expect(satisfiesMinVersion("15.4", "15.4.0")).toBe(true);
+        expect(satisfiesMinVersion("23", "23.0.0")).toBe(true);
+    });
+
+    it("rejects invalid version strings safely without throwing", () => {
+        expect(satisfiesMinVersion("invalid", "23.2.0")).toBe(false);
+        expect(satisfiesMinVersion("23.2.0", "invalid")).toBe(false);
+    });
+
+    it("fails when installed has fewer segments than minVersion with a non-zero patch", () => {
+        expect(satisfiesMinVersion("15.4", "15.4.1")).toBe(false);
     });
 });

@@ -1,3 +1,5 @@
+import { compare, validate } from "compare-versions";
+
 /* eslint-disable @stylistic/max-len */
 /**
  * Host applications launchable via `VulcanControlAdapter.launchApp`
@@ -49,20 +51,15 @@ export const HOST_APPS: readonly HostAppDescriptor[] = [
 ];
 
 /**
- * Pure version comparison, ported from UDT 2.2.1's `_checkMinHostAppVersion`
- * (ARCHITECTURE-UDT2-DIFF.md §6.4). Returns the first non-zero per-segment
- * difference; missing segments in `minVersion` count as 0. A non-numeric
- * segment at or after the first equal prefix poisons the result to NaN
- * (`NaN >= 0` is `false`) — replicated intentionally, not a bug.
+ * Pure version comparison backed by `compare-versions`. Compares arbitrary segment lengths
+ * (e.g., `"15.4"` vs `"15.4.1"`) and treats pre-release suffixes (e.g., `"26.0.0-beta"`)
+ * as lower than the corresponding release (`"26.0.0"`). Invalid version strings return `false`.
  */
 export function satisfiesMinVersion(installed: string, minVersion: string): boolean {
-    const min = minVersion.split(".").map(Number);
-    return (
-        installed
-            .split(".")
-            .map(Number)
-            .reduce<number>((acc, part, i) => acc || part - (min[i] ?? 0), 0) >= 0
-    );
+    if (!validate(installed) || !validate(minVersion)) {
+        return false;
+    }
+    return compare(installed, minVersion, ">=");
 }
 
 /** Catalog `minVersion` is binding: older versions are launchable but never debuggable. */

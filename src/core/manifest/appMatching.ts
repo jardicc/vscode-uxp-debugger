@@ -4,26 +4,9 @@
  * when **both** sides specify one — otherwise the app-id match suffices.
  */
 
+import { compare } from "compare-versions";
 import type { ConnectedApp } from "../broker/UxpBroker";
 import type { NormalizedHost } from "./manifest";
-
-/**
- * Segment-wise numeric version comparison ("26.0.0" vs "23.2.0").
- * Missing segments count as 0. Returns <0, 0, >0.
- */
-export function compareVersions(a: string, b: string): number {
-    const pa = a.split(".").map((s) => Number.parseInt(s, 10));
-    const pb = b.split(".").map((s) => Number.parseInt(s, 10));
-    const length = Math.max(pa.length, pb.length);
-    for (let i = 0; i < length; i++) {
-        const va = Number.isFinite(pa[i]) ? pa[i] : 0;
-        const vb = Number.isFinite(pb[i]) ? pb[i] : 0;
-        if (va !== vb) {
-            return va - vb;
-        }
-    }
-    return 0;
-}
 
 /** Connected apps applicable to the given manifest host entries. */
 export function matchApps(
@@ -36,7 +19,7 @@ export function matchApps(
                 return false;
             }
             if (host.minVersion && app.info.appVersion) {
-                return compareVersions(app.info.appVersion, host.minVersion) >= 0;
+                return compare(app.info.appVersion, host.minVersion, ">=");
             }
             return true;
         }),
