@@ -198,5 +198,9 @@ export async function probePauseSnapshot(session: vscode.DebugSession): Promise<
     if (stackResult.kind !== "ok") {
         return undefined;
     }
-    return toSnapshot(threadId, stackResult.value as Record<string, unknown>);
+    const snapshot = toSnapshot(threadId, stackResult.value as Record<string, unknown>);
+    if (snapshot.frames.length === 0) {
+        return undefined;
+    }
+    return snapshot;
 }

@@ -1,5 +1,10 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+
+vi.mock("vscode", () => ({}));
+
+import type * as vscode from "vscode";
 import { type CancellationTokenLike, type PauseSnapshot, PauseTracker } from "../../src/vscode/debug/pauseTracker";
+import { probePauseSnapshot } from "../../src/vscode/debug/pauseTrackerRegistration";
 
 /** A fake `vscode.CancellationToken` — never cancelled unless `.cancel()` is called. */
 function fakeToken(): CancellationTokenLike & { cancel(): void } {
@@ -128,5 +133,44 @@ describe("PauseTracker", () => {
 
         // Waiters on other sessions remain active until resolved or timed out.
         await otherSessionTimeoutAssertion;
+    });
+});
+
+describe("probePauseSnapshot", () => {
+    it("returns a snapshot when the target has non-empty stack frames", async () => {
+        const customRequest = vi.fn((command: string) => {
+            if (command === "threads") {
+                return Promise.resolve({ threads: [{ id: 7 }] });
+            }
+            if (command === "stackTrace") {
+                return Promise.resolve({
+                    stackFrames: [{ id: 10, name: "onClick", source: { path: "/plugin/index.js" }, line: 42 }],
+                });
+            }
+            return Promise.reject(new Error(`Unexpected command: ${command}`));
+        });
+        const session = { customRequest } as unknown as vscode.DebugSession;
+
+        const result = await probePauseSnapshot(session);
+        expect(result).toEqual({
+            threadId: 7,
+            frames: [{ id: 10, name: "onClick", sourcePath: "/plugin/index.js", line: 42 }],
+        });
+    });
+
+    it("returns undefined when stackTrace resolves with empty stackFrames", async () => {
+        const customRequest = vi.fn((command: string) => {
+            if (command === "threads") {
+                return Promise.resolve({ threads: [{ id: 7 }] });
+            }
+            if (command === "stackTrace") {
+                return Promise.resolve({ stackFrames: [] });
+            }
+            return Promise.reject(new Error(`Unexpected command: ${command}`));
+        });
+        const session = { customRequest } as unknown as vscode.DebugSession;
+
+        const result = await probePauseSnapshot(session);
+        expect(result).toBeUndefined();
     });
 });

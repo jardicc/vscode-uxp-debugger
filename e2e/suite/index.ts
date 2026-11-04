@@ -16,7 +16,7 @@ import Mocha from "mocha";
 import { sleep } from "./liveHelpers";
 
 // ! TODO - Ultimately, we want to get rid of this arbitrary delay.
-const PS_RECOVERY_DELAY = 250;
+const PS_RECOVERY_DELAY = 500;
 export function run(): Promise<void> {
     const mocha = new Mocha({
         ui: "bdd",
