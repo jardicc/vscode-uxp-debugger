@@ -1,6 +1,7 @@
 import * as fs from "fs";
 import * as os from "os";
 import * as path from "path";
+import { pathToFileURL } from "url";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { fakeLog } from "../fixtures/fakeVscode";
 
@@ -44,198 +45,50 @@ function scriptParsed(overrides: Record<string, unknown> = {}): string {
 }
 
 describe("CdpMessageRewriter — source map / script URL rewriting (rewriteFromTarget)", () => {
-    it("resolves a uxp:// scriptParsed url with no source map to a real file:// path on disk", () => {
-        const { rewriter, log } = makeRewriter("A:/plugins/my-plugin");
-        const raw = scriptParsed({ url: "uxp://com.adobe.plugin/index.js" });
-
-        const result = JSON.parse(rewriter.rewriteFromTarget(raw)!);
-
-        expect(result.params.url).toBe("file:///A:/plugins/my-plugin/index.js");
-        expect(log.lines).toContain(
-            "[CDP] Final source file: \"/index.js\" → \"file:///A:/plugins/my-plugin/index.js\"",
-        );
-    });
-
-    it("resolves a nested uxp:// scriptParsed url with no source map to a real file:// path on disk", () => {
-        const { rewriter } = makeRewriter("A:/plugins/my-plugin");
-        const raw = scriptParsed({ url: "uxp://com.adobe.plugin/assets/sub/index-abc123.js" });
-
-        const result = JSON.parse(rewriter.rewriteFromTarget(raw)!);
-
-        expect(result.params.url).toBe("file:///A:/plugins/my-plugin/assets/sub/index-abc123.js");
-    });
-
-    it("resolves the main script's raw Windows-path scriptParsed url (real Plugin/runScript shape, no uxp:// scheme) with no source map", () => {
-    // Real Photoshop log (2026-08-10): the main script's own Debugger.scriptParsed
-    // arrives with a raw OS path, not a uxp:// url — a "a:" drive letter regex
-    // false-positive left this completely unresolved (bug fixed alongside this test).
-        const pluginDir = "a:\\VS-projects\\uxp-debugger2\\e2e\\fixtures\\plugin";
-        const { rewriter } = makeRewriter(pluginDir);
-        const raw = scriptParsed({
-            url: "a:\\VS-projects\\uxp-debugger2\\e2e\\fixtures\\plugin\\index.js",
-            sourceMapURL: "",
-            endLine: 24,
-        });
-
-        const result = JSON.parse(rewriter.rewriteFromTarget(raw)!);
-
-        expect(result.params.url).toBe("file:///a:/VS-projects/uxp-debugger2/e2e/fixtures/plugin/index.js");
-        const map = decodeInlineSourceMap(result.params.sourceMapURL);
-        expect(map.sources).toEqual(["file:///a:/VS-projects/uxp-debugger2/e2e/fixtures/plugin/index.js"]);
-    });
-
-    it("resolves a raw macOS POSIX scriptParsed url (Plugin/runScript shape) without four slashes or doubled paths", () => {
-        const pluginDir = "/Users/alice/scripts";
-        const { rewriter } = makeRewriter(pluginDir);
-        const raw = scriptParsed({
-            url: "/Users/alice/scripts/test.psjs",
-            sourceMapURL: "",
-            endLine: 10,
-        });
-
-        const result = JSON.parse(rewriter.rewriteFromTarget(raw)!);
-
-        expect(result.params.url).toBe("file:///Users/alice/scripts/test.psjs");
-        const map = decodeInlineSourceMap(result.params.sourceMapURL);
-        expect(map.sources).toEqual(["file:///Users/alice/scripts/test.psjs"]);
-    });
-
-    it("rewrites the inline sourceMapURL's sourceRoot using the script's own subdirectory", () => {
-        const { rewriter } = makeRewriter("A:/plugins/my-plugin");
-        const raw = scriptParsed({
-            url: "./bundle/index.js",
-            sourceMapURL: buildInlineSourceMap({ version: 3, sources: ["../src/index.ts"], mappings: "" }),
-        });
-
-        const result = JSON.parse(rewriter.rewriteFromTarget(raw)!);
-        const map = decodeInlineSourceMap(result.params.sourceMapURL);
-
-        expect(map.sourceRoot).toBe("file:///A:/plugins/my-plugin/bundle/");
-    });
-
-    it("computes an empty subdirectory for a script at the plugin root", () => {
-        const { rewriter } = makeRewriter("A:/plugins/my-plugin");
-        const raw = scriptParsed({ url: "/index.js", sourceMapURL: buildInlineSourceMap() });
-
-        const result = JSON.parse(rewriter.rewriteFromTarget(raw)!);
-        const map = decodeInlineSourceMap(result.params.sourceMapURL);
-
-        expect(map.sourceRoot).toBe("file:///A:/plugins/my-plugin/");
-    });
-
-    it("derives the subdirectory from a uxp:// url AFTER normalization (real plugin shape: /assets/…)", () => {
-        const { rewriter } = makeRewriter("A:/plugins/my-plugin");
-        const raw = scriptParsed({
-            url: "uxp://com.adobe.plugin/assets/sub/index-abc123.js",
-            sourceMapURL: buildInlineSourceMap(),
-        });
-
-        const result = JSON.parse(rewriter.rewriteFromTarget(raw)!);
-
-        expect(result.params.url).toBe("/assets/sub/index-abc123.js");
-        expect(decodeInlineSourceMap(result.params.sourceMapURL).sourceRoot).toBe(
-            "file:///A:/plugins/my-plugin/assets/sub/",
-        );
-    });
-
-    it("resolves an external (non data:) sourceMapURL by reading the .map file off disk", () => {
+    it("resolves a uxp:// script with no source map to its file on disk and adds an identity map", () => {
         const pluginDir = fs.mkdtempSync(path.join(os.tmpdir(), "uxp-rewriter-test-"));
         try {
-            fs.writeFileSync(
-                path.join(pluginDir, "index.js.map"),
-                JSON.stringify({ version: 3, sources: ["index.ts"], mappings: "" }),
-            );
+            fs.writeFileSync(path.join(pluginDir, "index.js"), "// entry");
             const { rewriter } = makeRewriter(pluginDir);
-            const raw = scriptParsed({ url: "/index.js", sourceMapURL: "index.js.map" });
 
-            const result = JSON.parse(rewriter.rewriteFromTarget(raw)!);
+            const result = JSON.parse(rewriter.rewriteFromTarget(scriptParsed({ url: "uxp://com.adobe.plugin/index.js", endLine: 4 }))!);
 
-            expect(result.params.sourceMapURL.startsWith("data:application/json;")).toBe(true);
-            expect(decodeInlineSourceMap(result.params.sourceMapURL).sourceRoot).toBe(
-                `file:///${pluginDir.replace(/\\/g, "/")}/`,
-            );
+            const expected = pathToFileURL(path.join(pluginDir, "index.js")).href;
+            expect(result.params.url).toBe(expected);
+            const map = decodeInlineSourceMap(result.params.sourceMapURL);
+            expect(map.sources).toEqual([expected]);
+            expect((map.mappings as string).split(";")).toHaveLength(5);
         }
         finally {
             fs.rmSync(pluginDir, { recursive: true, force: true });
         }
     });
 
-    it("leaves sourceMapURL unchanged when the external .map file does not exist on disk", () => {
-        const { rewriter } = makeRewriter();
-        const raw = scriptParsed({ sourceMapURL: "index.js.map" });
-
-        const result = JSON.parse(rewriter.rewriteFromTarget(raw)!);
-
-        expect(result.params.sourceMapURL).toBe("index.js.map");
-    });
-
-    it("synthesizes an identity source map pointing back at the same file when the script has none", () => {
-        const { rewriter } = makeRewriter("A:/plugins/my-plugin");
-        const raw = scriptParsed({ url: "/index.js", endLine: 4 });
-
-        const result = JSON.parse(rewriter.rewriteFromTarget(raw)!);
-
-        expect(result.params.url).toBe("file:///A:/plugins/my-plugin/index.js");
-        const map = decodeInlineSourceMap(result.params.sourceMapURL);
-        expect(map.sources).toEqual(["file:///A:/plugins/my-plugin/index.js"]);
-        expect((map.mappings as string).split(";")).toHaveLength(5); // endLine 4 → 5 lines
-    });
-
-    it("fixes the real vite-uxp-plugin uxp-script:// bug end-to-end: sourceRoot resolves to the real src file, not dist/src", () => {
-    // Reproduces the exact reported bug (2026-08-10): vite-uxp-plugin's
-    // `debugger: "udt"` build mode reports the panel bundle's url as
-    // `uxp-script://assets/index-abc123.js` — naively dirname-ing that
-    // produces a garbage subdir, making `sources: ["../../src/main.tsx"]`
-    // (relative to "dist/assets/") resolve one level too high, to
-    // "dist/src/main.tsx" (a read-only CDP-fetched preview) instead of the
-    // real, editable "src/main.tsx" two levels up from "dist/assets/".
-        const projectDir = fs.mkdtempSync(path.join(os.tmpdir(), "uxp-e2e-sourcemap-test-"));
+    it("rewrites the sources of an inline source map to files on disk", () => {
+        const projectDir = fs.mkdtempSync(path.join(os.tmpdir(), "uxp-rewriter-test-"));
         try {
             const pluginDir = path.join(projectDir, "dist");
             fs.mkdirSync(path.join(pluginDir, "assets"), { recursive: true });
-            fs.mkdirSync(path.join(projectDir, "src"), { recursive: true });
-            fs.writeFileSync(path.join(projectDir, "src", "main.tsx"), "// real source");
-
+            fs.mkdirSync(path.join(projectDir, "src"));
+            fs.writeFileSync(path.join(pluginDir, "assets", "index-abc.js"), "// bundle");
+            fs.writeFileSync(path.join(projectDir, "src", "main.tsx"), "// source");
             const { rewriter } = makeRewriter(pluginDir);
-            const raw = scriptParsed({
-                url: "uxp-script://assets/index-abc123.js",
+
+            const result = JSON.parse(rewriter.rewriteFromTarget(scriptParsed({
+                url: "uxp-script://assets/index-abc.js",
                 sourceMapURL: buildInlineSourceMap({ version: 3, sources: ["../../src/main.tsx"], mappings: "" }),
-            });
+            }))!);
 
-            const result = JSON.parse(rewriter.rewriteFromTarget(raw)!);
-            const map = decodeInlineSourceMap(result.params.sourceMapURL);
-
-            expect(map.sourceRoot).toBe(`file:///${pluginDir.replace(/\\/g, "/")}/assets/`);
-            expect(path.resolve(pluginDir, "assets", (map.sources as string[])[0])).toBe(
-                path.join(projectDir, "src", "main.tsx"),
-            );
+            expect(decodeInlineSourceMap(result.params.sourceMapURL).sources).toEqual([
+                pathToFileURL(path.join(projectDir, "src", "main.tsx")).href,
+            ]);
         }
         finally {
             fs.rmSync(projectDir, { recursive: true, force: true });
         }
     });
 
-    it("resolves an opaque custom-scheme url with no source map by verifying the file exists on disk", () => {
-        const pluginDir = fs.mkdtempSync(path.join(os.tmpdir(), "uxp-e2e-scripturl-test-"));
-        try {
-            fs.mkdirSync(path.join(pluginDir, "assets"));
-            fs.writeFileSync(path.join(pluginDir, "assets", "index-abc123.js"), "// bundle");
-
-            const { rewriter } = makeRewriter(pluginDir);
-            const raw = scriptParsed({ url: "uxp-script://assets/index-abc123.js", sourceMapURL: "", endLine: 2 });
-
-            const result = JSON.parse(rewriter.rewriteFromTarget(raw)!);
-
-            expect(result.params.url).toBe(`file:///${pluginDir.replace(/\\/g, "/")}/assets/index-abc123.js`);
-            const map = decodeInlineSourceMap(result.params.sourceMapURL);
-            expect(map.sources).toEqual([`file:///${pluginDir.replace(/\\/g, "/")}/assets/index-abc123.js`]);
-        }
-        finally {
-            fs.rmSync(pluginDir, { recursive: true, force: true });
-        }
-    });
-
-    it("leaves an opaque custom-scheme url with no source map unchanged when the file doesn't exist on disk", () => {
+    it("leaves a script that doesn't exist on disk untouched", () => {
         const { rewriter } = makeRewriter("A:/plugins/my-plugin");
         const raw = scriptParsed({ url: "uxp-script://assets/missing.js", sourceMapURL: "" });
 

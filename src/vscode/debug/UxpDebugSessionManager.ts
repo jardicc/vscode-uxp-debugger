@@ -232,6 +232,7 @@ export class UxpDebugSessionManager implements vscode.Disposable {
             // js-debug defaults to "localhost", which may resolve to ::1; the proxy binds IPv4 only.
             address: "127.0.0.1",
             port: proxyPort,
+            cwd: projectDir,
             webRoot: projectDir,
             sourceMaps: true,
             resolveSourceMapLocations: null,
@@ -251,15 +252,10 @@ export class UxpDebugSessionManager implements vscode.Disposable {
             // script's source map is processed and startup breakpoints are bound —
             // without it, js-debug resumes the instrumentation pause immediately.
             ...(shouldPauseForSourceMap ? { pauseForSourceMap: true } : {}),
-            sourceMapPathOverrides: {
-                "webpack-internal:///./src/*": `${projectDir}/src/*`,
-                "webpack-internal:///./*": `${projectDir}/*`,
-                "webpack-internal:///*": "*",
-                "webpack:///./~/*": `${projectDir}/node_modules/*`,
-                "webpack:///./*": `${projectDir}/*`,
-                "webpack:///*": "*",
-                "webpack:///src/*": `${projectDir}/*`,
-            },
+            // All bundler schemes and source roots are resolved against disk by
+            // `sourceMapRewriter.ts` in the CDP proxy; pass an empty map so
+            // js-debug does not apply its own hardcoded `webpack://` defaults.
+            sourceMapPathOverrides: {},
             [UXP_SESSION_KEY]: session.clientSessionId,
         };
 

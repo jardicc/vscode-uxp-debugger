@@ -50,7 +50,7 @@ violates every assumption that flow relies on:
    (case-insensitive `urlRegex` built from local `file:///a:/…` paths)
    can never match, so breakpoints only bind **after**
    `Debugger.scriptParsed` delivers the script's **inline source map**
-   (whose `sourceRoot` the proxy rewrites — see `sourceMapRewriter.ts`).
+   (whose sources the proxy resolves to files on disk — see `sourceMapRewriter.ts`).
    Consequence: *no amount of delaying the resume can ever work* — the
    race is not "configuration vs. resume", it is "script execution vs.
    source-map processing", and the map does not exist until the script

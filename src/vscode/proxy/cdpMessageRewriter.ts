@@ -2,13 +2,7 @@ import * as vscode from "vscode";
 import type { Protocol } from "devtools-protocol";
 import { CdpEventBuffer } from "./cdpEventBuffer";
 import type { CdpMessage, CdpPayload } from "./cdpTypes";
-import {
-    buildIdentitySourceMapUrl,
-    normalizeScriptUrl,
-    resolveExternalSourceMap,
-    resolveScriptFileUrl,
-    rewriteInlineSourceMapRoot,
-} from "./sourceMapRewriter";
+import { SourceMapRewriter } from "./sourceMapRewriter";
 
 // ---------------------------------------------------------------------------
 // CDP Message Rewriter
@@ -109,13 +103,17 @@ export class CdpMessageRewriter {
     /** How long (ms) to wait for an execution context before warning the user. */
     private static readonly CONTEXT_TIMEOUT_MS = 8_000;
 
+    private readonly sourceMaps: SourceMapRewriter;
+
     constructor(
-        private readonly pluginDir: string,
+        pluginDir: string,
         private readonly log: vscode.OutputChannel,
         private readonly sendToClient: (msg: string) => void,
         private readonly stopProxy: () => void,
         private readonly sendToTarget: (msg: string) => void = () => undefined,
-    ) {}
+    ) {
+        this.sourceMaps = new SourceMapRewriter(pluginDir, log);
+    }
 
     // -----------------------------------------------------------------------
     // Public helpers for the proxy orchestrator
@@ -459,49 +457,7 @@ export class CdpMessageRewriter {
             // js-debug can map them to local files.
             const scriptParsedParams: CdpPayload<Protocol.Debugger.ScriptParsedEvent> | undefined = msg.params;
             if (msg.method === "Debugger.scriptParsed" && typeof scriptParsedParams?.url === "string") {
-                scriptParsedParams.url = normalizeScriptUrl(scriptParsedParams.url);
-
-                // Fix the sourceRoot inside the source map so that relative
-                // source paths (e.g. "../src/shared/store.ts") resolve to the
-                // correct local files under webRoot. Handles both inline (data:)
-                // maps and external .map files referenced by a plain filename.
-                // The script's subdirectory is derived (and verified against disk)
-                // from the url itself inside these two functions — see
-                // `resolveVerifiedSubdir` in sourceMapRewriter.ts.
-                if (typeof scriptParsedParams.sourceMapURL === "string" && scriptParsedParams.sourceMapURL.length > 0) {
-                    scriptParsedParams.sourceMapURL = scriptParsedParams.sourceMapURL.startsWith("data:")
-                        ? rewriteInlineSourceMapRoot(
-                                scriptParsedParams.sourceMapURL,
-                                this.pluginDir,
-                                scriptParsedParams.url,
-                                this.log,
-                            )
-                        : resolveExternalSourceMap(
-                                scriptParsedParams.sourceMapURL,
-                                this.pluginDir,
-                                scriptParsedParams.url,
-                                this.log,
-                            );
-                }
-                else {
-                    // No source map: point the url at the real file on disk, then
-                    // synthesize an identity source map pointing back at that same
-                    // file. The url rewrite alone isn't enough — js-debug only skips
-                    // its on-disk content-hash check (which UXP scripts always fail,
-                    // see `buildIdentitySourceMapUrl`) for sources that arrive via a
-                    // source map, so without one it still shows a read-only,
-                    // CDP-fetched copy even once the url resolves correctly.
-                    const resolvedUrl = resolveScriptFileUrl(scriptParsedParams.url, this.pluginDir);
-                    this.log.appendLine(
-                        `[CDP] Final source file: ${JSON.stringify(scriptParsedParams.url)} → ${JSON.stringify(resolvedUrl)}`,
-                    );
-                    scriptParsedParams.url = resolvedUrl;
-                    if (resolvedUrl.startsWith("file:///")) {
-                        const absoluteFilePath = resolvedUrl.slice("file:///".length);
-                        const lineCount = typeof scriptParsedParams.endLine === "number" ? scriptParsedParams.endLine + 1 : 1;
-                        scriptParsedParams.sourceMapURL = buildIdentitySourceMapUrl(absoluteFilePath, lineCount);
-                    }
-                }
+                this.sourceMaps.rewriteScriptParsed(scriptParsedParams);
 
                 const rewritten = JSON.stringify(msg);
                 if (typeof scriptParsedParams.scriptId === "string") {
