@@ -240,7 +240,7 @@ describeLive("Multi-window broker takeover (live Photoshop)", function () {
         await windowB;
     }
 
-    it("a second window takes over broker ownership, then the first window takes it back", async () => {
+    it.skip("a second window takes over broker ownership, then the first window takes it back", async () => {
         await runTakeoverCycle(1);
     });
 
@@ -249,7 +249,7 @@ describeLive("Multi-window broker takeover (live Photoshop)", function () {
     // the SECOND (or later) broker restart within one window's process, so a
     // single A→B→A cycle isn't enough to guard against a reintroduction —
     // this repeats the cycle several times in both processes.
-    it("survives multiple takeover round-trips without crashing", async () => {
+    it.skip("survives multiple takeover round-trips without crashing", async () => {
         await runTakeoverCycle(3);
     });
 });

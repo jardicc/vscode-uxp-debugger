@@ -30,7 +30,10 @@ export class CdtTunnelManager {
     /** clientSessionId → active tunnel. */
     private readonly tunnels = new Map<string, ActiveTunnel>();
 
-    constructor(private readonly log: (message: string) => void = () => undefined) {}
+    constructor(
+        private readonly log: (message: string) => void = () => undefined,
+        private readonly onFrontendDetached?: (session: PluginSession) => void,
+    ) {}
 
     /** Attach a DevTools frontend socket to a plugin session. */
     attach(frontend: SocketLike, session: PluginSession, app: AppConnection): void {
@@ -120,5 +123,6 @@ export class CdtTunnelManager {
         tunnel.unsubscribeCdt();
         tunnel.app.notifyCdtState(tunnel.session.hostSessionId, false);
         this.log(`cdt: frontend detached from ${tunnel.session.clientSessionId}`);
+        this.onFrontendDetached?.(tunnel.session);
     }
 }

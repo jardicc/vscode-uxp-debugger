@@ -119,6 +119,26 @@ describe("buildDebugState", () => {
         expect(state.scripts[0].sessions[0].attached).toBe(true);
     });
 
+    it("omits unattached script sessions from scripts[i].sessions", () => {
+        const state = buildDebugState(
+            baseInputs({
+                registry: baseRegistry({ scripts: [{ scriptPath: "A:/plugin/run.ccjs", args: "", watch: false }] }),
+                sessions: [
+                    pluginSession({
+                        kind: "script",
+                        manifestPath: undefined,
+                        scriptSourcePath: "A:/plugin/run.ccjs",
+                        name: "run.ccjs",
+                        clientSessionId: "uxp-session-stale",
+                    }),
+                ],
+                attachedSessionIds: new Set(),
+            }),
+        );
+        expect(state.scripts).toHaveLength(1);
+        expect(state.scripts[0].sessions).toEqual([]);
+    });
+
     it("passes through brokerStatus/brokerError untouched", () => {
         const state = buildDebugState(baseInputs({ brokerStatus: "error", brokerError: "boom" }));
         expect(state.brokerStatus).toBe("error");

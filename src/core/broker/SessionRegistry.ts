@@ -9,6 +9,7 @@
  */
 
 import { randomUUID } from "crypto";
+import * as path from "path";
 import { foldPathCase } from "../pathCase";
 import type { AppInfo } from "../protocol/types";
 
@@ -76,9 +77,9 @@ export class SessionRegistry {
 
     /** Live sessions belonging to a given manifest file. */
     forManifest(manifestPath: string): PluginSession[] {
-        const key = foldPathCase(manifestPath);
+        const key = foldPathCase(path.normalize(manifestPath));
         return this.list().filter(
-            (s) => s.manifestPath !== undefined && foldPathCase(s.manifestPath) === key,
+            (s) => s.manifestPath !== undefined && foldPathCase(path.normalize(s.manifestPath)) === key,
         );
     }
 

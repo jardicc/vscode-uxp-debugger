@@ -15,6 +15,8 @@ import * as path from "path";
 import Mocha from "mocha";
 import { sleep } from "./liveHelpers";
 
+// ! TODO - Ultimately, we want to get rid of this arbitrary delay.
+const PS_RECOVERY_DELAY = 250;
 export function run(): Promise<void> {
     const mocha = new Mocha({
         ui: "bdd",
@@ -25,9 +27,9 @@ export function run(): Promise<void> {
             // so give it a moment to recover before the next test starts.
             afterEach: async () => {
                 if (process.env.UXP_E2E_PHOTOSHOP === "1") {
-                    console.log("[e2e] waiting 2000ms after test to avoid PS 'not responding' state");
+                    console.log(`[e2e] waiting ${PS_RECOVERY_DELAY}ms after test to avoid PS 'not responding' state`);
                     // Photoshop has no readiness event after a live test case.
-                    await sleep(500);
+                    await sleep(PS_RECOVERY_DELAY);
                 }
             },
         },

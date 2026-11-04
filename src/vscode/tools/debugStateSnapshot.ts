@@ -102,6 +102,16 @@ export function buildDebugState(inputs: DebugStateInputs): DebugState {
             sessionsByManifest.set(key, list);
         }
         else if (session.kind === "script") {
+            // Unlike plugins, standalone scripts are one-shot runs and cannot be
+            // re-attached to or unloaded once the debugger detaches (UXP has no
+            // `Plugin/unload` for scripts). Skip unattached script sessions so
+            // `uxp_get_debug_state` only reports actively debugged script runs.
+            if (
+                !inputs.attachedSessionIds.has(session.clientSessionId)
+                && !inputs.pendingBreakSessionIds.has(session.clientSessionId)
+            ) {
+                continue;
+            }
             const key = pathKey(
                 path.normalize(session.scriptSourcePath ?? path.join(session.pluginPath, session.name)),
             );

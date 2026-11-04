@@ -12,9 +12,11 @@
  */
 
 import * as http from "http";
+import * as path from "path";
 import type { Duplex } from "stream";
 import { WebSocketServer } from "ws";
 import { TypedEvent } from "../events";
+import { foldPathCase } from "../pathCase";
 import { sleep } from "../sleep";
 import {
     HostReplyError,
@@ -129,7 +131,13 @@ export class UxpBroker {
         this.extensionVersion = options.extensionVersion ?? "0.0.0";
         this.onBeforeTakeoverStop = options.onBeforeTakeoverStop;
         this.extraRequestHandler = options.extraRequestHandler;
-        this.tunnels = new CdtTunnelManager(this.log);
+        this.tunnels = new CdtTunnelManager(this.log, (session) => {
+            // UXP has no `Plugin/unload` for scripts, so once the script's
+            // CDT frontend detaches, the one-shot script session is over.
+            if (session.kind === "script" && this.sessions.byClientId(session.clientSessionId)) {
+                this.endSession(session, /* notifyApp */ false);
+            }
+        });
     }
 
     // -------------------------------------------------------------------------
@@ -341,6 +349,21 @@ export class UxpBroker {
         }
 
         const hostSessionId = await connection.loadPlugin(pluginPath, breakOnStart);
+        // Evict any superseded session for the same plugin in this host app so a
+        // duplicate `loadPlugin` (without an intervening unload) never leaves a
+        // ghost entry behind in `SessionRegistry`.
+        const manifestKey = foldPathCase(path.normalize(manifestPath));
+        for (const existing of this.sessions.list()) {
+            if (existing.appConnectionId !== connection.id) {
+                continue;
+            }
+            const sameManifest
+                = existing.manifestPath !== undefined
+                    && foldPathCase(path.normalize(existing.manifestPath)) === manifestKey;
+            if (existing.hostSessionId === hostSessionId || sameManifest) {
+                this.endSession(existing, /* notifyApp */ false);
+            }
+        }
         return this.sessions.add({
             hostSessionId,
             kind: "plugin",
@@ -360,8 +383,17 @@ export class UxpBroker {
         const reply = await connection.reloadPlugin(session.hostSessionId);
         // Some hosts may hand back a fresh host session id on reload; re-bind it
         // under the stable client id so debuggers keep working.
-        if (typeof reply.pluginSessionId === "string" && reply.pluginSessionId.length > 0) {
+        if (
+            typeof reply.pluginSessionId === "string"
+            && reply.pluginSessionId.length > 0
+            && reply.pluginSessionId !== session.hostSessionId
+        ) {
             session.hostSessionId = reply.pluginSessionId;
+            // Re-announce `Plugin/cdtConnected` for the new `hostSessionId` if a
+            // debugger/inspector tunnel is already attached to this session.
+            if (this.tunnels.hasTunnel(clientSessionId)) {
+                connection.notifyCdtState(session.hostSessionId, true);
+            }
         }
     }
 
@@ -385,6 +417,19 @@ export class UxpBroker {
         await this.waitForAppSettle(connection);
 
         const hostSessionId = await connection.runScript(scriptDir, fileName, userArgs);
+        // Evict any earlier unattached pseudo-session for the same script in this
+        // host app before registering the new run.
+        const scriptKey = foldPathCase(path.normalize(sourcePath ?? path.join(scriptDir, fileName)));
+        for (const existing of this.sessions.list()) {
+            if (existing.appConnectionId !== connection.id) {
+                continue;
+            }
+            const existingPath = existing.scriptSourcePath ?? path.join(existing.pluginPath, existing.name);
+            const sameScript = existing.kind === "script" && foldPathCase(path.normalize(existingPath)) === scriptKey;
+            if (existing.hostSessionId === hostSessionId || sameScript) {
+                this.endSession(existing, /* notifyApp */ false);
+            }
+        }
         return this.sessions.add({
             hostSessionId,
             kind: "script",

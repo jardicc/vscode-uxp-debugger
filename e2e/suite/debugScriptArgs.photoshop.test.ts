@@ -32,7 +32,6 @@ import {
     detachStrandedScriptSessions,
     fixturePluginDir,
     scriptUri,
-    sleep,
     trackDapMessages,
     waitFor,
 } from "./liveHelpers";
@@ -141,11 +140,9 @@ describeLive("Run script with arguments (live Photoshop)", function () {
     // SKIPPED: historical skip has no recorded rationale; keep these cases
     // pending repository-owner confirmation rather than silently enabling them.
     for (const { name, args } of cases) {
-        it.skip(`runs the script with ${name} and script.args matches what was sent`, async () => {
+        it(`runs the script with ${name} and script.args matches what was sent`, async () => {
             const received = await runScriptAndCaptureArgs(api, app, args);
             assert.deepStrictEqual(received, args);
-            // Photoshop has no readiness event after a script-heavy case.
-            await sleep(2000);
         });
     }
 });

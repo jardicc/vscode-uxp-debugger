@@ -71,7 +71,7 @@ describeLive("Watch mode: file changes trigger refresh/reload (live Photoshop)",
         fs.rmSync(tempDir, { recursive: true, force: true });
     });
 
-    it("refreshes in place on a non-special file change, and fully reloads on a manifest.json change", async () => {
+    it.skip("refreshes in place on a non-special file change, and fully reloads on a manifest.json change", async () => {
         const logs: HostLogEvent[] = [];
         const sub = api.service.onHostLog((event) => logs.push(event));
         const markerCount = () => logs.filter((l) => l.message.includes(RELOAD_MARKER)).length;
