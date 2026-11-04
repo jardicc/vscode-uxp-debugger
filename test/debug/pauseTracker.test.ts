@@ -99,16 +99,34 @@ describe("PauseTracker", () => {
         expect(tracker.getSnapshot("s1")).toBeUndefined();
     });
 
-    it("forgetSession drops both the snapshot and any pending waiters", async () => {
+    it("forgetSession drops the snapshot and immediately rejects any pending waiters", async () => {
         const tracker = new PauseTracker();
-        const promise = tracker.waitForPause("s1", 5000, fakeToken());
+        tracker.recordPause("s1", snapshot);
+        tracker.recordContinued("s1");
+
+        const token1 = fakeToken();
+        const token2 = fakeToken();
+        const promise1 = tracker.waitForPause("s1", 5000, token1);
+        const promise2 = tracker.waitForPause("s1", 5000, token2);
+        const otherSessionPromise = tracker.waitForPause("s2", 5000, fakeToken());
+
+        tracker.recordPause("s0", snapshot);
+        tracker.forgetSession("s0");
+        expect(tracker.getSnapshot("s0")).toBeUndefined();
+
         tracker.forgetSession("s1");
 
-        tracker.recordPause("s1", snapshot);
-        let settled = false;
-        void promise.then(() => (settled = true));
-        await vi.advanceTimersByTimeAsync(0);
+        await expect(promise1).rejects.toThrow("The debug session ended before the target paused.");
+        await expect(promise2).rejects.toThrow("The debug session ended before the target paused.");
 
-        expect(settled).toBe(false);
+        // Cancelling or advancing timers after forgetSession must be a no-op.
+        token1.cancel();
+        const otherSessionTimeoutAssertion = expect(otherSessionPromise).rejects.toThrow(
+            /Timed out waiting for the target to pause/,
+        );
+        await vi.advanceTimersByTimeAsync(5000);
+
+        // Waiters on other sessions remain active until resolved or timed out.
+        await otherSessionTimeoutAssertion;
     });
 });
