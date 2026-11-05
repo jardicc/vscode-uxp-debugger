@@ -133,15 +133,14 @@ export async function debugScriptCommand(
     if (cleanupStripped) {
         const cleanup = cleanupStripped;
         // Registered before attach so a script that finishes instantly can't
-        // terminate before the listener exists; also tracked in `subscriptions`
-        // so a window close can't leak it (dispose is idempotent).
+        // terminate before the listener exists; extension deactivation is
+        // covered by `cleanupAllStrippedScripts` in `extension.ts`.
         terminateListener = vscode.debug.onDidTerminateDebugSession((vsSession) => {
             if (getStampedUxpClientSessionId(vsSession.configuration) === session.clientSessionId) {
                 cleanup();
                 terminateListener?.dispose();
             }
         });
-        context.subscriptions.push(terminateListener);
     }
     let attached = false;
     try {
