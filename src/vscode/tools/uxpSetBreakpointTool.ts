@@ -1,4 +1,5 @@
 import * as vscode from "vscode";
+import { foldPathCase } from "../../core/pathCase";
 import { textResult } from "./toolResult";
 
 interface SetBreakpointInput {
@@ -33,9 +34,20 @@ export class UxpSetBreakpointTool implements vscode.LanguageModelTool<SetBreakpo
         }
 
         const uri = vscode.Uri.file(filePath);
-        const location = new vscode.Location(uri, new vscode.Position(line - 1, 0));
-        const breakpoint = new vscode.SourceBreakpoint(location, true);
-        vscode.debug.addBreakpoints([breakpoint]);
+        const targetPath = foldPathCase(uri.fsPath);
+        const targetLine = line - 1;
+
+        const alreadySet = vscode.debug.breakpoints.some(
+            (bp): bp is vscode.SourceBreakpoint =>
+                bp instanceof vscode.SourceBreakpoint
+                && foldPathCase(bp.location.uri.fsPath) === targetPath
+                && bp.location.range.start.line === targetLine,
+        );
+        if (!alreadySet) {
+            const location = new vscode.Location(uri, new vscode.Position(targetLine, 0));
+            const breakpoint = new vscode.SourceBreakpoint(location, true);
+            vscode.debug.addBreakpoints([breakpoint]);
+        }
 
         return textResult(
             `Breakpoint set at ${filePath}:${String(line)}. It stays until removed with uxp_remove_breakpoint or by the `

@@ -1,4 +1,5 @@
 import * as vscode from "vscode";
+import { foldPathCase } from "../../core/pathCase";
 import { textResult } from "./toolResult";
 
 interface RemoveBreakpointInput {
@@ -22,13 +23,13 @@ export class UxpRemoveBreakpointTool implements vscode.LanguageModelTool<RemoveB
         options: vscode.LanguageModelToolInvocationOptions<RemoveBreakpointInput>,
     ): Promise<vscode.LanguageModelToolResult> {
         const { filePath, line } = options.input;
-        const targetPath = vscode.Uri.file(filePath).fsPath;
+        const targetPath = foldPathCase(vscode.Uri.file(filePath).fsPath);
         const targetLine = line - 1;
 
         const matches = vscode.debug.breakpoints.filter(
             (bp): bp is vscode.SourceBreakpoint =>
                 bp instanceof vscode.SourceBreakpoint
-                && bp.location.uri.fsPath === targetPath
+                && foldPathCase(bp.location.uri.fsPath) === targetPath
                 && bp.location.range.start.line === targetLine,
         );
 
