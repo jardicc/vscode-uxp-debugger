@@ -2,15 +2,18 @@ import * as fs from "fs";
 import * as os from "os";
 import * as path from "path";
 import { fileURLToPath, pathToFileURL } from "url";
+import { originalPositionFor, type SourceMapInput, TraceMap } from "@jridgewell/trace-mapping";
+import type { Protocol } from "devtools-protocol";
 import type * as vscode from "vscode";
 import { foldPathCase } from "../../core/pathCase";
+import type { ResolvedCallFrameLocation } from "./cdpEventBuffer";
+import type { CdpPayload } from "./cdpTypes";
 
 /** The subset of `Debugger.scriptParsed` params rewritten here. */
-export interface ScriptParsedParams {
-    url?: string;
-    sourceMapURL?: string;
-    endLine?: number;
-}
+export type ScriptParsedParams = Pick<
+    Partial<Protocol.Debugger.ScriptParsedEvent>,
+    "scriptId" | "url" | "sourceMapURL" | "endLine"
+>;
 
 interface SourceMapV3 {
     [key: string]: unknown;
@@ -197,31 +200,102 @@ function identitySourceMapUrl(file: string, lineCount: number): string {
  * Every url / source is resolved purely by probing the filesystem (see
  * {@link pathCandidates}), so no URL scheme is special-cased.
  */
+interface RegisteredScript {
+    resolvedUrl?: string;
+    traceMap?: TraceMap;
+}
+
 export class SourceMapRewriter {
+    private readonly byScriptId = new Map<string, RegisteredScript>();
+    private readonly byUrl = new Map<string, RegisteredScript>();
+
     constructor(
         private readonly pluginDir: string,
         private readonly log: vscode.OutputChannel,
     ) {}
 
-    /** Rewrites `params` in place. */
+    /** Clears all cached script and source-map entries (e.g. when the target context resets). */
+    clear(): void {
+        this.byScriptId.clear();
+        this.byUrl.clear();
+    }
+
+    /** Rewrites `params` in place and indexes the script/source map for location lookups. */
     rewriteScriptParsed(params: ScriptParsedParams): void {
         if (typeof params.url !== "string") {
             return;
         }
-        const scriptFile = findFile(params.url, [this.pluginDir]);
+        const originalUrl = params.url;
+        const scriptFile = findFile(originalUrl, [this.pluginDir]);
+        let resolvedUrl: string | undefined;
         if (scriptFile) {
-            const url = pathToFileURL(scriptFile).href;
-            this.log.appendLine(`[CDP] Script: ${JSON.stringify(params.url)} → ${JSON.stringify(url)}`);
-            params.url = url;
+            resolvedUrl = pathToFileURL(scriptFile).href;
+            this.log.appendLine(`[CDP] Script: ${JSON.stringify(originalUrl)} → ${JSON.stringify(resolvedUrl)}`);
+            params.url = resolvedUrl;
         }
         const scriptDir = scriptFile ? path.dirname(scriptFile) : this.pluginDir;
 
+        let traceMap: TraceMap | undefined;
         if (params.sourceMapURL) {
-            params.sourceMapURL = this.rewriteSourceMap(params.sourceMapURL, scriptDir);
+            const rewritten = this.rewriteSourceMap(params.sourceMapURL, scriptDir);
+            params.sourceMapURL = rewritten.url;
+            traceMap = rewritten.traceMap;
         }
         else if (scriptFile) {
             params.sourceMapURL = identitySourceMapUrl(scriptFile, (params.endLine ?? 0) + 1);
         }
+
+        const entry: RegisteredScript = { resolvedUrl, traceMap };
+        if (typeof params.scriptId === "string" && params.scriptId !== "") {
+            this.byScriptId.set(params.scriptId, entry);
+        }
+        if (originalUrl !== "") {
+            this.byUrl.set(originalUrl, entry);
+        }
+        if (resolvedUrl) {
+            this.byUrl.set(resolvedUrl, entry);
+        }
+    }
+
+    /**
+     * Resolves a 0-based CDP `Protocol.Runtime.CallFrame`-shaped location through
+     * any source map registered for that script, falling back to the script's
+     * resolved `file:` URL on disk when no source-map segment matches.
+     */
+    resolveGeneratedLocation(
+        location: CdpPayload<Protocol.Runtime.CallFrame>,
+    ): ResolvedCallFrameLocation | undefined {
+        const { url, lineNumber, columnNumber, scriptId } = location;
+        if (typeof lineNumber !== "number" || lineNumber < 0) {
+            return undefined;
+        }
+        const entry
+            = (typeof scriptId === "string" ? this.byScriptId.get(scriptId) : undefined)
+                ?? (typeof url === "string" ? this.byUrl.get(url) : undefined);
+        if (!entry) {
+            return undefined;
+        }
+        if (entry.traceMap) {
+            const pos = originalPositionFor(entry.traceMap, {
+                line: lineNumber + 1,
+                column: Math.max(typeof columnNumber === "number" ? columnNumber : 0, 0),
+            });
+            if (pos.source !== null) {
+                return {
+                    url: pos.source,
+                    lineNumber: pos.line - 1,
+                    columnNumber: pos.column,
+                };
+            }
+        }
+        if (entry.resolvedUrl) {
+            return {
+                url: entry.resolvedUrl,
+                lineNumber,
+                columnNumber: typeof columnNumber === "number" ? columnNumber : undefined,
+            };
+        }
+        return undefined;
     }
 
     /**
@@ -229,25 +303,32 @@ export class SourceMapRewriter {
      * map and re-emits it inline with every resolvable source as an absolute
      * `file:` URL. Returns `sourceMapURL` unchanged when it can't be loaded.
      */
-    private rewriteSourceMap(sourceMapURL: string, scriptDir: string): string {
+    private rewriteSourceMap(sourceMapURL: string, scriptDir: string): { url: string; traceMap?: TraceMap } {
         try {
             const inline = decodeDataUrl(sourceMapURL);
             const mapFile = inline === undefined ? findFile(sourceMapURL, [scriptDir]) : undefined;
             const json = inline ?? (mapFile && fs.readFileSync(mapFile, "utf-8"));
             if (json === undefined) {
                 this.log.appendLine(`[CDP] Source map not found: ${sourceMapURL}`);
-                return sourceMapURL;
+                return { url: sourceMapURL };
             }
             const map: unknown = JSON.parse(json);
             if (!isSourceMapV3(map)) {
                 throw new TypeError("Invalid Source Map v3 JSON");
             }
             this.resolveSources(map, scriptDir);
-            return toDataUrl(map);
+            let traceMap: TraceMap | undefined;
+            try {
+                traceMap = new TraceMap({ ...map, sourceRoot: undefined } as unknown as SourceMapInput);
+            }
+            catch {
+                // Ignore malformed mappings in the trace resolver; still emit the rewritten map URL.
+            }
+            return { url: toDataUrl(map), traceMap };
         }
         catch (e) {
             this.log.appendLine(`[CDP] Failed to rewrite source map: ${e instanceof Error ? e.message : String(e)}`);
-            return sourceMapURL;
+            return { url: sourceMapURL };
         }
     }
 

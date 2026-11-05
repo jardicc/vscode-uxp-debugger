@@ -88,6 +88,86 @@ describe("CdpMessageRewriter — source map / script URL rewriting (rewriteFromT
         }
     });
 
+    it("resolves CdpEventBuffer console and exception locations through parsed source maps", () => {
+        const projectDir = fs.mkdtempSync(path.join(os.tmpdir(), "uxp-rewriter-test-"));
+        try {
+            const pluginDir = path.join(projectDir, "dist");
+            fs.mkdirSync(path.join(pluginDir, "assets"), { recursive: true });
+            fs.mkdirSync(path.join(projectDir, "src"));
+            fs.writeFileSync(path.join(pluginDir, "assets", "index-abc.js"), "// bundle");
+            fs.writeFileSync(path.join(projectDir, "src", "main.tsx"), "// source");
+            const { rewriter } = makeRewriter(pluginDir);
+
+            // "AAKE" = genCol 0, source 0, origLine 0 + 5 = 5, origCol 0 + 2 = 2
+            rewriter.rewriteFromTarget(scriptParsed({
+                scriptId: "99",
+                url: "uxp-script://assets/index-abc.js",
+                sourceMapURL: buildInlineSourceMap({
+                    version: 3,
+                    sources: ["../../src/main.tsx"],
+                    names: [],
+                    mappings: "AAKE",
+                }),
+            }));
+
+            rewriter.rewriteFromTarget(JSON.stringify({
+                method: "Runtime.consoleAPICalled",
+                params: {
+                    type: "warn",
+                    timestamp: 1000,
+                    args: [{ type: "string", value: "mapped warning" }],
+                    stackTrace: {
+                        callFrames: [{
+                            scriptId: "99",
+                            url: "uxp-script://assets/index-abc.js",
+                            lineNumber: 0,
+                            columnNumber: 0,
+                        }],
+                    },
+                },
+            }));
+
+            rewriter.rewriteFromTarget(JSON.stringify({
+                method: "Runtime.exceptionThrown",
+                params: {
+                    timestamp: 2000,
+                    exceptionDetails: {
+                        text: "Uncaught",
+                        scriptId: "99",
+                        url: "uxp-script://assets/index-abc.js",
+                        lineNumber: 0,
+                        columnNumber: 0,
+                        exception: { description: "Error: boom" },
+                        stackTrace: {
+                            callFrames: [{
+                                functionName: "render",
+                                scriptId: "99",
+                                url: "uxp-script://assets/index-abc.js",
+                                lineNumber: 0,
+                                columnNumber: 0,
+                            }],
+                        },
+                    },
+                },
+            }));
+
+            const expectedUrl = pathToFileURL(path.join(projectDir, "src", "main.tsx")).href;
+            const buffer = rewriter.getEventBuffer();
+            expect(buffer.console[0]).toMatchObject({
+                sourceUrl: expectedUrl,
+                line: 5,
+            });
+            expect(buffer.exceptions[0]).toMatchObject({
+                sourceUrl: expectedUrl,
+                line: 5,
+                stackTrace: `    at render (${expectedUrl}:6:3)`,
+            });
+        }
+        finally {
+            fs.rmSync(projectDir, { recursive: true, force: true });
+        }
+    });
+
     it("leaves a script that doesn't exist on disk untouched", () => {
         const { rewriter } = makeRewriter("A:/plugins/my-plugin");
         const raw = scriptParsed({ url: "uxp-script://assets/missing.js", sourceMapURL: "" });

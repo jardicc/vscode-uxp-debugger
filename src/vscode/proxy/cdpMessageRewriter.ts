@@ -94,7 +94,7 @@ export class CdpMessageRewriter {
     private targetPausedForClient = false;
 
     /** Rolling console/exception capture for LM tools (LANGUAGE-MODEL-TOOLS.md §4). */
-    private readonly eventBuffer = new CdpEventBuffer();
+    private readonly eventBuffer: CdpEventBuffer;
 
     /** How long (ms) to wait for a new execution context after destruction
    *  before forwarding the destruction event to js-debug (reload grace period). */
@@ -113,6 +113,7 @@ export class CdpMessageRewriter {
         private readonly sendToTarget: (msg: string) => void = () => undefined,
     ) {
         this.sourceMaps = new SourceMapRewriter(pluginDir, log);
+        this.eventBuffer = new CdpEventBuffer((loc) => this.sourceMaps.resolveGeneratedLocation(loc));
     }
 
     // -----------------------------------------------------------------------
@@ -220,6 +221,7 @@ export class CdpMessageRewriter {
         // cached state from the old context would be stale/wrong to replay.
         this.lastExecutionContextCreatedRaw = undefined;
         this.scriptParsedCache.clear();
+        this.sourceMaps.clear();
         // A brand-new V8 session on the target has no memory of previous
         // breakpoints either.
         this.liveBreakpointIds.clear();
@@ -291,6 +293,7 @@ export class CdpMessageRewriter {
         this.pendingEvaluateIds.clear();
         this.lastExecutionContextCreatedRaw = undefined;
         this.scriptParsedCache.clear();
+        this.sourceMaps.clear();
         this.liveBreakpointIds.clear();
         this.pendingBreakpointRequestIds.clear();
     }

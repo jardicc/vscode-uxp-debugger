@@ -330,4 +330,66 @@ describe("SourceMapRewriter — resolving sources across project layouts", () =>
         expect(map.sources).toEqual(["../src/missing.ts"]);
         expect(map.sourceRoot).toBe(fileUrl(path.join(root, "dist")) + "/");
     });
+
+    it("resolves generated (line, column) positions back to original sources via TraceMap", () => {
+        project("plugin/bundle.js", "plugin/src/main.ts");
+        const rewriter = new SourceMapRewriter(path.join(root, "plugin"), fakeLog());
+        // Line 0 col 0 in bundle.js -> line 2 col 4 in src/main.ts ("AAEI": genCol=0, srcIdx=0, srcLine=+2, srcCol=+4)
+        rewriter.rewriteScriptParsed({
+            scriptId: "12",
+            url: "uxp://com.adobe.plugin/bundle.js",
+            sourceMapURL: inlineMap({
+                version: 3,
+                sources: ["./src/main.ts"],
+                names: [],
+                mappings: "AAEI",
+            }),
+        });
+
+        const expectedSource = fileUrl(path.join(root, "plugin", "src", "main.ts"));
+        expect(
+            rewriter.resolveGeneratedLocation({
+                url: "uxp://com.adobe.plugin/bundle.js",
+                lineNumber: 0,
+                columnNumber: 0,
+            }),
+        ).toEqual({
+            url: expectedSource,
+            lineNumber: 2,
+            columnNumber: 4,
+        });
+        expect(
+            rewriter.resolveGeneratedLocation({
+                scriptId: "12",
+                lineNumber: 0,
+                columnNumber: 0,
+            }),
+        ).toEqual({
+            url: expectedSource,
+            lineNumber: 2,
+            columnNumber: 4,
+        });
+    });
+
+    it("falls back to the resolved script file URL when a script has no source map", () => {
+        project("plugin/index.js");
+        const rewriter = new SourceMapRewriter(path.join(root, "plugin"), fakeLog());
+        rewriter.rewriteScriptParsed({
+            scriptId: "5",
+            url: "uxp://com.adobe.plugin/index.js",
+            endLine: 10,
+        });
+
+        expect(
+            rewriter.resolveGeneratedLocation({
+                url: "uxp://com.adobe.plugin/index.js",
+                lineNumber: 3,
+                columnNumber: 2,
+            }),
+        ).toEqual({
+            url: fileUrl(path.join(root, "plugin", "index.js")),
+            lineNumber: 3,
+            columnNumber: 2,
+        });
+    });
 });
