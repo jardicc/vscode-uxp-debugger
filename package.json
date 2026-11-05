@@ -753,7 +753,8 @@
         "type": "uxp-script",
         "label": "UXP Script",
         "languages": [
-          "javascript"
+          "javascript",
+          "typescript"
         ],
         "configurationAttributes": {
           "launch": {
@@ -798,8 +799,7 @@
     "vscode:prepublish": "npm run compile",
     "clean": "node -e \"require('node:fs').rmSync('dist',{recursive:true,force:true})\"",
     "precompile": "npm run clean",
-    "compile": "esbuild src/vscode/extension.ts --bundle --outfile=dist/extension.js --external:vscode --format=cjs --platform=node --minify && npm run compile:inspector && npm run compile:panel && npm run compile:devtools",
-    "compile:inspector": "esbuild src/vscode/inspector/host/mainHost.ts --bundle --outfile=dist/inspectorHost.js --format=iife --platform=browser",
+    "compile": "esbuild src/vscode/extension.ts --bundle --outfile=dist/extension.js --external:vscode --format=cjs --platform=node --minify && npm run compile:panel && npm run compile:devtools",
     "compile:panel": "esbuild src/vscode/panel/webview/index.tsx --bundle --outfile=dist/panel.js --format=iife --platform=browser --minify --loader:.ttf=file --define:process.env.NODE_ENV=\\\"production\\\"",
     "compile:devtools": "node scripts/bundle-devtools.mjs",
     "watch": "node scripts/watch.mjs",
