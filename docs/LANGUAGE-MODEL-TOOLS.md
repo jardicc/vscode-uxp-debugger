@@ -186,9 +186,11 @@ Console arguments are formatted from CDP `RemoteObject` values. Object previews 
 limited to the value or description supplied by CDP; the tool does not recursively
 inspect objects.
 
-Source URLs, lines, and exception stacks in this buffer are raw CDP locations. They
-are not rewritten through source maps. CDP line numbers are converted to one-based
-display values by the output tools.
+Source URLs, lines, and exception stacks in this buffer are resolved through the
+source maps parsed by `SourceMapRewriter` (`@jridgewell/trace-mapping`) when
+available, falling back to the script's resolved `file:` URL or the raw CDP
+location. CDP line numbers are converted to one-based display values by the output
+tools.
 
 ### 4.3 Breakpoints and pause control
 

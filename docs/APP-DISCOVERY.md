@@ -260,6 +260,12 @@ port-release ordering, and native-adapter lifetime details.
   it does not retain a per-row launch error.
 - The panel launch wait only observes broker connection. It does not guarantee
   that a newly connected host is ready for plugin operations.
+- On Windows, `VulcanControl.dll` currently launches host apps in-process via
+  `CreateProcessW` with `DETACHED_PROCESS` (`0x8`) and without
+  `CREATE_BREAKAWAY_FROM_JOB`. Because the VS Code Extension Host runs inside a
+  Windows Job Object (`JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE`), a host app started
+  by the extension inherits that Job Object and is terminated by Windows when
+  VS Code exits.
 - Beta SAP codes for hosts other than Photoshop remain unverified assumptions
   in the catalog.
 
