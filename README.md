@@ -169,35 +169,15 @@ the short-script attach race and workaround are documented in
 
 Breakpoints in your original TypeScript/JavaScript sources work out of the box:
 
-- Your bundler must emit source maps — either **inline** (webpack: `devtool: "inline-source-map"`) or as an **external `.map` file** referenced via `//# sourceMappingURL=`.
-- The extension's CDP proxy rewrites the map's `sourceRoot` to your local plugin directory so relative `sources` entries resolve to real files; for external `.map` files, it reads them straight off disk (next to the script) and inlines the result.
+- **Inline and external source maps are both supported** — your bundler can emit either an **inline** map (e.g. webpack `devtool: "inline-source-map"`, esbuild/Vite `sourcemap: "inline"`) or an **external `.map` file** next to the bundle referenced via `//# sourceMappingURL=`.
+- **Unbundled plain `.js` and standalone `.ts` scripts work without a bundler** — for scripts without a source map, the CDP proxy automatically synthesizes a 1:1 identity source map once it matches the runtime script to a file on disk; standalone `.ts` scripts are type-stripped in place with an inline identity map.
+- **Automatic path resolution** — when UXP parses a script, the CDP proxy resolves every `sources` entry against your plugin directory, up to 5 ancestor directories (stopping at `.git`), and their immediate subdirectories, rewriting matched sources to canonical `file:///` URLs (and inlining external `.map` files) before handing the event to VS Code's JS debugger.
 
 ## HTML/CSS inspector
 
 `UXP: Inspect Plugin UI (HTML/CSS)` opens the bundled Chrome DevTools **Elements** panel
 for a live plugin session. See [HTML/CSS Inspector](docs/UI-DEBUGGING.md) for capabilities,
 limitations, CDP routing, lifecycle, and maintenance.
-
----
-
-## Source Maps & Breakpoints
-
-The extension has built-in support for source maps, so breakpoints set in your original TypeScript (or other) source files work out of the box — no extra configuration needed in most cases.
-
-### How it works
-
-UXP plugins typically serve bundled JavaScript files with **inline source maps** (embedded as a `data:application/json;base64,…` URL at the end of the file). The extension's CDP proxy intercepts these maps and rewrites their `sourceRoot` to point at your local plugin directory before passing them to VS Code's JS debugger. This lets the debugger resolve relative `sources` entries (e.g. `../src/index.ts`) back to real files on disk.
-
-### Requirements for breakpoints to work
-
-- Your bundler must **emit source maps**. For webpack, set `devtool: "inline-source-map"` (or any other inline variant). External `.map` files are **not** supported — the map must be embedded in the JS file itself.
-- The `sources` paths inside the map must be relative and resolve correctly from your output directory. Standard webpack/esbuild defaults work without changes.
-
-### Breakpoints in practice
-
-1. Set a breakpoint in any source file (TypeScript, JavaScript, etc.) in VS Code.
-2. Attach the debugger as usual.
-3. Trigger the code path in the host application — VS Code will pause at the correct source line.
 
 ---
 
@@ -210,10 +190,73 @@ UXP plugins typically serve bundled JavaScript files with **inline source maps**
 | _"Developer mode could not be enabled"_ | Elevation prompt declined | Run `UXP: Enable Developer Mode` again and accept the prompt |
 | _"Plugin load timed out"_ | Host app busy or showing a modal dialog | Dismiss dialogs in the app and **Retry** |
 | _"…is a sandboxed host application"_ | UWP-style host (not supported yet) | Use a non-sandboxed host app |
-| Breakpoints not binding | No source maps, or the external `.map` file isn't next to its script on disk | Enable source maps in your bundler (`devtool: "inline-source-map"` or equivalent) |
+| Breakpoints not binding (hollow gray circle) | Debugger not attached, stale build, missing source maps, or unresolved source paths | Follow [Why is my breakpoint not binding?](#why-is-my-breakpoint-not-binding) below |
 | _"None of the connected applications report script-debugging support"_ | Older UXP runtime | Update the host app, or use **Try anyway** |
 
 The **UXP Debugger** output channel contains detailed diagnostics; each host app also gets its own `UXP – <App> <version>` log channel.
+
+### Why is my breakpoint not binding?
+
+When a breakpoint stays hollow/gray (_"Unbound breakpoint"_) or is never hit, work through the causes below from the simplest everyday oversights to the most complex source-map and timing issues:
+
+1. **The debugger is not attached (or is attached to a different session)**
+   - Clicking **Load** (or running `UXP: Load Plugin`) only loads the plugin into the host app — it does **not** start a VS Code debug session. Click **Debug** on the plugin row in the **UXP Devtools** panel (or press **F5** with a `"type": "uxp"` configuration) and confirm the VS Code debug toolbar is visible.
+   - If you have multiple plugins or multiple Adobe host apps connected, verify in the **Call Stack** view (or the **UXP Devtools** panel) that the active debug session is attached to the plugin and host app you are actually interacting with.
+
+2. **The breakpoint is on a non-executable line, or the build/plugin is stale**
+   - Breakpoints placed on TypeScript `interface` / `type` declarations, comments, blank lines, or dead code eliminated by tree-shaking have no generated JavaScript instructions to bind to. Try placing the breakpoint on a concrete statement (e.g. `console.log(...)`).
+   - If you edited your source files without rebuilding, or rebuilt without refreshing the plugin, the running UXP session still has the old bundle. Rebuild your bundle and click **Refresh** / **Reload** (or enable **Watch** on the plugin row).
+
+3. **The script or chunk has not been parsed by UXP yet**
+   - VS Code's JS debugger can only bind a breakpoint after UXP actually loads and parses the script containing that code (`Debugger.scriptParsed`).
+   - If the file is never imported from your entry point, or lives in a lazy-loaded chunk (`import()`), a secondary HTML dialog/panel that has not been opened yet, or a Web Worker, the breakpoint will remain unbound until that code path is loaded at runtime.
+
+4. **Top-level startup code already ran before the debugger attached (or a short script finished first)**
+   - **Plugins:** If your breakpoint is inside top-level initialization code that runs immediately when the plugin loads, attaching the debugger *after* a normal load is too late — that code has already executed. Check **Break on load** in the **UXP Devtools** panel header (or run `UXP: Load Plugin (Break on Start)`) and then click **Debug** so the runtime pauses before executing the bundle.
+   - **Standalone scripts (`.js`, `.ts`, `.ccjs`, `.psjs`, `.idjs`):** Very short synchronous scripts can finish executing before VS Code finishes attaching and processing the source map. Add a short initial async pause at the top of the script while debugging:
+
+     ```js
+     await new Promise((resolve) => setTimeout(resolve, 1500));
+     ```
+
+   See [Break on start](docs/BREAK-ON-START.md) for the full startup handshake details.
+
+5. **Your bundler is not emitting source maps (or uses `eval` devtool modes)**
+   - If your build pipeline transpiles TypeScript/JSX or bundles modules without emitting a source map, UXP only sees the compiled `.js` file and the debugger never learns about your original `.ts` / `.tsx` files.
+   - Enable **inline** source maps (webpack: `devtool: "inline-source-map"`, esbuild/Vite: `sourcemap: "inline"`) or **external** `.map` files (webpack: `devtool: "source-map"`, esbuild/Vite: `sourcemap: true`).
+   - Avoid webpack's `eval` or `eval-cheap-*` modes — `eval()` strings do not carry a script-level `sourceMapURL` on `Debugger.scriptParsed` and lack accurate source mappings.
+   - If you use external `.map` files, make sure your build copies the `.js.map` file into the deployed plugin folder right next to the `.js` bundle referenced by `manifest.json`.
+
+6. **Inspect the `UXP Debugger` Output panel to see which source maps and files resolved on disk**
+   - Open VS Code's **Output** panel (`Ctrl+Shift+U` / `Cmd+Shift+U`) and select **UXP Debugger** from the channel dropdown.
+   - Whenever a debug session starts or a script is parsed, the CDP proxy logs how each runtime script and its source-map `sources` entries were matched to local files on disk:
+     - **Script match:**
+
+       ```text
+       [CDP] Script: "uxp://..." → "file:///.../dist/index.js"
+       ```
+
+       Confirms the runtime script URL was matched to a local `.js` file in your plugin folder.
+     - **Missing or invalid source map:**
+       - `[CDP] Source map not found: index.js.map` — the bundle has a `//# sourceMappingURL=...` comment, but the `.map` file could not be found next to the script on disk.
+       - `[CDP] Failed to rewrite source map: ...` — the inline or external source map could not be decoded or is not valid Source Map v3 JSON.
+     - **Which source files were found on disk and which were not:**
+
+       ```text
+       [CDP] Source: "webpack://my-plugin/./src/index.ts" → "file:///.../src/index.ts"
+       [CDP] Resolved 12/14 source map sources on disk
+       [CDP] Unresolved source: "../../shared/utils.ts"
+       ```
+
+       - `[CDP] Source: "<raw>" → "file:///..."` (logged for the first 5 resolved entries per map) shows the exact on-disk `file:///` URI that the proxy mapped each source entry to.
+       - `[CDP] Resolved X/Y source map sources on disk` tells you at a glance how many `sources` entries in the source map were found on disk versus the total count in the map.
+       - `[CDP] Unresolved source: "..."` (up to 15 entries per map, followed by `[CDP] ...and N more unresolved`) explicitly lists every source-map entry that **could not** be located on disk.
+
+7. **Complex path-resolution mismatches (out-of-tree staging folders, monorepos, symlinks, or custom bundler paths)**
+   - When the Output panel reports `[CDP] Unresolved source` for the file where you set your breakpoint — or resolves it to a different path than the editor tab you have open — check how the proxy searches for source files:
+     - **Out-of-tree build / staging copy:** The proxy searches for source files starting from the script's directory and walks up to **5 ancestor directories** (stopping at the `.git` repository root, your home directory, or the OS temp directory) plus their immediate subdirectories. If your build copies the plugin (`manifest.json` + bundle) into a completely separate directory outside your repository (e.g. a distant staging folder or >5 directory levels deep), walking up from the loaded `manifest.json` will never reach your `src/` folder. **Fix:** Load the `manifest.json` located inside your repository (or emit inline source maps whose `sourceRoot` / paths resolve within the repo tree).
+     - **Breakpoint set in a duplicate file or symlinked path:** Compare the `file:///...` target printed in `[CDP] Source: ... → "file:///..."` with the full path of the file open in your VS Code editor. In monorepos or projects that copy sources into a build folder, the source map may resolve to a copied file or a real path while your breakpoint was set in a symlinked path (or vice versa). Open and set the breakpoint in the resolved path, or adjust your bundler's `sourceRoot` so `sources` point to the canonical `src/` directory.
+     - **Custom `devtoolModuleFilenameTemplate` / virtual bundler URLs:** If your bundler rewrites source paths into custom virtual URLs that do not correspond to relative paths on disk, adjust your bundler's source-map configuration so `sources` contain standard relative paths from the output bundle back to `src/`.
 
 ## Known issues
 
