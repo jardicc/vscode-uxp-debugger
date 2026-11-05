@@ -6,6 +6,7 @@
 
 import { compare } from "compare-versions";
 import type { ConnectedApp } from "../broker/UxpBroker";
+import { canonicalAppId, isSameHostApp } from "../vulcan/hostAppCatalog";
 import type { NormalizedHost } from "./manifest";
 
 /** Connected apps applicable to the given manifest host entries. */
@@ -15,7 +16,7 @@ export function matchApps(
 ): ConnectedApp[] {
     return connected.filter((app) =>
         hosts.some((host) => {
-            if (host.app !== app.info.appId) {
+            if (!isSameHostApp(host.app, app.info.appId)) {
                 return false;
             }
             if (host.minVersion && app.info.appVersion) {
@@ -28,5 +29,5 @@ export function matchApps(
 
 /** The app ids a manifest requires (for the "start <app> and retry" dialog). */
 export function requiredAppIds(hosts: NormalizedHost[]): string[] {
-    return [...new Set(hosts.map((h) => h.app))];
+    return [...new Set(hosts.map((h) => canonicalAppId(h.app)))];
 }

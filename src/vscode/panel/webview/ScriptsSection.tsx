@@ -7,7 +7,7 @@ import clsx from "clsx";
 import type { ChangeEvent, ReactNode } from "react";
 import { Fragment } from "react";
 import { SCRIPT_EXTENSIONS } from "../../../core/scriptCatalog";
-import { getUICodeByValue, HOST_APPS } from "../../../core/vulcan/hostAppCatalog";
+import { getUICodeByValue, HOST_APPS, isSameHostApp } from "../../../core/vulcan/hostAppCatalog";
 import type { ConnectedAppView, ScriptView } from "../panelProtocol";
 import { dispatch } from "./vscodeApi";
 import { IconButton, OverflowMenu, PathLabel, SectionHeader, Spinner, ToggleIconButton } from "./components";
@@ -108,19 +108,33 @@ function ScriptTargetSelect({
 }): ReactNode {
     // Installed apps that aren't connected. When installed-app detection is
     // unavailable, the saved target is kept visible instead.
-    const disconnectedIds = HOST_APPS
-        .map((a) => a.value)
-        // eslint-disable-next-line @typescript-eslint/prefer-nullish-coalescing
-        .filter((id) => installedApps?.includes(id) || (!installedApps && id === scriptTargetApp))
-        .filter((id) => !connectedApps.some((a) => a.appId === id));
-    const knownTarget = !!scriptTargetApp
-        && (connectedApps.some((a) => a.appId === scriptTargetApp) || disconnectedIds.includes(scriptTargetApp));
+    const isConnected = (appId: string) =>
+        connectedApps.some((app) => isSameHostApp(app.appId, appId));
+    const isKnownInstalled = (appId: string) => {
+        if (installedApps !== undefined) {
+            return installedApps.includes(appId);
+        }
+
+        return scriptTargetApp !== undefined && isSameHostApp(appId, scriptTargetApp);
+    };
+
+    const catalogAppIds = HOST_APPS.map(({ value }) => value);
+    const installedAppIds = catalogAppIds.filter(isKnownInstalled);
+    const disconnectedIds = installedAppIds.filter((appId) => !isConnected(appId));
+
+    const connectedTarget = scriptTargetApp
+        ? connectedApps.find((app) => isSameHostApp(app.appId, scriptTargetApp))
+        : undefined;
+    const disconnectedTarget = scriptTargetApp
+        ? disconnectedIds.find((appId) => isSameHostApp(appId, scriptTargetApp))
+        : undefined;
+    const selectedOptionValue = connectedTarget?.appId ?? disconnectedTarget;
 
     return (
         <select
             className="target-select"
             title="Which connected host app runs the scripts"
-            value={knownTarget ? scriptTargetApp : ""}
+            value={selectedOptionValue ?? ""}
             onClick={(e) => { e.stopPropagation(); }}
             onChange={(e: ChangeEvent<HTMLSelectElement>) => { dispatch({ kind: "setScriptTargetApp", appId: e.target.value || undefined }); }}
         >

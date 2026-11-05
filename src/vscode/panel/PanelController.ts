@@ -14,7 +14,7 @@ import { buildPluginLaunchConfig, buildScriptLaunchConfig } from "../../core/lau
 import { parseArgsText } from "../../core/protocol/messages";
 import { isScriptPath, scriptDialogExtensions, scriptExtensionsLabel } from "../../core/scriptCatalog";
 import type { PluginSession } from "../../core/broker/SessionRegistry";
-import { connectedAppUnsupportedReason, HOST_APPS, parseRunningApps, type RunningApp } from "../../core/vulcan/hostAppCatalog";
+import { connectedAppUnsupportedReason, HOST_APPS, isSameHostApp, parseRunningApps, type RunningApp } from "../../core/vulcan/hostAppCatalog";
 import { sortInstalledCandidates } from "../../core/vulcan/VulcanHostAppController";
 import type { UxpService } from "../UxpService";
 import { addLaunchConfiguration, launchFolderFor } from "../commands/addLaunchConfig";
@@ -137,8 +137,8 @@ export class PanelController implements vscode.Disposable {
         if (
             target
             && this.installedAppIds
-            && !this.installedAppIds.includes(target)
-            && !this.service.connectedApps.some((app) => app.info.appId === target)
+            && !this.installedAppIds.some((id) => isSameHostApp(id, target))
+            && !this.service.connectedApps.some((app) => isSameHostApp(app.info.appId, target))
         ) {
             void this.pluginRegistry.setScriptTargetApp(undefined);
         }
@@ -879,7 +879,7 @@ export class PanelController implements vscode.Disposable {
             return;
         }
         await this.service.waitForConnection(
-            () => this.service.connectedApps.some((app) => app.info.appId === appId),
+            () => this.service.connectedApps.some((app) => isSameHostApp(app.info.appId, appId)),
             CONNECT_TIMEOUT_MS,
         );
     }

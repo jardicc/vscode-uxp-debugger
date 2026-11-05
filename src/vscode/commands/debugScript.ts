@@ -28,7 +28,7 @@ import {
 } from "../../core/scriptCatalog";
 import { sleep } from "../../core/sleep";
 import { stripTypeScriptFile } from "../../core/stripTypeScript";
-import { connectedAppUnsupportedReason } from "../../core/vulcan/hostAppCatalog";
+import { connectedAppUnsupportedReason, isSameHostApp } from "../../core/vulcan/hostAppCatalog";
 import type { UxpService } from "../UxpService";
 import {
     getStampedUxpClientSessionId,
@@ -223,7 +223,7 @@ async function pickScriptTargetApp(
             (app) => isAppAllowedForScript(extension, app.info.appId),
         );
         if (appIdFilter) {
-            apps = apps.filter((app) => app.info.appId === appIdFilter);
+            apps = apps.filter((app) => isSameHostApp(app.info.appId, appIdFilter));
         }
         return apps;
     };

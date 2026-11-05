@@ -6,7 +6,7 @@
 
 import * as vscode from "vscode";
 import { NativeAddonUnavailableError } from "../../core/errors";
-import { type HostAppDescriptor, HOST_APPS, isDebuggableVersion } from "../../core/vulcan/hostAppCatalog";
+import { findCatalogHostApp, type HostAppDescriptor, isDebuggableVersion, isSameHostApp } from "../../core/vulcan/hostAppCatalog";
 import { sleep } from "../../core/sleep";
 import type { IHostAppController } from "../../core/vulcan/IHostAppController";
 import type { UxpService } from "../UxpService";
@@ -38,7 +38,7 @@ export async function resolveHostAppNotRunning(
     requiredApps: string[],
 ): Promise<boolean> {
     const recognized = requiredApps
-        .map((id) => HOST_APPS.find((app) => app.value === id))
+        .map((id) => findCatalogHostApp(id))
         .filter((app): app is HostAppDescriptor => app !== undefined);
 
     if (recognized.length === 0) {
@@ -67,7 +67,7 @@ export async function launchHostAppByValue(
     output: vscode.OutputChannel,
     appValue: string,
 ): Promise<{ debuggable: boolean } | undefined> {
-    const app = HOST_APPS.find((candidate) => candidate.value === appValue);
+    const app = findCatalogHostApp(appValue);
     if (!app) {
         void vscode.window.showInformationMessage(
             `UXP: "${appValue}" is not a launchable host application.`,
@@ -257,7 +257,7 @@ async function waitForConnection(
     requiredApps: string[],
 ): Promise<boolean> {
     const hasMatch = () =>
-        requiredApps.some((id) => service.connectedApps.some((connected) => connected.info.appId === id));
+        requiredApps.some((id) => service.connectedApps.some((connected) => isSameHostApp(connected.info.appId, id)));
 
     const connected = await vscode.window.withProgress(
         {

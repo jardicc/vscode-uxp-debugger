@@ -23,7 +23,7 @@ import { parseManifestContent, type ParsedManifest } from "../core/manifest/mani
 import { isDevModeEnabled } from "../core/devmode/devMode";
 import { DEFAULT_BROKER_PORT } from "../core/protocol/types";
 import { sleep } from "../core/sleep";
-import { connectedAppUnsupportedReason, type HostAppDescriptor, parseRunningApps, runningUnsupportedReasons } from "../core/vulcan/hostAppCatalog";
+import { connectedAppUnsupportedReason, type HostAppDescriptor, isSameHostApp, parseRunningApps, runningUnsupportedReasons } from "../core/vulcan/hostAppCatalog";
 import type { IHostAppController, LaunchResult } from "../core/vulcan/IHostAppController";
 import { VulcanAnnouncer } from "../core/vulcan/VulcanAnnouncer";
 import { VulcanHostAppController } from "../core/vulcan/VulcanHostAppController";
@@ -554,7 +554,7 @@ export class UxpService implements vscode.Disposable {
 
         let apps: ConnectedApp[];
         if (targetAppId !== undefined) {
-            apps = matched.filter((app) => app.info.appId === targetAppId);
+            apps = matched.filter((app) => isSameHostApp(app.info.appId, targetAppId));
             if (apps.length === 0) {
                 const reasons = this.runningUnsupportedReasons([targetAppId]);
                 if (reasons.length > 0) {

@@ -36,15 +36,22 @@ describe("matchApps", () => {
         expect(matched.map((a) => a.info.appId)).toEqual(["PS", "ID"]);
     });
 
+    it("matches by app id case-insensitively and across catalog aliases", () => {
+        const apps = [app("PS", "27.9.0", 1), app("ID", "18.5.0", 2), app("indesign", "19.0.0", 3)];
+        expect(matchApps([{ app: "ps" }], apps).map((a) => a.connectionId)).toEqual([1]);
+        expect(matchApps([{ app: "indesign" }], apps).map((a) => a.connectionId)).toEqual([2, 3]);
+        expect(matchApps([{ app: "ID" }], apps).map((a) => a.connectionId)).toEqual([2, 3]);
+    });
+
     it("returns an empty list when nothing is connected", () => {
         expect(matchApps([{ app: "PS" }], [])).toHaveLength(0);
     });
 });
 
 describe("requiredAppIds", () => {
-    it("deduplicates app ids", () => {
+    it("deduplicates and canonicalizes app ids", () => {
         expect(
-            requiredAppIds([{ app: "PS" }, { app: "PS", minVersion: "23.0.0" }, { app: "ID" }]),
+            requiredAppIds([{ app: "PS" }, { app: "ps", minVersion: "23.0.0" }, { app: "indesign" }, { app: "ID" }]),
         ).toEqual(["PS", "ID"]);
     });
 });

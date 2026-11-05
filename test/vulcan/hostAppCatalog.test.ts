@@ -1,14 +1,50 @@
 import { describe, expect, it } from "vitest";
 import {
+    canonicalAppId,
     connectedAppUnsupportedReason,
+    findCatalogHostApp,
+    getUICodeByValue,
     HOST_APPS,
     isDebuggableApp,
     isDebuggableVersion,
+    isSameHostApp,
     parseRunningApps,
     runningUnsupportedReasons,
 } from "../../src/core/vulcan/hostAppCatalog";
 
 const ps = HOST_APPS.find((app) => app.value === "PS")!;
+
+describe("findCatalogHostApp / canonicalAppId / isSameHostApp", () => {
+    it("matches catalog value and appIdAliases case-insensitively", () => {
+        expect(findCatalogHostApp("PS")?.value).toBe("PS");
+        expect(findCatalogHostApp("ps")?.value).toBe("PS");
+        expect(findCatalogHostApp("ID")?.value).toBe("ID");
+        expect(findCatalogHostApp("indesign")?.value).toBe("ID");
+        expect(findCatalogHostApp("InDesign")?.value).toBe("ID");
+        expect(findCatalogHostApp("indesignserver")?.value).toBe("IDS");
+        expect(findCatalogHostApp("XD")).toBeUndefined();
+    });
+
+    it("canonicalizes known aliases and preserves unknown ids", () => {
+        expect(canonicalAppId("indesign")).toBe("ID");
+        expect(canonicalAppId("ps")).toBe("PS");
+        expect(canonicalAppId("XD")).toBe("XD");
+    });
+
+    it("compares app ids across case and aliases", () => {
+        expect(isSameHostApp("ID", "indesign")).toBe(true);
+        expect(isSameHostApp("InDesign", "id")).toBe(true);
+        expect(isSameHostApp("PS", "ps")).toBe(true);
+        expect(isSameHostApp("XD", "xd")).toBe(true);
+        expect(isSameHostApp("PS", "ID")).toBe(false);
+    });
+
+    it("resolves UI codes for aliases as well as canonical values", () => {
+        expect(getUICodeByValue("ID")).toBe("ID");
+        expect(getUICodeByValue("indesign")).toBe("ID");
+        expect(getUICodeByValue("premierepro")).toBe("PR");
+    });
+});
 
 describe("isDebuggableVersion", () => {
     it("accepts versions at or above the catalog minVersion", () => {
@@ -28,6 +64,8 @@ describe("isDebuggableApp", () => {
 
     it("accepts a new catalog app", () => {
         expect(isDebuggableApp("PS", "26.0.0")).toBe(true);
+        expect(isDebuggableApp("indesign", "18.5.0")).toBe(true);
+        expect(isDebuggableApp("indesign", "17.0.0")).toBe(false);
     });
 
     it("lets through apps outside the catalog or without a version", () => {
@@ -57,8 +95,9 @@ describe("parseRunningApps", () => {
         expect(parseRunningApps(["PS,27.9.0,Adobe Photoshop"])).toEqual([{ appId: "PS", version: "27.9.0" }]);
     });
 
-    it("matches catalog ids case-insensitively", () => {
+    it("matches catalog ids and aliases case-insensitively", () => {
         expect(parseRunningApps(["ps,17.0.2,Adobe Photoshop"])[0]?.appId).toBe("PS");
+        expect(parseRunningApps(["indesign,19.0.0,Adobe InDesign"])[0]?.appId).toBe("ID");
     });
 
     it("ignores unknown apps and malformed entries", () => {

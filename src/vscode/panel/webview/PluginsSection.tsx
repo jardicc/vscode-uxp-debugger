@@ -18,7 +18,7 @@ import {
     Spinner,
     ToggleIconButton,
 } from "./components";
-import { getUICodeByValue } from "../../../core/vulcan/hostAppCatalog";
+import { canonicalAppId, getUICodeByValue } from "../../../core/vulcan/hostAppCatalog";
 
 export function PluginsSection({
     plugins,
@@ -35,7 +35,7 @@ export function PluginsSection({
     collapsed: boolean;
     onToggle: () => void;
 }): ReactNode {
-    const connectedIds = new Set(connectedApps.map((a) => a.appId));
+    const connectedIds = new Set(connectedApps.map((a) => canonicalAppId(a.appId).toLowerCase()));
 
     return (
         <>
@@ -212,7 +212,7 @@ function PluginRow({
                         <HostBadge
                             key={appId}
                             uiCode={getUICodeByValue(appId)}
-                            connected={connectedIds.has(appId)}
+                            connected={connectedIds.has(canonicalAppId(appId).toLowerCase())}
                         />
                     ))}
                     {plugin.matchedFolderLength !== undefined && (

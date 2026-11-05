@@ -51,6 +51,39 @@ export const HOST_APPS: readonly HostAppDescriptor[] = [
 ];
 
 /**
+ * Look up a catalog entry by `value` or any of its `appIdAliases`
+ * (case-insensitive).
+ */
+export function findCatalogHostApp(appId: string): HostAppDescriptor | undefined {
+    const normalizedAppId = appId.toLowerCase();
+    const matchesAppId = (candidateId: string) => candidateId.toLowerCase() === normalizedAppId;
+
+    return HOST_APPS.find(({ value, appIdAliases }) =>
+        matchesAppId(value) || appIdAliases?.some(matchesAppId) === true,
+    );
+}
+
+/**
+ * Canonicalize `appId` to its catalog `value` when recognized (e.g.
+ * `"indesign"` → `"ID"`, `"ps"` → `"PS"`), or return `appId` as-is for
+ * uncataloged hosts.
+ */
+export function canonicalAppId(appId: string): string {
+    return findCatalogHostApp(appId)?.value ?? appId;
+}
+
+/**
+ * Case-insensitive host-app id comparison that also equates catalog `value`
+ * and `appIdAliases` (e.g. `"ID"` matches `"indesign"` and `"id"`).
+ */
+export function isSameHostApp(a: string, b: string): boolean {
+    const canonicalA = canonicalAppId(a).toLowerCase();
+    const canonicalB = canonicalAppId(b).toLowerCase();
+
+    return canonicalA === canonicalB;
+}
+
+/**
  * Pure version comparison backed by `compare-versions`. Compares arbitrary segment lengths
  * (e.g., `"15.4"` vs `"15.4.1"`) and treats pre-release suffixes (e.g., `"26.0.0-beta"`)
  * as lower than the corresponding release (`"26.0.0"`). Invalid version strings return `false`.
@@ -72,7 +105,7 @@ export function isDebuggableVersion(app: HostAppDescriptor, version: string): bo
  * version can't be judged and are allowed through.
  */
 export function isDebuggableApp(appId: string, version: string | undefined): boolean {
-    const app = HOST_APPS.find((candidate) => candidate.value === appId);
+    const app = findCatalogHostApp(appId);
     if (!app || !version) {
         return true;
     }
@@ -91,7 +124,7 @@ export function unsupportedVersionReason(app: Pick<HostAppDescriptor, "name" | "
 
 /** Why a connected app can't be debugged, or `undefined` when it can. */
 export function connectedAppUnsupportedReason(appId: string, version: string | undefined): string | undefined {
-    const app = HOST_APPS.find((candidate) => candidate.value === appId);
+    const app = findCatalogHostApp(appId);
     if (!app || !version || isDebuggableVersion(app, version)) {
         return undefined;
     }
@@ -118,7 +151,7 @@ export function parseRunningApps(entries: readonly string[]): RunningApp[] {
     const result: RunningApp[] = [];
     for (const entry of entries) {
         const [rawId = "", version = ""] = entry.split(",").map((part) => part.trim());
-        const app = HOST_APPS.find((candidate) => candidate.value.toLowerCase() === rawId.toLowerCase());
+        const app = findCatalogHostApp(rawId);
         if (!app || !version) {
             continue;
         }
@@ -132,22 +165,29 @@ export function parseRunningApps(entries: readonly string[]): RunningApp[] {
 }
 
 /**
- * Reasons for running-but-unsupported instances of `appIds` (catalog ids,
- * case-insensitive; `undefined` = any catalog app). An app that also has a
- * supported version running is skipped — it may simply not be connected yet.
+ * Reasons for running-but-unsupported instances of `appIds` (catalog ids or
+ * aliases, case-insensitive; `undefined` = any catalog app). An app that also
+ * has a supported version running is skipped — it may simply not be connected yet.
  */
 export function runningUnsupportedReasons(running: readonly RunningApp[], appIds?: readonly string[]): string[] {
-    const wanted = appIds?.map((id) => id.toLowerCase());
-    const relevant = running.filter((a) => !wanted || wanted.includes(a.appId.toLowerCase()));
-    return relevant.flatMap((a) =>
-        a.unsupportedReason && !relevant.some((other) => other.appId === a.appId && !other.unsupportedReason)
-            ? [a.unsupportedReason]
-            : [],
+    const relevantApps = running.filter(
+        ({ appId }) => !appIds || appIds.some((wanted) => isSameHostApp(appId, wanted)),
     );
+
+    return relevantApps.flatMap((app) => {
+        if (!app.unsupportedReason) {
+            return [];
+        }
+
+        const hasSupportedVersion = relevantApps.some((other) =>
+            isSameHostApp(other.appId, app.appId) && !other.unsupportedReason,
+        );
+        return hasSupportedVersion ? [] : [app.unsupportedReason];
+    });
 }
 
 export const getUICodeByValue = (value: string): string => {
-    const app = HOST_APPS.find((app) => app.value.toLocaleLowerCase() === value.toLocaleLowerCase());
+    const app = findCatalogHostApp(value);
     const res = app?.uiCode ?? "";
     return res;
 };

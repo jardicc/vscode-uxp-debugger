@@ -11,6 +11,7 @@ import AdmZip from "adm-zip";
 import { type ParsedManifest, parseManifestContent } from "../manifest/manifest";
 import { foldPathCase } from "../pathCase";
 import type { UxpManifestHost, UxpPluginManifest } from "../protocol/types";
+import { isSameHostApp } from "../vulcan/hostAppCatalog";
 
 type HostEntry = UxpManifestHost | string;
 
@@ -57,7 +58,7 @@ export function resolveHostOverride(parsed: ParsedManifest, host?: string): stri
                 + "Specify \"host\" to pick which one the packed manifest.json should target.",
             );
         }
-        const index = parsed.hosts.findIndex((h) => h.app === host);
+        const index = parsed.hosts.findIndex((h) => isSameHostApp(h.app, host));
         if (index === -1) {
             throw new Error(
                 `"${host}" is not one of this manifest's host apps (${parsed.hosts.map((h) => h.app).join(", ")}).`,
