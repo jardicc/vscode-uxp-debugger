@@ -307,6 +307,8 @@ please attach the relevant part of the **UXP Debugger** output channel.
 
 ## How it works
 
+![UXP Debugger architecture](docs/images/architecture.png)
+
 1. **Developer mode** — host apps only join dev workflows when Adobe's machine-global `settings.json` contains `{"developer": true}` (one-time elevated write, with your consent).
 2. **Broker** — the extension runs a WebSocket server on `127.0.0.1:14001` speaking the UXP DevTools wire protocol and announces it via the **Adobe Vulcan IPC** native library (shipped per platform). Running Adobe apps connect within about a second.
 3. **Plugin sessions** — local manifest validation followed by `Plugin/load` creates a session; reload/unload operate on it. Scripts use `Plugin/runScript` and behave like short-lived plugin sessions.
