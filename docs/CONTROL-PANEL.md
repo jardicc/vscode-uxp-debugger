@@ -208,6 +208,8 @@ Changes are debounced for 350 ms.
 A watched plugin has an active recursive watcher only while at least one of its sessions
 is loaded:
 
+- files and subdirectories whose name starts with `.` (relative to the plugin folder) are
+  ignored;
 - a change to `manifest.json`, any `.uxpaddon`, or a manifest-declared icon triggers a
   full Reload;
 - every other changed file triggers an in-place Refresh;
