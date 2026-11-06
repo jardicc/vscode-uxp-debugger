@@ -4,13 +4,19 @@ import * as os from "os";
 import * as path from "path";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
-const { createWebviewPanelMock } = vi.hoisted(() => ({
+const { createWebviewPanelMock, clipboardWriteTextMock } = vi.hoisted(() => ({
     createWebviewPanelMock: vi.fn(),
+    clipboardWriteTextMock: vi.fn(() => Promise.resolve()),
 }));
 
 vi.mock("vscode", () => ({
     ViewColumn: { Beside: 2 },
     Uri: { file: (p: string) => ({ fsPath: p }) },
+    env: {
+        clipboard: {
+            writeText: clipboardWriteTextMock,
+        },
+    },
     window: {
         createWebviewPanel: createWebviewPanelMock,
     },
@@ -37,6 +43,7 @@ describe("inspectorStaticServer & bundled DevTools CSP (S5)", () => {
         for (const dir of tempDirs.splice(0)) {
             fs.rmSync(dir, { recursive: true, force: true });
         }
+        clipboardWriteTextMock.mockClear();
         UxpInspectorPanel.disposeAll();
     });
 
@@ -84,7 +91,19 @@ describe("inspectorStaticServer & bundled DevTools CSP (S5)", () => {
             expect(response.status).toBe(200);
             expect(response.headers.get("content-security-policy")).toBe(INSPECTOR_CSP);
             expect(response.headers.get("cache-control")).toBe("no-store");
-            expect(await response.text()).toBe("<!doctype html><title>DevTools</title>");
+            expect(await response.text()).toBe(
+                "<!doctype html><title>DevTools</title><script src=\"./uxp_inspector_shim.js\"></script>\n",
+            );
+
+            const shimResponse = await fetch(
+                `http://127.0.0.1:${String(port)}${INSPECTOR_STATIC_PATH_PREFIX}uxp_inspector_shim.js`,
+            );
+            expect(shimResponse.status).toBe(200);
+            expect(shimResponse.headers.get("content-security-policy")).toBe(INSPECTOR_CSP);
+            expect(shimResponse.headers.get("content-type")).toBe("text/javascript; charset=utf-8");
+            const shimSource = await shimResponse.text();
+            expect(shimSource).toContain("uxp-inspector-copy");
+            expect(shimSource).toContain("execCommand(\"copy\")");
 
             const postResponse = await fetch(
                 `http://127.0.0.1:${String(port)}${INSPECTOR_STATIC_PATH_PREFIX}uxp_inspector_app.html`,
@@ -101,13 +120,18 @@ describe("inspectorStaticServer & bundled DevTools CSP (S5)", () => {
         }
     });
 
-    it("renders the outer webview HTML with default-src 'none', no unsafe-eval, and origin-scoped clipboard allow", async () => {
+    it("renders the outer webview HTML with default-src 'none', nonce script-src, no unsafe-eval, and origin-scoped clipboard allow", async () => {
         let disposeListener: (() => void) | undefined;
+        let messageListener: ((msg: unknown) => void) | undefined;
         const fakePanel = {
             visible: true,
             webview: {
                 html: "",
                 cspSource: "vscode-webview://test",
+                onDidReceiveMessage: vi.fn((cb: (msg: unknown) => void) => {
+                    messageListener = cb;
+                    return { dispose: vi.fn() };
+                }),
             },
             reveal: vi.fn(),
             onDidDispose: vi.fn((cb: () => void) => {
@@ -152,13 +176,17 @@ describe("inspectorStaticServer & bundled DevTools CSP (S5)", () => {
         );
 
         const html = fakePanel.webview.html;
-        expect(html).toContain(
-            "default-src 'none'; style-src 'unsafe-inline'; frame-src http://127.0.0.1:14001;",
+        expect(html).toMatch(
+            /default-src 'none'; style-src 'unsafe-inline'; script-src 'nonce-[A-Za-z0-9+/=]+';/,
         );
+        expect(html).toContain("frame-src http://127.0.0.1:14001;");
         expect(html).not.toContain("unsafe-eval");
         expect(html).not.toContain("clipboard-write *");
         expect(html).toContain(
             "allow=\"clipboard-read http://127.0.0.1:14001; clipboard-write http://127.0.0.1:14001\"",
         );
+
+        messageListener?.({ type: "uxp-inspector-copy", text: "copied text" });
+        expect(clipboardWriteTextMock).toHaveBeenCalledWith("copied text");
     });
 });
