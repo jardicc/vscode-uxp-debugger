@@ -18,7 +18,7 @@ interface UxpScriptDebugConfiguration extends vscode.DebugConfiguration {
 }
 
 export class UxpDebugConfigProvider implements vscode.DebugConfigurationProvider {
-    constructor(private readonly log: vscode.OutputChannel) {}
+    constructor(private readonly log: vscode.LogOutputChannel) {}
 
     provideDebugConfigurations(): vscode.ProviderResult<vscode.DebugConfiguration[]> {
         return [
@@ -48,14 +48,14 @@ export class UxpDebugConfigProvider implements vscode.DebugConfigurationProvider
         _folder: vscode.WorkspaceFolder | undefined,
         config: vscode.DebugConfiguration,
     ): Promise<vscode.DebugConfiguration | undefined> {
-        this.log.appendLine(`Resolving "uxp" debug config: ${JSON.stringify(config)}`);
+        this.log.debug(`Resolving "uxp" debug config: ${JSON.stringify(config)}`);
         await vscode.commands.executeCommand("uxp.attachDebugger", config.manifestPath);
         return undefined; // cancel — the command started the real session
     }
 }
 
 export class UxpScriptDebugConfigProvider implements vscode.DebugConfigurationProvider {
-    constructor(private readonly log: vscode.OutputChannel) {}
+    constructor(private readonly log: vscode.LogOutputChannel) {}
 
     provideDebugConfigurations(): vscode.ProviderResult<UxpScriptDebugConfiguration[]> {
         return [
@@ -74,7 +74,7 @@ export class UxpScriptDebugConfigProvider implements vscode.DebugConfigurationPr
         _folder: vscode.WorkspaceFolder | undefined,
         config: UxpScriptDebugConfiguration,
     ): Promise<vscode.DebugConfiguration | undefined> {
-        this.log.appendLine(`Resolving "uxp-script" debug config: ${JSON.stringify(config)}`);
+        this.log.debug(`Resolving "uxp-script" debug config: ${JSON.stringify(config)}`);
         const args: DebugScriptArgs = {
             script: config.script,
             app: config.app,

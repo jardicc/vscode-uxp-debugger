@@ -10,6 +10,7 @@
  */
 
 import { TypedEvent } from "../events";
+import { type Logger, NOOP_LOGGER } from "../logFormat";
 import { HostReplyError, RequestTimeoutError } from "../errors";
 import {
     asAppMessage,
@@ -106,7 +107,7 @@ export class AppConnection {
     constructor(
         public readonly id: number,
         private readonly socket: SocketLike,
-        private readonly log: (message: string) => void = () => undefined,
+        private readonly log: Logger = NOOP_LOGGER,
         private readonly timeouts: TimeoutConfig = DEFAULT_TIMEOUTS,
     ) {
         socket.on("message", (data) => {
@@ -116,7 +117,7 @@ export class AppConnection {
             this.handleClose();
         });
         socket.on("error", (err) => {
-            this.log(`app connection #${String(id)} socket error: ${err.message}`);
+            this.log.error(`app connection #${String(id)} socket error: ${err.message}`);
         });
         // Handshake step 1: greet the app.
         this.sendFrame(buildReady());
@@ -186,7 +187,7 @@ export class AppConnection {
             this.sendFrame(buildCdtState(requestId, hostSessionId, connected));
         }
         catch (err) {
-            this.log(`cdt state notify failed: ${String(err instanceof Error ? err.message : err)}`);
+            this.log.warn(`cdt state notify failed: ${String(err instanceof Error ? err.message : err)}`);
         }
     }
 
@@ -230,7 +231,7 @@ export class AppConnection {
     private sendFrame(frame: BrokerToAppMessage): void {
         const json = JSON.stringify(frame);
         if (frame.command !== "CDT") {
-            this.log(`app #${String(this.id)} ← ${truncateForLog(json)}`);
+            this.log.debug(`app #${String(this.id)} ← ${truncateForLog(json)}`);
         }
         this.socket.send(json);
     }
@@ -250,15 +251,15 @@ export class AppConnection {
     private handleRaw(raw: string): void {
         const parsed = parseFrame(raw);
         if (!parsed) {
-            this.log(`app #${String(this.id)}: ignoring malformed frame: ${truncateForLog(raw)}`);
+            this.log.warn(`app #${String(this.id)}: ignoring malformed frame: ${truncateForLog(raw)}`);
             return;
         }
         if (parsed.command !== "CDT") {
-            this.log(`app #${String(this.id)} → ${truncateForLog(raw)}`);
+            this.log.debug(`app #${String(this.id)} → ${truncateForLog(raw)}`);
         }
         const msg = asAppMessage(parsed);
         if (!msg) {
-            this.log(`app #${String(this.id)}: ignoring unknown frame command=${String(parsed.command)}`);
+            this.log.warn(`app #${String(this.id)}: ignoring unknown frame command=${String(parsed.command)}`);
             return;
         }
 
@@ -270,7 +271,7 @@ export class AppConnection {
                 const pending = this.pending.get(msg.requestId);
                 if (!pending) {
                     // Reply after timeout — dropped by design.
-                    this.log(`app #${String(this.id)}: dropping late reply requestId=${String(msg.requestId)}`);
+                    this.log.warn(`app #${String(this.id)}: dropping late reply requestId=${String(msg.requestId)}`);
                     return;
                 }
                 this.pending.delete(msg.requestId);
@@ -314,14 +315,14 @@ export class AppConnection {
             const { command: _c, requestId: _r, error: _e, ...info } = reply;
             this.appInfo = info as unknown as AppInfo;
             this.readyAtMs = Date.now();
-            this.log(
+            this.log.info(
                 `app #${String(this.id)} identified: ${this.appInfo.appName} ${this.appInfo.appVersion} `
                 + `(uxp ${this.appInfo.uxpVersion})`,
             );
             this.onReady.emit(this.appInfo);
         }
         catch (err) {
-            this.log(
+            this.log.error(
                 `app #${String(this.id)}: App/info handshake failed — ${String(
                     err instanceof Error ? err.message : err,
                 )}`,

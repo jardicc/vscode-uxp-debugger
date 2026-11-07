@@ -14,6 +14,7 @@
  */
 
 import { compareVersions } from "compare-versions";
+import { type Logger, NOOP_LOGGER } from "../logFormat";
 import { type HostAppDescriptor, satisfiesMinVersion } from "./hostAppCatalog";
 import type { IHostAppController, LaunchResult } from "./IHostAppController";
 import { loadAddon, type VulcanControlAdapterNative } from "./addonLoader";
@@ -30,7 +31,7 @@ export class VulcanHostAppController implements IHostAppController {
    */
     constructor(
         private readonly nativeRoot: string,
-        private readonly log: (message: string) => void = () => undefined,
+        private readonly log: Logger = NOOP_LOGGER,
     ) {}
 
     getSpecifiers(): string[] {
@@ -75,14 +76,14 @@ export class VulcanHostAppController implements IHostAppController {
         const adapter = this.getAdapter();
 
         if (!app.sapCodes.some((sapCode) => adapter.isAppInstalled(sapCode))) {
-            this.log(`vulcan: none of [${app.sapCodes.join(", ")}] is installed`);
+            this.log.warn(`vulcan: none of [${app.sapCodes.join(", ")}] is installed`);
             return { status: "notInstalled", sapCode: app.sapCodes[0] };
         }
 
         const candidates = this.getInstalledCandidates(app);
         if (!candidates.some((c) => satisfiesMinVersion(c.version, app.minVersion))) {
             const installed = candidates.map((c) => c.version);
-            this.log(
+            this.log.warn(
                 `vulcan: [${app.sapCodes.join(", ")}] installed (${installed.join(", ") || "?"}) `
                 + `does not satisfy minVersion ${app.minVersion}`,
             );
@@ -111,7 +112,7 @@ export class VulcanHostAppController implements IHostAppController {
         const success = await new Promise<boolean>((resolve) => {
             adapter.launchApp(sapCode, true, "", (err, ok) => {
                 if (err) {
-                    this.log(
+                    this.log.error(
                         // The native callback error is untyped and may intentionally use its own string conversion.
                         `vulcan: launchApp(${sapCode}) callback error: ${
                             // eslint-disable-next-line @typescript-eslint/no-base-to-string
@@ -124,7 +125,7 @@ export class VulcanHostAppController implements IHostAppController {
                 resolve(ok === true);
             });
         });
-        this.log(`vulcan: launchApp(${sapCode}) => ${success}`);
+        this.log.info(`vulcan: launchApp(${sapCode}) => ${success}`);
         return success;
     }
 
@@ -151,7 +152,7 @@ export class VulcanHostAppController implements IHostAppController {
             const addon = loadAddon(this.nativeRoot);
             this.adapter = new addon.VulcanControlAdapter();
             controlAdapterInstantiated = true;
-            this.log("vulcan: control adapter initialized");
+            this.log.info("vulcan: control adapter initialized");
         }
         return this.adapter;
     }

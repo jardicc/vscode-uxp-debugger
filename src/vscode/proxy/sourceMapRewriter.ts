@@ -23,7 +23,7 @@ interface SourceMapV3 {
 }
 
 const MAX_ANCESTORS = 5;
-const MAX_LOGGED_UNRESOLVED = 15;
+const MAX_LOGGED_UNRESOLVED = 50;
 const STOP_DIRS = new Set([os.homedir(), os.tmpdir()].map((d) => foldPathCase(path.resolve(d))));
 const LEADING_DOTS_AND_SLASHES = /^(?:\.{0,2}[\\/])+/;
 
@@ -211,7 +211,7 @@ export class SourceMapRewriter {
 
     constructor(
         private readonly pluginDir: string,
-        private readonly log: vscode.OutputChannel,
+        private readonly log: vscode.LogOutputChannel,
     ) {}
 
     /** Clears all cached script and source-map entries (e.g. when the target context resets). */
@@ -230,7 +230,7 @@ export class SourceMapRewriter {
         let resolvedUrl: string | undefined;
         if (scriptFile) {
             resolvedUrl = pathToFileURL(scriptFile).href;
-            this.log.appendLine(`[CDP] Script: ${JSON.stringify(originalUrl)} → ${JSON.stringify(resolvedUrl)}`);
+            this.log.debug(`[CDP] Script: ${JSON.stringify(originalUrl)} → ${JSON.stringify(resolvedUrl)}`);
             params.url = resolvedUrl;
         }
         const scriptDir = scriptFile ? path.dirname(scriptFile) : this.pluginDir;
@@ -309,7 +309,7 @@ export class SourceMapRewriter {
             const mapFile = inline === undefined ? findFile(sourceMapURL, [scriptDir]) : undefined;
             const json = inline ?? (mapFile && fs.readFileSync(mapFile, "utf-8"));
             if (json === undefined) {
-                this.log.appendLine(`[CDP] Source map not found: ${sourceMapURL}`);
+                this.log.warn(`[CDP] Source map not found: ${sourceMapURL}`);
                 return { url: sourceMapURL };
             }
             const map: unknown = JSON.parse(json);
@@ -327,7 +327,7 @@ export class SourceMapRewriter {
             return { url: toDataUrl(map), traceMap };
         }
         catch (e) {
-            this.log.appendLine(`[CDP] Failed to rewrite source map: ${e instanceof Error ? e.message : String(e)}`);
+            this.log.error(`[CDP] Failed to rewrite source map: ${e instanceof Error ? e.message : String(e)}`);
             return { url: sourceMapURL };
         }
     }
@@ -346,19 +346,19 @@ export class SourceMapRewriter {
                 return source;
             }
             const url = pathToFileURL(file).href + suffix;
-            if (resolved++ < 5) {
-                this.log.appendLine(`[CDP] Source: ${JSON.stringify(source)} → ${JSON.stringify(url)}`);
+            if (resolved++ < 25) {
+                this.log.debug(`[CDP] Source: ${JSON.stringify(source)} → ${JSON.stringify(url)}`);
             }
             return url;
         });
         // Unresolved relative sources fall back to the script's own directory.
         map.sourceRoot = dirUrl(scriptDir);
-        this.log.appendLine(`[CDP] Resolved ${String(resolved)}/${String(map.sources.length)} source map sources on disk`);
+        this.log.info(`[CDP] Resolved ${String(resolved)}/${String(map.sources.length)} source map sources on disk`);
         for (const source of unresolved.slice(0, MAX_LOGGED_UNRESOLVED)) {
-            this.log.appendLine(`[CDP] Unresolved source: ${JSON.stringify(source)}`);
+            this.log.warn(`[CDP] Unresolved source: ${JSON.stringify(source)}`);
         }
         if (unresolved.length > MAX_LOGGED_UNRESOLVED) {
-            this.log.appendLine(`[CDP] ...and ${String(unresolved.length - MAX_LOGGED_UNRESOLVED)} more unresolved`);
+            this.log.warn(`[CDP] ...and ${String(unresolved.length - MAX_LOGGED_UNRESOLVED)} more unresolved`);
         }
     }
 }

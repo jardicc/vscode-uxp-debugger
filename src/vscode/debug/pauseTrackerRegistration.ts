@@ -67,7 +67,7 @@ function withTimeout<T>(thenable: Thenable<T>, ms: number): Promise<TimedResult<
     });
 }
 
-export function registerPauseTracker(tracker: PauseTracker, output: vscode.OutputChannel): vscode.Disposable {
+export function registerPauseTracker(tracker: PauseTracker, output: vscode.LogOutputChannel): vscode.Disposable {
     return vscode.debug.registerDebugAdapterTrackerFactory("*", {
         createDebugAdapterTracker(session: vscode.DebugSession) {
             // Match via the parentSession chain: js-debug delegates the actual
@@ -79,7 +79,7 @@ export function registerPauseTracker(tracker: PauseTracker, output: vscode.Outpu
             if (clientSessionId === undefined) {
                 return undefined;
             }
-            output.appendLine(
+            output.debug(
                 `[pauseTracker] tracking session=${session.id}${session.parentSession ? " (js-debug child)" : ""} client=${clientSessionId}`,
             );
             let sessionEnded = false;
@@ -96,7 +96,7 @@ export function registerPauseTracker(tracker: PauseTracker, output: vscode.Outpu
                                 // js-debug's own pauseForSourceMap bookkeeping pause (binds
                                 // startup breakpoints/source maps, then resumes on its own) —
                                 // not a real pause the agent should react to.
-                                output.appendLine(`[pauseTracker] client=${clientSessionId} ignored "instrumentation" stopped event`);
+                                output.debug(`[pauseTracker] client=${clientSessionId} ignored "instrumentation" stopped event`);
                                 return;
                             }
                             try {
@@ -104,7 +104,7 @@ export function registerPauseTracker(tracker: PauseTracker, output: vscode.Outpu
                                 if (!snapshot) {
                                     return;
                                 }
-                                output.appendLine(
+                                output.info(
                                     `[pauseTracker] client=${clientSessionId} PAUSED reason=${String(reason)} threadId=${String(snapshot.threadId)} frames=${String(snapshot.frames.length)}`,
                                 );
                                 tracker.recordPause(clientSessionId, snapshot);
@@ -113,14 +113,14 @@ export function registerPauseTracker(tracker: PauseTracker, output: vscode.Outpu
                                 // All stackTrace retries failed — the pause itself is NOT lost:
                                 // uxp_wait_for_pause/uxp_resume fall back to probePauseSnapshot(),
                                 // which re-queries the (still paused) adapter on demand.
-                                output.appendLine(
+                                output.error(
                                     `[pauseTracker] client=${clientSessionId} failed to build a pause snapshot: ${String(err)}`,
                                 );
                                 console.error("[UXP pauseTracker] Failed to build a pause snapshot:", err);
                             }
                         }
                         else if (msg.type === "event" && msg.event === "continued") {
-                            output.appendLine(`[pauseTracker] client=${clientSessionId} RESUMED (continued event)`);
+                            output.debug(`[pauseTracker] client=${clientSessionId} RESUMED (continued event)`);
                             tracker.recordContinued(clientSessionId);
                         }
                         else if (
@@ -129,12 +129,12 @@ export function registerPauseTracker(tracker: PauseTracker, output: vscode.Outpu
                             && typeof msg.command === "string"
                             && RESUME_COMMANDS.has(msg.command)
                         ) {
-                            output.appendLine(`[pauseTracker] client=${clientSessionId} RESUMED (${msg.command} response)`);
+                            output.debug(`[pauseTracker] client=${clientSessionId} RESUMED (${msg.command} response)`);
                             tracker.recordContinued(clientSessionId);
                         }
                     })().catch((err: unknown) => {
                         // Bookkeeping must never surface as an unhandled rejection.
-                        output.appendLine(
+                        output.error(
                             `[pauseTracker] client=${clientSessionId} unexpected error: ${String(err)}`,
                         );
                     });

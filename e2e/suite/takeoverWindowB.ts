@@ -53,7 +53,7 @@ export async function run(): Promise<void> {
     // — this window is REQUESTING ownership away from window A, every round.
     // eslint-disable-next-line @typescript-eslint/require-await
     warningTarget.showWarningMessage = async (message: string) => {
-        console.log(`[windowB] showWarningMessage: ${message}`);
+        console.warn(`[windowB] showWarningMessage: ${message}`);
         return "Take Over";
     };
 

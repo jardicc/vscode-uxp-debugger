@@ -65,7 +65,7 @@ export class PluginWatchManager implements vscode.Disposable {
         private readonly service: UxpService,
         private readonly debugManager: UxpDebugSessionManager,
         private readonly panelController: PanelController,
-        private readonly output: vscode.OutputChannel,
+        private readonly output: vscode.LogOutputChannel,
     ) {
         const reconcile = () => {
             this.reconcile();
@@ -180,7 +180,7 @@ export class PluginWatchManager implements vscode.Disposable {
         }
 
         const special = changed.some((file) => this.isSpecialPluginFile(file, manifestPath));
-        this.output.appendLine(
+        this.output.info(
             `[watch] ${String(changed.length)} file(s) changed under ${path.basename(path.dirname(manifestPath))} — `
             + (special ? "reloading (manifest/addon/icon changed)." : "refreshing."),
         );
@@ -251,7 +251,7 @@ export class PluginWatchManager implements vscode.Disposable {
         if (!stillDebugging) {
             return; // debugger detached during the debounce window — nothing to restart
         }
-        this.output.appendLine(`[watch] ${path.basename(scriptPath)} changed — restarting debug session.`);
+        this.output.info(`[watch] ${path.basename(scriptPath)} changed — restarting debug session.`);
         void this.panelController.dispatchQueued({ kind: "restartScript", scriptPath });
     }
 

@@ -21,7 +21,7 @@ export class UxpGetVariableChildrenTool implements vscode.LanguageModelTool<GetV
     constructor(
         private readonly debugManager: UxpDebugSessionManager,
         private readonly pauseTracker: PauseTracker,
-        private readonly output: vscode.OutputChannel,
+        private readonly output: vscode.LogOutputChannel,
     ) {}
 
     prepareInvocation(): vscode.PreparedToolInvocation {
@@ -61,7 +61,7 @@ export class UxpGetVariableChildrenTool implements vscode.LanguageModelTool<GetV
             return textResult(`Session "${sessionId}" has no active VS Code debug session yet — try again shortly.`);
         }
 
-        this.output.appendLine(
+        this.output.info(
             `[uxp_get_variable_children] session=${sessionId} variablesReference=${String(variablesReference)}`,
         );
         try {
@@ -90,7 +90,7 @@ export class UxpGetVariableChildrenTool implements vscode.LanguageModelTool<GetV
         }
         catch (err) {
             const message = err instanceof Error ? err.message : String(err);
-            this.output.appendLine(`[uxp_get_variable_children] failed: ${message}`);
+            this.output.error(`[uxp_get_variable_children] failed: ${message}`);
             return textResult(
                 `Reading child variables failed: ${message}\nThe reference may be stale; call uxp_wait_for_pause and `
                 + "uxp_get_frame_variables again.",

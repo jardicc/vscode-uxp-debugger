@@ -6,6 +6,7 @@ vi.mock("../../src/core/vulcan/addonLoader", () => ({
 
 import { loadAddon } from "../../src/core/vulcan/addonLoader";
 import { VulcanAnnouncer } from "../../src/core/vulcan/VulcanAnnouncer";
+import { fakeLog } from "../fixtures/fakeVscode";
 
 const loadAddonMock = loadAddon as unknown as ReturnType<typeof vi.fn>;
 const setServerDetailsMock = vi.fn();
@@ -62,14 +63,14 @@ describe("VulcanAnnouncer", () => {
     });
 
     it("withdraw() swallows adapter errors and logs them instead of throwing", () => {
-        const logs: string[] = [];
-        const announcer = new VulcanAnnouncer("/native", (m) => logs.push(m));
+        const log = fakeLog();
+        const announcer = new VulcanAnnouncer("/native", log);
         announcer.announce(14001);
         setServerDetailsMock.mockImplementationOnce(() => {
             throw new Error("boom");
         });
         expect(() => announcer.withdraw(14001)).not.toThrow();
-        expect(logs.some((l) => l.includes("withdraw failed") && l.includes("boom"))).toBe(true);
+        expect(log.byLevel.error.some((l) => l.includes("withdraw failed") && l.includes("boom"))).toBe(true);
     });
 
     it("dispose() calls adapter.disconnect() when an adapter was created", () => {
@@ -94,14 +95,14 @@ describe("VulcanAnnouncer", () => {
     });
 
     it("dispose() swallows adapter.disconnect() errors and logs them", () => {
-        const logs: string[] = [];
-        const announcer = new VulcanAnnouncer("/native", (m) => logs.push(m));
+        const log = fakeLog();
+        const announcer = new VulcanAnnouncer("/native", log);
         announcer.announce(14001);
         disconnectMock.mockImplementationOnce(() => {
             throw new Error("disconnect boom");
         });
         expect(() => announcer.dispose()).not.toThrow();
-        expect(logs.some((l) => l.includes("disconnect failed") && l.includes("disconnect boom"))).toBe(
+        expect(log.byLevel.error.some((l) => l.includes("disconnect failed") && l.includes("disconnect boom"))).toBe(
             true,
         );
     });

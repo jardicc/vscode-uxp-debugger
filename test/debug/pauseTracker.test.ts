@@ -10,6 +10,7 @@ vi.mock("vscode", () => ({
 }));
 
 import type * as vscode from "vscode";
+import { fakeLog } from "../fixtures/fakeVscode";
 import { type CancellationTokenLike, type PauseSnapshot, PauseTracker } from "../../src/vscode/debug/pauseTracker";
 import { probePauseSnapshot, registerPauseTracker } from "../../src/vscode/debug/pauseTrackerRegistration";
 import { UXP_SESSION_KEY } from "../../src/vscode/debug/uxpSessionChain";
@@ -196,8 +197,8 @@ describe("registerPauseTracker", () => {
 
     it("aborts in-flight stackTrace retries without logging an error when the session stops", async () => {
         const tracker = new PauseTracker();
-        const lines: string[] = [];
-        const output = { appendLine: (line: string) => lines.push(line) } as unknown as vscode.OutputChannel;
+        const output = fakeLog();
+        const lines = output.lines;
 
         registerPauseTracker(tracker, output);
         const factory = registerDebugAdapterTrackerFactory.mock.calls[0][1] as vscode.DebugAdapterTrackerFactory;

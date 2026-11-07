@@ -12,7 +12,7 @@ import type { UxpService } from "../UxpService";
 interface ExpAction {
     label: string;
     description: string;
-    run: (service: UxpService, output: vscode.OutputChannel) => Promise<void>;
+    run: (service: UxpService, output: vscode.LogOutputChannel) => Promise<void>;
 }
 
 function promptString(prompt: string, placeHolder?: string): Thenable<string | undefined> {
@@ -24,9 +24,9 @@ async function promptBoolean(prompt: string): Promise<boolean | undefined> {
     return pick === undefined ? undefined : pick === "true";
 }
 
-function report(output: vscode.OutputChannel, call: string, result: unknown): void {
+function report(output: vscode.LogOutputChannel, call: string, result: unknown): void {
     const text = `[_exp_] ${call} => ${JSON.stringify(result)}`;
-    output.appendLine(text);
+    output.info(text);
     output.show(true);
     void vscode.window.showInformationMessage(text);
 }
@@ -173,7 +173,7 @@ const ACTIONS: ExpAction[] = [
 
 export async function expHostAppMethodsCommand(
     service: UxpService,
-    output: vscode.OutputChannel,
+    output: vscode.LogOutputChannel,
 ): Promise<void> {
     const pick = await vscode.window.showQuickPick(
         ACTIONS.map((action) => ({ label: action.label, description: action.description, action })),

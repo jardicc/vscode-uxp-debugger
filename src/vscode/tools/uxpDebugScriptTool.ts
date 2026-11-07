@@ -19,7 +19,7 @@ export class UxpDebugScriptTool implements vscode.LanguageModelTool<DebugScriptI
         private readonly service: UxpService,
         private readonly debugManager: UxpDebugSessionManager,
         private readonly context: vscode.ExtensionContext,
-        private readonly output: vscode.OutputChannel,
+        private readonly output: vscode.LogOutputChannel,
     ) {}
 
     prepareInvocation(

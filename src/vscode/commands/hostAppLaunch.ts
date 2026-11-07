@@ -34,7 +34,7 @@ const POST_CONNECT_SETTLE_MS = 3_000;
  */
 export async function resolveHostAppNotRunning(
     service: UxpService,
-    output: vscode.OutputChannel,
+    output: vscode.LogOutputChannel,
     requiredApps: string[],
 ): Promise<boolean> {
     const recognized = requiredApps
@@ -64,7 +64,7 @@ export async function resolveHostAppNotRunning(
  */
 export async function launchHostAppByValue(
     service: UxpService,
-    output: vscode.OutputChannel,
+    output: vscode.LogOutputChannel,
     appValue: string,
 ): Promise<{ debuggable: boolean } | undefined> {
     const app = findCatalogHostApp(appValue);
@@ -102,7 +102,7 @@ export async function launchHostAppByValue(
         return undefined;
     }
 
-    output.appendLine(`[hostapp] launching ${picked.sapCode}-${picked.version}`);
+    output.info(`[hostapp] launching ${picked.sapCode}-${picked.version}`);
     const launched = await launchCandidate(controller, picked);
     if (!launched) {
         void vscode.window.showErrorMessage(`UXP: Failed to launch ${app.name} ${picked.version}.`);
@@ -128,7 +128,7 @@ async function pickAppToLaunch(
 
 async function launchAndWaitFor(
     service: UxpService,
-    output: vscode.OutputChannel,
+    output: vscode.LogOutputChannel,
     app: HostAppDescriptor,
     requiredApps: string[],
 ): Promise<boolean> {
@@ -180,7 +180,7 @@ async function launchAndWaitFor(
         return false;
     }
 
-    output.appendLine(`[hostapp] launching ${picked.sapCode}-${picked.version}`);
+    output.info(`[hostapp] launching ${picked.sapCode}-${picked.version}`);
     const launched = await launchCandidate(controller, picked);
     if (!launched) {
         void vscode.window.showErrorMessage(`UXP: Failed to launch ${app.name} ${picked.version}.`);
@@ -252,7 +252,7 @@ async function pickVersion(
 
 async function waitForConnection(
     service: UxpService,
-    output: vscode.OutputChannel,
+    output: vscode.LogOutputChannel,
     app: HostAppDescriptor,
     requiredApps: string[],
 ): Promise<boolean> {
@@ -270,7 +270,7 @@ async function waitForConnection(
             if (!ok || token.isCancellationRequested) {
                 return ok;
             }
-            output.appendLine(
+            output.info(
                 `[hostapp] ${app.name} connected — settling ${String(POST_CONNECT_SETTLE_MS)}ms before retrying load`,
             );
             progress.report({ message: "connected, letting it finish starting up..." });
@@ -280,7 +280,7 @@ async function waitForConnection(
     );
 
     if (!connected) {
-        output.appendLine(`[hostapp] ${app.name} did not connect within ${String(CONNECT_TIMEOUT_MS)}ms`);
+        output.error(`[hostapp] ${app.name} did not connect within ${String(CONNECT_TIMEOUT_MS)}ms`);
         void vscode.window.showWarningMessage(
             `UXP: ${app.name} did not connect within ${String(CONNECT_TIMEOUT_MS / 1000)}s. `
             + "It may still be starting — run \"Load Plugin\" again in a moment.",

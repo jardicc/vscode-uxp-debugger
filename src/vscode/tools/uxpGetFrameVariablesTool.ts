@@ -24,7 +24,7 @@ export class UxpGetFrameVariablesTool implements vscode.LanguageModelTool<GetFra
     constructor(
         private readonly debugManager: UxpDebugSessionManager,
         private readonly pauseTracker: PauseTracker,
-        private readonly output: vscode.OutputChannel,
+        private readonly output: vscode.LogOutputChannel,
     ) {}
 
     prepareInvocation(
@@ -71,7 +71,7 @@ export class UxpGetFrameVariablesTool implements vscode.LanguageModelTool<GetFra
             return textResult(`Session "${sessionId}" has no active VS Code debug session yet — try again shortly.`);
         }
 
-        this.output.appendLine(`[uxp_get_frame_variables] session=${sessionId} frameId=${String(frameId)}`);
+        this.output.info(`[uxp_get_frame_variables] session=${sessionId} frameId=${String(frameId)}`);
         try {
             const scopeReply = await raceWithTimeout(
                 dapSession.customRequest("scopes", { frameId }),
@@ -122,7 +122,7 @@ export class UxpGetFrameVariablesTool implements vscode.LanguageModelTool<GetFra
         }
         catch (err) {
             const message = err instanceof Error ? err.message : String(err);
-            this.output.appendLine(`[uxp_get_frame_variables] failed: ${message}`);
+            this.output.error(`[uxp_get_frame_variables] failed: ${message}`);
             return textResult(
                 `Reading frame variables failed: ${message}\nCall uxp_wait_for_pause again if the target resumed.`,
             );

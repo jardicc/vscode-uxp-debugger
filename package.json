@@ -716,6 +716,30 @@
         }
       ]
     },
+    "configuration": {
+      "title": "UXP Debugger",
+      "properties": {
+        "uxp.logLevel": {
+          "type": "string",
+          "enum": [
+            "off",
+            "error",
+            "warn",
+            "info",
+            "debug"
+          ],
+          "enumDescriptions": [
+            "Log nothing.",
+            "Log errors only.",
+            "Log warnings and errors.",
+            "Log informational messages, warnings and errors.",
+            "Log everything, including protocol messages (CDP and UXP broker traffic)."
+          ],
+          "default": "info",
+          "markdownDescription": "Minimum level the installed extension writes to the UXP Debugger and host app output channels. Development and E2E runs ignore this setting and always log everything. VS Code additionally hides messages below the output channel's own level, so to see `debug` messages also choose `Debug` via the gear icon in the Output panel (or `Developer: Set Log Level…`)."
+        }
+      }
+    },
     "debuggers": [
       {
         "type": "uxp",

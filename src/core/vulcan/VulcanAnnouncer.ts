@@ -9,6 +9,7 @@
  * importing this module (or activating the extension) never touches native code.
  */
 
+import { type Logger, NOOP_LOGGER } from "../logFormat";
 import type { IPortAnnouncer } from "./IPortAnnouncer";
 import { loadAddon, type VulcanAdapterNative } from "./addonLoader";
 
@@ -25,7 +26,7 @@ export class VulcanAnnouncer implements IPortAnnouncer {
    */
     constructor(
         private readonly nativeRoot: string,
-        private readonly log: (message: string) => void = () => undefined,
+        private readonly log: Logger = NOOP_LOGGER,
     ) {}
 
     announce(port: number): void {
@@ -36,7 +37,7 @@ export class VulcanAnnouncer implements IPortAnnouncer {
     // `setServerDetails(false, …)` actively told connected/connecting host
     // apps to disconnect. See LIFECYCLE-NOTES.md.
         this.getAdapter().setServerDetails(true, JSON.stringify({ port }));
-        this.log(`vulcan: announced service on port ${String(port)}`);
+        this.log.info(`vulcan: announced service on port ${String(port)}`);
     }
 
     withdraw(port: number): void {
@@ -45,10 +46,10 @@ export class VulcanAnnouncer implements IPortAnnouncer {
         }
         try {
             this.adapter.setServerDetails(false, JSON.stringify({ port }));
-            this.log(`vulcan: withdrew announcement for port ${String(port)}`);
+            this.log.info(`vulcan: withdrew announcement for port ${String(port)}`);
         }
         catch (err) {
-            this.log(`vulcan: withdraw failed: ${String(err instanceof Error ? err.message : err)}`);
+            this.log.error(`vulcan: withdraw failed: ${String(err instanceof Error ? err.message : err)}`);
         }
     }
 
@@ -65,7 +66,7 @@ export class VulcanAnnouncer implements IPortAnnouncer {
             return this.adapter.getAppsList();
         }
         catch (err) {
-            this.log(`vulcan: getAppsList failed: ${String(err instanceof Error ? err.message : err)}`);
+            this.log.error(`vulcan: getAppsList failed: ${String(err instanceof Error ? err.message : err)}`);
             return undefined;
         }
     }
@@ -79,7 +80,7 @@ export class VulcanAnnouncer implements IPortAnnouncer {
             this.adapter?.disconnect();
         }
         catch (err) {
-            this.log(`vulcan: disconnect failed: ${String(err instanceof Error ? err.message : err)}`);
+            this.log.error(`vulcan: disconnect failed: ${String(err instanceof Error ? err.message : err)}`);
         }
         this.adapter = undefined;
     }
@@ -94,7 +95,7 @@ export class VulcanAnnouncer implements IPortAnnouncer {
                 VULCAN_SERVER_ENDPOINT_ID,
                 VULCAN_ENDPOINT_VERSION,
             );
-            this.log("vulcan: adapter initialised (endpoint UTDS)");
+            this.log.info("vulcan: adapter initialized (endpoint UTDS)");
         }
         return this.adapter;
     }

@@ -6,6 +6,7 @@ vi.mock("../../src/core/vulcan/addonLoader", () => ({
 
 import { loadAddon } from "../../src/core/vulcan/addonLoader";
 import type { HostAppDescriptor } from "../../src/core/vulcan/hostAppCatalog";
+import { fakeLog } from "../fixtures/fakeVscode";
 import {
     resetControlAdapterGuardForTests,
     satisfiesMinVersion,
@@ -130,14 +131,14 @@ describe("VulcanHostAppController", () => {
     });
 
     it("launchSapCode() logs the callback error instead of swallowing it silently", async () => {
-        const logs: string[] = [];
+        const log = fakeLog();
         launchAppMock.mockImplementation((_sap, _focus, _args, cb) =>
             cb(new Error("boom"), false),
         );
-        const ctl = new VulcanHostAppController("/native", (m) => logs.push(m));
+        const ctl = new VulcanHostAppController("/native", log);
         const result = await ctl.launchSapCode("PHSP");
         expect(result).toBe(false);
-        expect(logs.some((l) => l.includes("callback error") && l.includes("boom"))).toBe(true);
+        expect(log.byLevel.error.some((l) => l.includes("callback error") && l.includes("boom"))).toBe(true);
     });
 
     it("launchSapCode() treats a non-strict-true ok as failure even without an error", async () => {

@@ -59,7 +59,7 @@ export class UxpInspectorPanel {
         session: PluginSession,
         proxyRegistry: CdpProxyRegistry,
         targetWsUrl: string,
-        output: vscode.OutputChannel,
+        output: vscode.LogOutputChannel,
     ): Promise<void> {
         const existing = UxpInspectorPanel.instances.get(session.clientSessionId);
         if (existing) {
@@ -91,7 +91,7 @@ export class UxpInspectorPanel {
         session: PluginSession,
         proxyRegistry: CdpProxyRegistry,
         targetWsUrl: string,
-        output: vscode.OutputChannel,
+        output: vscode.LogOutputChannel,
     ): Promise<void> {
         const sourceRootDir = session.manifestPath
             ? path.dirname(session.manifestPath)
@@ -140,7 +140,7 @@ export class UxpInspectorPanel {
         private readonly session: PluginSession,
         private readonly proxyRegistry: CdpProxyRegistry,
         private readonly proxyPort: number,
-        private readonly output: vscode.OutputChannel,
+        private readonly output: vscode.LogOutputChannel,
     ) {
         this.panel.onDidDispose(() => {
             this.dispose();
@@ -181,11 +181,11 @@ export class UxpInspectorPanel {
             d.dispose();
         }
         this.proxyRegistry.release(this.session.clientSessionId).catch((err: unknown) => {
-            this.output.appendLine(
+            this.output.error(
                 `[inspector] Failed to release the CDP proxy: ${err instanceof Error ? err.message : String(err)}`,
             );
         });
-        this.output.appendLine(`[inspector] Panel for "${this.session.name}" closed.`);
+        this.output.info(`[inspector] Panel for "${this.session.name}" closed.`);
     }
 
     // ---------------------------------------------------------------------

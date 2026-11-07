@@ -21,6 +21,7 @@ import { HostAppNotRunningError, HostAppVersionUnsupportedError, MultipleAppsMat
 import { matchApps, requiredAppIds } from "../core/manifest/appMatching";
 import { parseManifestContent, type ParsedManifest } from "../core/manifest/manifest";
 import { isDevModeEnabled } from "../core/devmode/devMode";
+import { prefixLogger } from "../core/logFormat";
 import { DEFAULT_BROKER_PORT } from "../core/protocol/types";
 import { sleep } from "../core/sleep";
 import { connectedAppUnsupportedReason, type HostAppDescriptor, isSameHostApp, parseRunningApps, runningUnsupportedReasons } from "../core/vulcan/hostAppCatalog";
@@ -122,7 +123,7 @@ export class UxpService implements vscode.Disposable {
 
     constructor(
         private readonly context: vscode.ExtensionContext,
-        private readonly output: vscode.OutputChannel,
+        private readonly output: vscode.LogOutputChannel,
     ) {}
 
     /**
@@ -209,9 +210,7 @@ export class UxpService implements vscode.Disposable {
     getHostAppController(): IHostAppController {
         if (!this.hostAppController) {
             const nativeRoot = path.join(this.context.extensionPath, "native");
-            const log = (message: string) => {
-                this.output.appendLine(`[hostapp] ${message}`);
-            };
+            const log = prefixLogger(this.output, "[hostapp] ");
             this.hostAppController = new VulcanHostAppController(nativeRoot, log);
         }
         return this.hostAppController;
@@ -274,9 +273,7 @@ export class UxpService implements vscode.Disposable {
    */
     private createBrokerInstance(): UxpBroker {
         const nativeRoot = path.join(this.context.extensionPath, "native");
-        const log = (message: string) => {
-            this.output.appendLine(`[broker] ${message}`);
-        };
+        const log = prefixLogger(this.output, "[broker] ");
         this.announcer ??= new VulcanAnnouncer(nativeRoot, log);
         // VS Code exposes extension package metadata as `any`.
         // eslint-disable-next-line @typescript-eslint/no-unsafe-member-access
@@ -303,13 +300,13 @@ export class UxpService implements vscode.Disposable {
             );
         });
         broker.onAppConnected.on((app) => {
-            this.output.appendLine(
+            this.output.info(
                 `Host app connected: ${app.info.appName} ${app.info.appVersion}`,
             );
             this.appsChangedEmitter.fire();
         });
         broker.onAppDisconnected.on((app) => {
-            this.output.appendLine(
+            this.output.info(
                 `Host app disconnected: ${app.info.appName} ${app.info.appVersion}`,
             );
             this.appsChangedEmitter.fire();
@@ -398,7 +395,7 @@ export class UxpService implements vscode.Disposable {
             else {
                 this.lifecycleError = err instanceof Error ? err.message : String(err);
             }
-            this.output.appendLine(`[broker] auto-start failed: ${this.lifecycleError}`);
+            this.output.error(`[broker] auto-start failed: ${this.lifecycleError}`);
             this.lifecyclePhase = "error";
             this.brokerStateChangedEmitter.fire();
             return;
@@ -668,7 +665,7 @@ export class UxpService implements vscode.Disposable {
         if (hasMatch() || this.connectedApps.length > 0) {
             return;
         }
-        this.output.appendLine(
+        this.output.warn(
             "[broker] no host app reacted to the start-up announcement — re-announcing once",
         );
         this.broker?.reannounce();

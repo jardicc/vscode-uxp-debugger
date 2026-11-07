@@ -27,7 +27,7 @@ export class UxpWaitForPauseTool implements vscode.LanguageModelTool<WaitForPaus
     constructor(
         private readonly debugManager: UxpDebugSessionManager,
         private readonly pauseTracker: PauseTracker,
-        private readonly output: vscode.OutputChannel,
+        private readonly output: vscode.LogOutputChannel,
     ) {}
 
     prepareInvocation(): vscode.PreparedToolInvocation {
@@ -53,7 +53,7 @@ export class UxpWaitForPauseTool implements vscode.LanguageModelTool<WaitForPaus
         }
 
         const timeoutMs = options.input.timeoutMs ?? 30_000;
-        this.output.appendLine(
+        this.output.info(
             `[uxp_wait_for_pause] session=${sessionId} dapSessionId=${dapSession.id} timeoutMs=${String(timeoutMs)}`,
         );
         try {
@@ -62,19 +62,19 @@ export class UxpWaitForPauseTool implements vscode.LanguageModelTool<WaitForPaus
                 // can drop stackTrace right after a pause — see probePauseSnapshot).
                 const probed = await probePauseSnapshot(dapSession);
                 if (probed) {
-                    this.output.appendLine("[uxp_wait_for_pause] target is already paused (recovered via probe)");
+                    this.output.info("[uxp_wait_for_pause] target is already paused (recovered via probe)");
                     this.pauseTracker.recordPause(sessionId, probed);
                 }
             }
             const snapshot = await this.pauseTracker.waitForPause(sessionId, timeoutMs, token);
-            this.output.appendLine(
+            this.output.info(
                 `[uxp_wait_for_pause] resolved: threadId=${String(snapshot.threadId)} frames=${String(snapshot.frames.length)}`,
             );
             return textResult(JSON.stringify({ sessionId, ...snapshot }, null, 2));
         }
         catch (err) {
             const message = err instanceof Error ? err.message : String(err);
-            this.output.appendLine(`[uxp_wait_for_pause] failed: ${message}`);
+            this.output.error(`[uxp_wait_for_pause] failed: ${message}`);
             return textResult(message);
         }
     }

@@ -314,11 +314,11 @@ export function trackDapMessages(
         createDebugAdapterTracker(session) {
             return {
                 onDidSendMessage(message: Record<string, unknown>) {
-                    console.log(`[e2e][dap>] ${JSON.stringify(message)}`);
+                    console.debug(`[e2e][dap>] ${JSON.stringify(message)}`);
                     onMessage(message, "send", session);
                 },
                 onWillReceiveMessage(message: Record<string, unknown>) {
-                    console.log(`[e2e][dap<] ${JSON.stringify(message)}`);
+                    console.debug(`[e2e][dap<] ${JSON.stringify(message)}`);
                     onMessage(message, "receive", session);
                 },
             };
@@ -342,7 +342,7 @@ function resumeIfStartupPause(message: Record<string, unknown>, session: vscode.
     }
     console.log(`[e2e] resuming startup pause (reason=${String(reason)})`);
     session.customRequest("continue", { threadId: m.body?.threadId }).then(undefined, (err: unknown) => {
-        console.log(`[e2e] failed to resume startup pause: ${String(err)}`);
+        console.error(`[e2e] failed to resume startup pause: ${String(err)}`);
     });
     return true;
 }

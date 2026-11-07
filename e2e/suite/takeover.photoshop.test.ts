@@ -200,7 +200,7 @@ describeLive("Multi-window broker takeover (live Photoshop)", function () {
         const originalWarning = target.showWarningMessage;
         // eslint-disable-next-line @typescript-eslint/require-await
         target.showWarningMessage = async (message: string) => {
-            console.log(`[windowA] showWarningMessage: ${message}`);
+            console.warn(`[windowA] showWarningMessage: ${message}`);
             return "Take Over";
         };
         try {
@@ -255,7 +255,7 @@ describeLive("Multi-window broker takeover (live Photoshop)", function () {
         windowB.then(
             (code) => console.log(`[windowA] window B process exited with code ${code}`),
             // eslint-disable-next-line @typescript-eslint/restrict-template-expressions
-            (err: unknown) => console.log(`[windowA] window B process failed: ${err}`),
+            (err: unknown) => console.error(`[windowA] window B process failed: ${err}`),
         );
 
         for (let round = 1; round <= rounds; round++) {

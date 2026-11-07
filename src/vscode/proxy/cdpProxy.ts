@@ -56,7 +56,7 @@ export class CdpProxyServer {
 
     private readonly targetWsUrl: string;
     private readonly targetLabel: string;
-    private readonly log: vscode.OutputChannel;
+    private readonly log: vscode.LogOutputChannel;
     private readonly wss = new WebSocketServer({ noServer: true });
     private httpServer: http.Server | undefined;
     private targetWs: WebSocket | undefined;
@@ -143,7 +143,7 @@ export class CdpProxyServer {
         targetWsUrl: string,
         targetLabel: string,
         pluginDir: string,
-        log: vscode.OutputChannel,
+        log: vscode.LogOutputChannel,
         breakOnStartPending = false,
     ) {
         this.targetWsUrl = targetWsUrl;
@@ -184,7 +184,7 @@ export class CdpProxyServer {
    */
     start(): Promise<number> {
         const targetId = this.targetWsUrl.split("/").pop() ?? "uxp-target";
-        this.log.appendLine(`Using target ID: ${targetId}`);
+        this.log.info(`Using target ID: ${targetId}`);
 
         const startServerRes = new Promise<number>((resolve, reject) => {
             this.httpServer = http.createServer((req, res) => {
@@ -223,7 +223,7 @@ export class CdpProxyServer {
     setBreakOnStartPending(pending: boolean): void {
         if (this.targetOpen || this.targetConnecting) {
             if (pending) {
-                this.log.appendLine(
+                this.log.debug(
                     "[CDP] Ignoring breakOnStart request — target connection already established.",
                 );
             }
@@ -368,7 +368,7 @@ export class CdpProxyServer {
         }
 
         if (!isLoopbackHost(_req) || isBrowserOriginRequest(_req)) {
-            this.log.appendLine("[CDP] Rejected WebSocket upgrade with non-loopback Host or browser Origin.");
+            this.log.warn("[CDP] Rejected WebSocket upgrade with non-loopback Host or browser Origin.");
             socket.write("HTTP/1.1 403 Forbidden\r\n\r\n");
             socket.destroy();
             return;
@@ -379,7 +379,7 @@ export class CdpProxyServer {
                 this.clientWs.close();
             }
             this.clientWs = clientWs;
-            this.log.appendLine("js-debug connected to CDP proxy.");
+            this.log.info("js-debug connected to CDP proxy.");
             this.rewriter.markNewClient();
 
             // A "Restart" (debug-toolbar / F5-while-attached) closes js-debug's
@@ -396,7 +396,7 @@ export class CdpProxyServer {
             // Runtime.evaluate probes fail with "Cannot find default execution
             // context" until the churn happened to settle.
             if (this.targetOpen || this.targetConnecting) {
-                this.log.appendLine("[CDP] Reusing existing UXP target connection for new client.");
+                this.log.info("[CDP] Reusing existing UXP target connection for new client.");
             }
             else {
                 this.connectToTarget();
@@ -423,7 +423,7 @@ export class CdpProxyServer {
                     try {
                         const msg = JSON.parse(raw) as CdpMessage;
                         if (msg.id !== undefined) {
-                            this.log.appendLine(
+                            this.log.debug(
                                 "[CDP] Adopting js-debug's setInstrumentationBreakpoint — replying with the armed id.",
                             );
                             clientWs.send(
@@ -456,7 +456,7 @@ export class CdpProxyServer {
                 if (this.clientWs === clientWs) {
                     this.clientWs = undefined;
                 }
-                this.log.appendLine("js-debug WebSocket closed.");
+                this.log.info("js-debug WebSocket closed.");
                 // Do NOT close the UXP target connection here — a "Restart" swaps
                 // js-debug's client WebSocket but expects the same target/session
                 // to still be there afterwards (see the comment above, in
@@ -468,7 +468,7 @@ export class CdpProxyServer {
             });
 
             clientWs.on("error", (err) => {
-                this.log.appendLine(`js-debug client WS error: ${err.message}`);
+                this.log.error(`js-debug client WS error: ${err.message}`);
             });
         });
     }
@@ -489,7 +489,7 @@ export class CdpProxyServer {
         head: Buffer,
     ): void {
         if (!isAllowedPanelUpgrade(req)) {
-            this.log.appendLine(
+            this.log.warn(
                 `[CDP][panel] Rejected WebSocket upgrade from unauthorized origin "${req.headers.origin ?? ""}".`,
             );
             socket.write("HTTP/1.1 403 Forbidden\r\n\r\n");
@@ -499,12 +499,12 @@ export class CdpProxyServer {
 
         this.wss.handleUpgrade(req, socket, head, (panelWs) => {
             this.panelClients.add(panelWs);
-            this.log.appendLine(
+            this.log.info(
                 `Inspector panel connected to CDP proxy (${String(this.panelClients.size)} panel client(s)).`,
             );
 
             if (this.targetOpen || this.targetConnecting) {
-                this.log.appendLine("[CDP] Reusing existing UXP target connection for the inspector panel.");
+                this.log.info("[CDP] Reusing existing UXP target connection for the inspector panel.");
             }
             else {
                 this.connectToTarget();
@@ -524,11 +524,11 @@ export class CdpProxyServer {
                         this.panelPendingRequests.delete(forwardId);
                     }
                 }
-                this.log.appendLine("Inspector panel WebSocket closed.");
+                this.log.info("Inspector panel WebSocket closed.");
             });
 
             panelWs.on("error", (err) => {
-                this.log.appendLine(`Inspector panel WS error: ${err.message}`);
+                this.log.error(`Inspector panel WS error: ${err.message}`);
             });
         });
     }
@@ -545,13 +545,13 @@ export class CdpProxyServer {
             msg = JSON.parse(raw) as CdpMessage;
         }
         catch {
-            this.log.appendLine("[CDP][panel] Dropped unparseable message from the inspector panel.");
+            this.log.warn("[CDP][panel] Dropped unparsable message from the inspector panel.");
             return;
         }
 
         const method = typeof msg.method === "string" ? msg.method : undefined;
         if (method !== undefined && CdpProxyServer.isPanelMethodDenied(method)) {
-            this.log.appendLine(`[CDP][panel] Denied method (answered locally): ${method}`);
+            this.log.debug(`[CDP][panel] Denied method (answered locally): ${method}`);
             if (typeof msg.id === "number" && panelWs.readyState === WebSocket.OPEN) {
                 panelWs.send(
                     JSON.stringify({
@@ -583,7 +583,7 @@ export class CdpProxyServer {
                 params.uniqueContextId = this.rewriter.executionContextUniqueId;
             }
             else if (typeof msg.id === "number" && panelWs.readyState === WebSocket.OPEN) {
-                this.log.appendLine(
+                this.log.debug(
                     `[CDP][panel] ${String(method)} — no execution context yet, answering locally.`,
                 );
                 panelWs.send(
@@ -653,7 +653,7 @@ export class CdpProxyServer {
                     const cachedContext = this.rewriter.getLastExecutionContextCreatedRaw();
                     if (cachedContext) {
                         this.panelContextReplayed.add(pending.ws);
-                        this.log.appendLine(
+                        this.log.debug(
                             "[CDP][panel] Replaying cached execution context after Runtime.enable ack.",
                         );
                         pending.ws.send(cachedContext);
@@ -691,7 +691,7 @@ export class CdpProxyServer {
         this.targetWs = new WebSocket(this.targetWsUrl);
 
         this.targetWs.on("open", () => {
-            this.log.appendLine(`Connected to UXP target: ${this.targetWsUrl}`);
+            this.log.info(`Connected to UXP target: ${this.targetWsUrl}`);
             this.targetOpen = true;
             this.targetConnecting = false;
 
@@ -728,7 +728,7 @@ export class CdpProxyServer {
             // breakpoints during that pause (see `breakOnStartPending`).
             if (this.breakOnStartPending) {
                 this.breakOnStartPending = false;
-                this.log.appendLine(
+                this.log.info(
                     "[CDP] breakOnStart session — arming an instrumentation breakpoint before resuming the runtime.",
                 );
                 const debuggerEnableId = this.rewriter.allocateInternalId("Debugger.enable");
@@ -777,7 +777,7 @@ export class CdpProxyServer {
         });
 
         this.targetWs.on("close", () => {
-            this.log.appendLine("UXP target WebSocket closed.");
+            this.log.info("UXP target WebSocket closed.");
             this.targetOpen = false;
             this.targetConnecting = false;
             this.rewriter.resetContextState();
@@ -787,7 +787,7 @@ export class CdpProxyServer {
         });
 
         this.targetWs.on("error", (err) => {
-            this.log.appendLine(`UXP target WS error: ${err.message}`);
+            this.log.error(`UXP target WS error: ${err.message}`);
         });
     }
 
@@ -821,7 +821,7 @@ export class CdpProxyServer {
                 const result:
                     CdpPayload<Protocol.Debugger.SetInstrumentationBreakpointResponse> | undefined = msg.result;
                 this.instrumentationBreakpointId = result?.breakpointId;
-                this.log.appendLine(`[CDP] Instrumentation breakpoint reply: ${raw}`);
+                this.log.debug(`[CDP] Instrumentation breakpoint reply: ${raw}`);
             }
         }
         catch {
@@ -838,7 +838,7 @@ export class CdpProxyServer {
             return;
         }
         if (attempt > CdpProxyServer.MAX_RECONNECT_ATTEMPTS) {
-            this.log.appendLine(
+            this.log.error(
                 `[CDP] Gave up reconnecting after ${String(CdpProxyServer.MAX_RECONNECT_ATTEMPTS)} attempts.`,
             );
             vscode.window.showErrorMessage(
@@ -851,7 +851,7 @@ export class CdpProxyServer {
             return;
         }
 
-        this.log.appendLine(
+        this.log.warn(
             `[CDP] Reconnect attempt ${String(attempt)}/${String(CdpProxyServer.MAX_RECONNECT_ATTEMPTS)} `
             + `in ${String(CdpProxyServer.RECONNECT_DELAY_MS)}ms…`,
         );
@@ -873,7 +873,7 @@ export class CdpProxyServer {
             // the counter increments properly.
             currentWs?.removeAllListeners("close");
             currentWs?.on("close", () => {
-                this.log.appendLine("UXP target WebSocket closed.");
+                this.log.info("UXP target WebSocket closed.");
                 // Capture before clearing — reaching OPEN means this attempt succeeded.
                 const reachedOpen = this.targetOpen;
                 this.targetOpen = false;
@@ -899,6 +899,6 @@ export class CdpProxyServer {
     private logTraffic(direction: string, raw: string): void {
         const maxLen = 500;
         const truncated = raw.length > maxLen ? raw.slice(0, maxLen) + "…" : raw;
-        this.log.appendLine(`[CDP] ${direction}: ${truncated}`);
+        this.log.debug(`[CDP] ${direction}: ${truncated}`);
     }
 }

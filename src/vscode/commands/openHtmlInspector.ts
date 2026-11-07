@@ -22,9 +22,9 @@ export async function openInspectorForSession(
     service: UxpService,
     proxyRegistry: CdpProxyRegistry,
     context: vscode.ExtensionContext,
-    output: vscode.OutputChannel,
+    output: vscode.LogOutputChannel,
 ): Promise<void> {
-    output.appendLine(`[inspector] Opening HTML inspector for "${session.name}".`);
+    output.info(`[inspector] Opening HTML inspector for "${session.name}".`);
     await UxpInspectorPanel.createOrShow(
         context,
         session,
@@ -39,7 +39,7 @@ export async function openHtmlInspectorCommand(
     debugManager: UxpDebugSessionManager,
     proxyRegistry: CdpProxyRegistry,
     context: vscode.ExtensionContext,
-    output: vscode.OutputChannel,
+    output: vscode.LogOutputChannel,
 ): Promise<void> {
     // Scripts have no DOM; sessions still paused waiting for their first
     // debugger attach have no execution context to inspect yet (and the

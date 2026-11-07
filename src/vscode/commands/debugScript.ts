@@ -67,7 +67,7 @@ export async function debugScriptCommand(
     service: UxpService,
     debugManager: UxpDebugSessionManager,
     context: vscode.ExtensionContext,
-    output: vscode.OutputChannel,
+    output: vscode.LogOutputChannel,
     args?: DebugScriptArgs,
 ): Promise<PluginSession | undefined> {
     // 1. Resolve the script file.
@@ -117,7 +117,7 @@ export async function debugScriptCommand(
     }
 
     // 5. Run + attach.
-    output.appendLine(
+    output.info(
         `Running script ${scriptPath} in ${app.info.appName} ${app.info.appVersion} `
         + `with userArgs ${JSON.stringify(userArgs)}`,
     );
@@ -167,7 +167,7 @@ async function runScriptWithModalRetry(
     app: ConnectedApp,
     userArgs: unknown[],
     scriptPath: string,
-    output: vscode.OutputChannel,
+    output: vscode.LogOutputChannel,
 ): Promise<PluginSession> {
     for (let attempt = 1; ; attempt++) {
         try {
@@ -177,7 +177,7 @@ async function runScriptWithModalRetry(
             if (!isHostModalError(err) || attempt >= MODAL_RETRY_ATTEMPTS) {
                 throw err;
             }
-            output.appendLine(
+            output.warn(
                 `[script] Photoshop is still modal (previous run tearing down) — retrying `
                 + `(${String(attempt)}/${String(MODAL_RETRY_ATTEMPTS)})…`,
             );

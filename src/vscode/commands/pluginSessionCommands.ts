@@ -14,7 +14,7 @@ import { loadWithDialogs, reportLoadResult } from "./loadPlugin";
 export async function unloadPluginCommand(
     service: UxpService,
     pluginRegistry: PluginRegistry,
-    _output: vscode.OutputChannel,
+    _output: vscode.LogOutputChannel,
 ): Promise<void> {
     const manifestPath = await pickManifest(pluginRegistry);
     if (!manifestPath) {
@@ -43,7 +43,7 @@ export async function unloadPluginCommand(
 export async function reloadPluginCommand(
     service: UxpService,
     pluginRegistry: PluginRegistry,
-    output: vscode.OutputChannel,
+    output: vscode.LogOutputChannel,
 ): Promise<void> {
     const manifestPath = await pickManifest(pluginRegistry);
     if (!manifestPath) {
