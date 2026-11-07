@@ -4,6 +4,12 @@ import { CdpEventBuffer } from "./cdpEventBuffer";
 import type { CdpMessage, CdpPayload } from "./cdpTypes";
 import { SourceMapRewriter } from "./sourceMapRewriter";
 
+const JS_DEBUG_PROBE_SUFFIX = /\/\/# sourceURL=eval-[0-9a-f]+\.cdp\s*$/;
+
+function isJsDebugProbe(expr: string): boolean {
+    return JS_DEBUG_PROBE_SUFFIX.test(expr);
+}
+
 // ---------------------------------------------------------------------------
 // CDP Message Rewriter
 // ---------------------------------------------------------------------------
@@ -83,6 +89,27 @@ export class CdpMessageRewriter {
     /** Whether cached state has already been replayed for the current client. */
     private hasReplayedForCurrentClient = false;
 
+    /**
+   * Whether the target is paused by V8's instrumentation breakpoint, i.e.
+   * *before* the script starts. js-debug normally resumes it itself, but keeps
+   * it when a user breakpoint sits on the script's first position. UXP ignores
+   * stepping there, and after a plain resume fires its own startup pause that
+   * the user never asked for. See `holdUntilRunning`.
+   */
+    private pausedForInstrumentation = false;
+
+    /** A resume/step request withheld until the first real pause (see `holdUntilRunning`). */
+    private held: { raw: string; timer: ReturnType<typeof setTimeout> } | undefined;
+
+    private static readonly HELD_TIMEOUT_MS = 3_000;
+
+    private static readonly CONTINUE_METHODS = new Set([
+        "Debugger.resume",
+        "Debugger.stepOver",
+        "Debugger.stepInto",
+        "Debugger.stepOut",
+    ]);
+
     /** Rolling console/exception capture for LM tools (LANGUAGE-MODEL-TOOLS.md §4). */
     private readonly eventBuffer: CdpEventBuffer;
 
@@ -97,7 +124,7 @@ export class CdpMessageRewriter {
 
     constructor(
         pluginDir: string,
-        private readonly log: vscode.OutputChannel,
+        private readonly log: vscode.LogOutputChannel,
         private readonly sendToClient: (msg: string) => void,
         private readonly stopProxy: () => void,
         private readonly sendToTarget: (msg: string) => void = () => undefined,
@@ -178,7 +205,7 @@ export class CdpMessageRewriter {
     startContextTimeout(): void {
         this.noContextTimer = setTimeout(() => {
             if (!this.executionContextUniqueId) {
-                this.log.appendLine(
+                this.log.warn(
                     "[CDP] Warning: no execution context received within "
                     + `${String(CdpMessageRewriter.CONTEXT_TIMEOUT_MS / 1000)}s — plugin may not be loaded. Disconnecting.`,
                 );
@@ -216,6 +243,7 @@ export class CdpMessageRewriter {
         // breakpoints either.
         this.liveBreakpointIds.clear();
         this.pendingBreakpointRequestIds.clear();
+        this.resetInstrumentationPauseState();
     }
 
     /**
@@ -225,11 +253,12 @@ export class CdpMessageRewriter {
    */
     markNewClient(): void {
         this.hasReplayedForCurrentClient = false;
+        this.resetInstrumentationPauseState();
         this.pendingContextMessages.length = 0;
         this.pendingEvaluateIds.clear();
 
         if (this.liveBreakpointIds.size > 0) {
-            this.log.appendLine(
+            this.log.info(
                 `[CDP] Removing ${String(this.liveBreakpointIds.size)} breakpoint(s) left over from the `
                 + "previous client on this (reused) target connection.",
             );
@@ -243,6 +272,29 @@ export class CdpMessageRewriter {
     }
 
     /**
+   * Leave an instrumentation pause for the client's resume/step: resume the
+   * target, and replay the request from the first real pause that follows (UXP's
+   * startup pause). If none arrives in time the request is answered empty, so the
+   * client never waits forever.
+   */
+    private holdUntilRunning(raw: string, id: number): void {
+        this.pausedForInstrumentation = false;
+        const timer = setTimeout(() => {
+            this.held = undefined;
+            this.sendToClient(JSON.stringify({ id, result: {} }));
+        }, CdpMessageRewriter.HELD_TIMEOUT_MS);
+        this.held = { raw, timer };
+        const resumeId = this.allocateInternalId("Debugger.resume");
+        this.sendToTarget(JSON.stringify({ id: resumeId, method: "Debugger.resume", params: {} }));
+    }
+
+    private resetInstrumentationPauseState(): void {
+        this.pausedForInstrumentation = false;
+        clearTimeout(this.held?.timer);
+        this.held = undefined;
+    }
+
+    /**
    * Replay the last known execution context + all cached scriptParsed
    * events to the (newly attached) client. See `scriptParsedCache` above.
    */
@@ -250,7 +302,7 @@ export class CdpMessageRewriter {
         if (!this.lastExecutionContextCreatedRaw && this.scriptParsedCache.size === 0) {
             return;
         }
-        this.log.appendLine(
+        this.log.debug(
             `[CDP] Replaying cached execution context + ${String(this.scriptParsedCache.size)} `
             + "scriptParsed event(s) to the newly (re)attached client.",
         );
@@ -284,6 +336,7 @@ export class CdpMessageRewriter {
         this.sourceMaps.clear();
         this.liveBreakpointIds.clear();
         this.pendingBreakpointRequestIds.clear();
+        this.resetInstrumentationPauseState();
     }
 
     // -----------------------------------------------------------------------
@@ -307,11 +360,26 @@ export class CdpMessageRewriter {
             // blocks or alters the forwarding decision made below.
             this.eventBuffer.captureFromTarget(msg);
 
+            if (msg.method === "Debugger.paused") {
+                const pausedParams: CdpPayload<Protocol.Debugger.PausedEvent> | undefined = msg.params;
+                const instrumentation = pausedParams?.reason === "instrumentation";
+                const held = this.held;
+                if (held && !instrumentation) {
+                    this.resetInstrumentationPauseState();
+                    this.sendToTarget(held.raw);
+                    return null;
+                }
+                this.pausedForInstrumentation = instrumentation;
+            }
+            else if (msg.method === "Debugger.resumed") {
+                this.pausedForInstrumentation = false;
+            }
+
             // Swallow responses to proxy-internal requests (e.g. Runtime.enable)
             if (msg.id !== undefined && this.internalIds.has(msg.id)) {
                 const method = this.internalIds.get(msg.id);
                 this.internalIds.delete(msg.id);
-                this.log.appendLine(
+                this.log.debug(
                     `[CDP] Swallowed internal response id=${String(msg.id)} method=${String(method)}`,
                 );
                 const waiter = this.internalRequestWaiters.get(msg.id);
@@ -332,7 +400,7 @@ export class CdpMessageRewriter {
             ) {
                 this.pendingEvaluateIds.delete(msg.id);
                 const errText = msg.error.message ?? "Evaluation not supported";
-                this.log.appendLine(
+                this.log.error(
                     `[CDP] Runtime.evaluate failed (id=${String(msg.id)}): ${errText}`,
                 );
                 return JSON.stringify({
@@ -379,20 +447,20 @@ export class CdpMessageRewriter {
                 if (this.deferredContextTimer) {
                     clearTimeout(this.deferredContextTimer);
                     this.deferredContextTimer = undefined;
-                    this.log.appendLine(
+                    this.log.debug(
                         "[CDP] New context arrived — discarding "
                         + `${String(this.deferredContextMessages.length)} deferred destruction event(s) (reload)`,
                     );
                     this.deferredContextMessages.length = 0;
                 }
-                this.log.appendLine(`[CDP] Captured executionContext uniqueId: ${this.executionContextUniqueId}`);
+                this.log.debug(`[CDP] Captured executionContext uniqueId: ${this.executionContextUniqueId}`);
                 this.lastExecutionContextCreatedRaw = raw;
 
                 // Flush any Runtime.evaluate requests that arrived before this
                 // context existed (see `pendingContextMessages`) now that we have
                 // a uniqueContextId to attach to them.
                 if (this.pendingContextMessages.length > 0) {
-                    this.log.appendLine(
+                    this.log.debug(
                         `[CDP] Flushing ${String(this.pendingContextMessages.length)} deferred Runtime.evaluate `
                         + "request(s) now that an execution context exists.",
                     );
@@ -414,7 +482,7 @@ export class CdpMessageRewriter {
                 msg.method === "Runtime.executionContextDestroyed"
                 || msg.method === "Runtime.executionContextsCleared"
             ) {
-                this.log.appendLine(
+                this.log.debug(
                     `[CDP] Deferring ${msg.method} (grace period `
                     + `${String(CdpMessageRewriter.CONTEXT_RELOAD_GRACE_MS)}ms)`,
                 );
@@ -425,7 +493,7 @@ export class CdpMessageRewriter {
                 this.deferredContextTimer ??= setTimeout(() => {
                     this.deferredContextTimer = undefined;
                     // Grace period elapsed with no new context — forward to js-debug.
-                    this.log.appendLine(
+                    this.log.debug(
                         "[CDP] Grace period elapsed — forwarding "
                         + `${String(this.deferredContextMessages.length)} deferred destruction event(s)`,
                     );
@@ -444,7 +512,9 @@ export class CdpMessageRewriter {
                 this.sourceMaps.rewriteScriptParsed(scriptParsedParams);
 
                 const rewritten = JSON.stringify(msg);
-                if (typeof scriptParsedParams.scriptId === "string") {
+                // js-debug's own `eval-*.cdp` probe scripts belong to the client that ran
+                // them — replaying them to a reattached client only confuses it.
+                if (typeof scriptParsedParams.scriptId === "string" && !scriptParsedParams.url.endsWith(".cdp")) {
                     this.scriptParsedCache.set(scriptParsedParams.scriptId, rewritten);
                 }
                 return rewritten;
@@ -472,10 +542,23 @@ export class CdpMessageRewriter {
             // UXP does not support NodeWorker — swallow the request and send a
             // synthetic success response so that js-debug does not stall.
             if (msg.method === "NodeWorker.enable" && msg.id !== undefined) {
-                this.log.appendLine(
+                this.log.debug(
                     `[CDP] Swallowed unsupported method NodeWorker.enable (id=${String(msg.id)})`,
                 );
                 this.sendToClient(JSON.stringify({ id: msg.id, result: {} }));
+                return null;
+            }
+
+            // Resuming/stepping out of an instrumentation pause needs special care
+            // (see `pausedForInstrumentation`).
+            if (
+                msg.method !== undefined
+                && CdpMessageRewriter.CONTINUE_METHODS.has(msg.method)
+                && msg.id !== undefined
+                && this.pausedForInstrumentation
+                && !this.held
+            ) {
+                this.holdUntilRunning(raw, msg.id);
                 return null;
             }
 
@@ -514,7 +597,7 @@ export class CdpMessageRewriter {
                 const expr = evaluateParams.expression;
                 if (
                     typeof expr === "string"
-                    && (expr.endsWith(".cdp\n") || expr.endsWith(".cdp"))
+                    && isJsDebugProbe(expr)
                 ) {
                     // js-debug (`pwa-node`) sends three internal startup probes via
                     // Runtime.evaluate (`//# sourceURL=eval-<hex>.cdp`):
@@ -524,10 +607,10 @@ export class CdpMessageRewriter {
                     // Executing any `eval-*.cdp` while UXP is mid-bootstrap inside
                     // `uxp://uxp-internal/domjs_scripts.js` during `breakOnStart`
                     // crashes Photoshop in `libdynamic-napi.dll` (`napi_unwrap`).
-                    // Match using O(1) suffix + prefix checks so user evaluations
-                    // (`.repl` or no sourceURL) pay no regex or full-string scan cost.
+                    // The regex runs on a short trimmed tail only, so user evaluations
+                    // (`.repl` or no sourceURL) pay no full-string scan cost.
                     if (expr.startsWith("require('module').builtinModules")) {
-                        this.log.appendLine(
+                        this.log.debug(
                             `[CDP] Swallowed js-debug builtinModules probe (id=${String(msg.id)})`,
                         );
                         this.sendToClient(
@@ -539,7 +622,7 @@ export class CdpMessageRewriter {
                         return null;
                     }
                     if (expr.startsWith("typeof process === 'undefined' || process.pid === undefined")) {
-                        this.log.appendLine(
+                        this.log.debug(
                             `[CDP] Swallowed js-debug process probe (id=${String(msg.id)})`,
                         );
                         this.sendToClient(
@@ -551,7 +634,7 @@ export class CdpMessageRewriter {
                         return null;
                     }
                     if (expr.startsWith("(()=>{let t=[\"instantiate\",\"instantiateStreaming\"")) {
-                        this.log.appendLine(
+                        this.log.debug(
                             `[CDP] Swallowed js-debug WebAssembly probe (id=${String(msg.id)})`,
                         );
                         this.sendToClient(
@@ -574,7 +657,7 @@ export class CdpMessageRewriter {
                     // "Cannot find default execution context"; hold it instead and
                     // flush it (see the executionContextCreated handling above) once
                     // a context is captured.
-                    this.log.appendLine(
+                    this.log.debug(
                         `[CDP] Deferring Runtime.evaluate (id=${String(msg.id)}) — no execution context yet.`,
                     );
                     this.pendingContextMessages.push({ id: msg.id, raw: msg });

@@ -509,3 +509,56 @@ describe("CdpMessageRewriter — misc client-side rewriting", () => {
         expect(rewriter.rewriteFromClient("not json")).toBe("not json");
     });
 });
+
+describe("CdpMessageRewriter — resuming/stepping out of an instrumentation pause", () => {
+    const paused = (reason: string) => JSON.stringify({ method: "Debugger.paused", params: { reason, callFrames: [] } });
+    const methods = ["Debugger.resume", "Debugger.stepOver"];
+
+    beforeEach(() => vi.useFakeTimers());
+    afterEach(() => vi.useRealTimers());
+
+    it.each(methods)("forwards %s unchanged when the target is not paused by instrumentation", (method) => {
+        const { rewriter, sendToTarget } = makeRewriter();
+        const request = JSON.stringify({ id: 44, method, params: {} });
+        rewriter.rewriteFromTarget(paused("other"));
+
+        expect(rewriter.rewriteFromClient(request)).toBe(request);
+        expect(sendToTarget).not.toHaveBeenCalled();
+    });
+
+    it.each(methods)("resumes first and replays %s from the first real pause", (method) => {
+        const { rewriter, sendToTarget } = makeRewriter();
+        const request = JSON.stringify({ id: 44, method, params: {} });
+        rewriter.rewriteFromTarget(paused("instrumentation"));
+
+        expect(rewriter.rewriteFromClient(request)).toBeNull();
+        expect(JSON.parse(sendToTarget.mock.calls[0][0])).toMatchObject({ method: "Debugger.resume" });
+
+        expect(rewriter.rewriteFromTarget(paused("other"))).toBeNull();
+        expect(sendToTarget).toHaveBeenLastCalledWith(request);
+
+        const next = paused("step");
+        expect(rewriter.rewriteFromTarget(next)).toBe(next);
+        expect(rewriter.rewriteFromClient(request)).toBe(request);
+    });
+
+    it("answers the held request with an empty result when no pause follows in time", () => {
+        const { rewriter, sendToClient } = makeRewriter();
+        rewriter.rewriteFromTarget(paused("instrumentation"));
+        rewriter.rewriteFromClient(JSON.stringify({ id: 44, method: "Debugger.resume", params: {} }));
+
+        vi.advanceTimersByTime(3_000);
+
+        expect(sendToClient).toHaveBeenCalledExactlyOnceWith(JSON.stringify({ id: 44, result: {} }));
+    });
+
+    it("forgets the instrumentation pause for a new client", () => {
+        const { rewriter } = makeRewriter();
+        const request = JSON.stringify({ id: 44, method: "Debugger.resume", params: {} });
+        rewriter.rewriteFromTarget(paused("instrumentation"));
+
+        rewriter.markNewClient();
+
+        expect(rewriter.rewriteFromClient(request)).toBe(request);
+    });
+});
