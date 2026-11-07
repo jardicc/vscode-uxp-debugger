@@ -141,12 +141,12 @@ function spawnTakeoverWindowB(
     const logFilePath = resolveOrCreateE2eLogFile(repoRoot);
     const windowBStdout = createChildOutputStream({
         logFilePath,
-        defaultLevel: "INFO",
+        defaultLevel: "info",
         sourceTag: "windowB:vscode",
     });
     const windowBStderr = createChildOutputStream({
         logFilePath,
-        defaultLevel: "WARN",
+        defaultLevel: "warn",
         sourceTag: "windowB:stderr",
     });
     const promise = runTests({

@@ -173,32 +173,32 @@ describe("SourceMapRewriter — loading source maps", () => {
         expect(log.lines.some((l) => l.includes(logged))).toBe(true);
     });
 
-    it("logs at most 5 resolved sources plus a summary", () => {
-        const files = Array.from({ length: 7 }, (_, i) => `src/f${String(i)}.ts`);
+    it("logs at most 25 resolved sources plus a summary", () => {
+        const files = Array.from({ length: 30 }, (_, i) => `src/f${String(i)}.ts`);
         project("index.js", ...files);
         const { log } = rewrite(root, { url: "/index.js", sourceMapURL: inlineMap({ version: 3, sources: files, mappings: "" }) });
 
-        expect(log.lines).toContain(
+        expect(log.byLevel.debug).toContain(
             `[CDP] Source: "src/f0.ts" → ${JSON.stringify(fileUrl(path.join(root, "src", "f0.ts")))}`,
         );
-        expect(log.lines.filter((l) => l.startsWith("[CDP] Source:"))).toHaveLength(5);
-        expect(log.lines).toContain("[CDP] Resolved 7/7 source map sources on disk");
+        expect(log.lines.filter((l) => l.startsWith("[CDP] Source:"))).toHaveLength(25);
+        expect(log.byLevel.info).toContain("[CDP] Resolved 30/30 source map sources on disk");
         expect(log.lines.some((l) => l.startsWith("[CDP] Unresolved source:"))).toBe(false);
     });
 
-    it("logs a sample of at most 15 unresolved sources", () => {
-        const missing = Array.from({ length: 17 }, (_, i) => `webpack:///./missing${String(i)}.ts`);
+    it("logs a sample of at most 50 unresolved sources", () => {
+        const missing = Array.from({ length: 52 }, (_, i) => `webpack:///./missing${String(i)}.ts`);
         project("index.js", "found.ts");
         const { log } = rewrite(root, {
             url: "/index.js",
             sourceMapURL: inlineMap({ version: 3, sources: ["found.ts", ...missing], mappings: "" }),
         });
 
-        expect(log.lines).toContain("[CDP] Resolved 1/18 source map sources on disk");
-        const sample = log.lines.filter((l) => l.startsWith("[CDP] Unresolved source:"));
-        expect(sample).toHaveLength(15);
+        expect(log.byLevel.info).toContain("[CDP] Resolved 1/53 source map sources on disk");
+        const sample = log.byLevel.warn.filter((l) => l.startsWith("[CDP] Unresolved source:"));
+        expect(sample).toHaveLength(50);
         expect(sample[0]).toBe("[CDP] Unresolved source: \"webpack:///./missing0.ts\"");
-        expect(log.lines).toContain("[CDP] ...and 2 more unresolved");
+        expect(log.byLevel.warn).toContain("[CDP] ...and 2 more unresolved");
     });
 });
 

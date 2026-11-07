@@ -11,6 +11,7 @@ import type { HostLogEvent } from "../../core/broker/AppConnection";
 import {
     type ConfiguredLogLevel,
     isLogLevelEnabled,
+    LOG_LEVELS,
     type LogLevel,
     parseConfiguredLogLevel,
     parseHostLogLevel,
@@ -38,52 +39,9 @@ function isEnabled(level: LogLevel, getMinLevel: LogLevelProvider | undefined): 
     return configured === undefined || isLogLevelEnabled(level, configured);
 }
 
-/**
- * Dispatches a message to the appropriate `vscode.LogOutputChannel` method
- * (`debug` / `info` / `warn` / `error`) for native timestamp, level, and syntax
- * highlighting in VS Code's Output panel.
- */
-export function logToChannel(
-    channel: Pick<vscode.LogOutputChannel, "debug" | "info" | "warn" | "error">,
-    level: LogLevel,
-    message: string,
-): void {
-    switch (level) {
-        case "DEBUG":
-            channel.debug(message);
-            break;
-        case "WARN":
-            channel.warn(message);
-            break;
-        case "ERROR":
-            channel.error(message);
-            break;
-        case "INFO":
-        default:
-            channel.info(message);
-            break;
-    }
-}
-
 function teeToConsole(level: LogLevel, prefix: string, message: string): void {
-    const text = `${prefix} ${message}`;
-    switch (level) {
-        case "WARN":
-            console.warn(text);
-            break;
-        case "ERROR":
-            console.error(text);
-            break;
-        case "DEBUG":
-            // eslint-disable-next-line no-console -- E2E diagnostics are recorded by the test runner.
-            console.debug(text);
-            break;
-        case "INFO":
-        default:
-            // eslint-disable-next-line no-console -- E2E diagnostics are recorded by the test runner.
-            console.log(text);
-            break;
-    }
+    // eslint-disable-next-line no-console -- E2E diagnostics are recorded by the test runner.
+    console[level](`${prefix} ${message}`);
 }
 
 /**
@@ -98,8 +56,9 @@ export function createUxpOutputChannel(
     const channel = vscode.window.createOutputChannel(name, { log: true });
     const prefix = options?.teeToConsolePrefix;
 
-    const wrap = (level: LogLevel, native: (message: string, ...args: unknown[]) => void) =>
-        (message: string, ...args: unknown[]): void => {
+    for (const level of LOG_LEVELS) {
+        const native = channel[level].bind(channel);
+        channel[level] = (message: string, ...args: unknown[]): void => {
             if (isEnabled(level, options?.getMinLevel)) {
                 native(message, ...args);
             }
@@ -107,11 +66,7 @@ export function createUxpOutputChannel(
                 teeToConsole(level, prefix, message);
             }
         };
-
-    channel.debug = wrap("DEBUG", channel.debug.bind(channel));
-    channel.info = wrap("INFO", channel.info.bind(channel));
-    channel.warn = wrap("WARN", channel.warn.bind(channel));
-    channel.error = wrap("ERROR", channel.error.bind(channel));
+    }
 
     return channel;
 }
@@ -163,7 +118,7 @@ export class HostLogChannels implements vscode.Disposable {
             channel = createUxpOutputChannel(label);
             this.channels.set(key, channel);
         }
-        logToChannel(channel, level, event.message);
+        channel[level](event.message);
     }
 
     dispose(): void {

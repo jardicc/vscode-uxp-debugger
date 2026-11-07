@@ -2,11 +2,12 @@ import { describe, expect, it, vi } from "vitest";
 import { isLogLevelEnabled, parseConfiguredLogLevel, parseHostLogLevel, prefixLogger } from "../../src/core/logFormat";
 
 describe("parseHostLogLevel", () => {
-    it("maps host level names and defaults unknown ones to INFO", () => {
-        expect(parseHostLogLevel("error")).toBe("ERROR");
-        expect(parseHostLogLevel(" Warning ")).toBe("WARN");
-        expect(parseHostLogLevel("trace")).toBe("DEBUG");
-        expect(parseHostLogLevel("log")).toBe("INFO");
+    it("maps host level names and defaults unknown ones to info", () => {
+        expect(parseHostLogLevel("error")).toBe("error");
+        expect(parseHostLogLevel(" Warning ")).toBe("warn");
+        expect(parseHostLogLevel("trace")).toBe("debug");
+        expect(parseHostLogLevel("log")).toBe("info");
+        expect(parseHostLogLevel("constructor")).toBe("info");
     });
 });
 
@@ -28,11 +29,11 @@ describe("configured log level", () => {
     });
 
     it("filters by minimum severity", () => {
-        expect(isLogLevelEnabled("DEBUG", "info")).toBe(false);
-        expect(isLogLevelEnabled("INFO", "info")).toBe(true);
-        expect(isLogLevelEnabled("WARN", "error")).toBe(false);
-        expect(isLogLevelEnabled("ERROR", "error")).toBe(true);
-        expect(isLogLevelEnabled("DEBUG", "debug")).toBe(true);
-        expect(isLogLevelEnabled("ERROR", "off")).toBe(false);
+        expect(isLogLevelEnabled("debug", "info")).toBe(false);
+        expect(isLogLevelEnabled("info", "info")).toBe(true);
+        expect(isLogLevelEnabled("warn", "error")).toBe(false);
+        expect(isLogLevelEnabled("error", "error")).toBe(true);
+        expect(isLogLevelEnabled("debug", "debug")).toBe(true);
+        expect(isLogLevelEnabled("error", "off")).toBe(false);
     });
 });

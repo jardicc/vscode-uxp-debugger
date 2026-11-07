@@ -3,18 +3,14 @@
  * extension (`src/vscode/ui/output.ts`) and the E2E test harness (`e2e/e2eLog.ts`).
  */
 
-export type LogLevel = "DEBUG" | "INFO" | "WARN" | "ERROR";
+export const LOG_LEVELS = ["debug", "info", "warn", "error"] as const;
+export type LogLevel = typeof LOG_LEVELS[number];
 
 /**
  * Leveled logger used across the core and the extension. `vscode.LogOutputChannel`
  * satisfies it structurally, so the extension passes its output channel directly.
  */
-export interface Logger {
-    debug(message: string): void;
-    info(message: string): void;
-    warn(message: string): void;
-    error(message: string): void;
-}
+export type Logger = Record<LogLevel, (message: string) => void>;
 
 export const NOOP_LOGGER: Logger = {
     debug: () => undefined,
@@ -25,22 +21,21 @@ export const NOOP_LOGGER: Logger = {
 
 /** Wraps `logger` so every message is prefixed (e.g. `"[broker] "`). */
 export function prefixLogger(logger: Logger, prefix: string): Logger {
-    return {
-        debug: (message) => { logger.debug(`${prefix}${message}`); },
-        info: (message) => { logger.info(`${prefix}${message}`); },
-        warn: (message) => { logger.warn(`${prefix}${message}`); },
-        error: (message) => { logger.error(`${prefix}${message}`); },
-    };
+    const prefixed = {} as Logger;
+    for (const level of LOG_LEVELS) {
+        prefixed[level] = (message) => {
+            logger[level](`${prefix}${message}`);
+        };
+    }
+    return prefixed;
 }
 
 /** Values of the `uxp.logLevel` setting. */
-export type ConfiguredLogLevel = "off" | "error" | "warn" | "info" | "debug";
+export type ConfiguredLogLevel = LogLevel | "off";
 
 export const DEFAULT_CONFIGURED_LOG_LEVEL: ConfiguredLogLevel = "info";
 
-const LOG_LEVEL_SEVERITY: Record<LogLevel, number> = { DEBUG: 0, INFO: 1, WARN: 2, ERROR: 3 };
-
-const CONFIGURED_LEVEL_MIN_SEVERITY: Record<ConfiguredLogLevel, number> = {
+const SEVERITY: Record<ConfiguredLogLevel, number> = {
     debug: 0,
     info: 1,
     warn: 2,
@@ -50,14 +45,14 @@ const CONFIGURED_LEVEL_MIN_SEVERITY: Record<ConfiguredLogLevel, number> = {
 
 /** Validates an untrusted `uxp.logLevel` value, falling back to the default. */
 export function parseConfiguredLogLevel(value: unknown): ConfiguredLogLevel {
-    return typeof value === "string" && Object.prototype.hasOwnProperty.call(CONFIGURED_LEVEL_MIN_SEVERITY, value)
+    return typeof value === "string" && Object.prototype.hasOwnProperty.call(SEVERITY, value)
         ? (value as ConfiguredLogLevel)
         : DEFAULT_CONFIGURED_LOG_LEVEL;
 }
 
 /** Whether a message of `level` passes the configured minimum level. */
 export function isLogLevelEnabled(level: LogLevel, configured: ConfiguredLogLevel): boolean {
-    return LOG_LEVEL_SEVERITY[level] >= CONFIGURED_LEVEL_MIN_SEVERITY[configured];
+    return SEVERITY[level] >= SEVERITY[configured];
 }
 
 // Matches ANSI CSI escape sequences (colors, cursor movement, etc.).
@@ -101,25 +96,23 @@ export function stripAnsi(text: string): string {
     return text.replace(ANSI_ESCAPE_REGEX, "");
 }
 
+const HOST_LEVELS = new Map<string, LogLevel>([
+    ["error", "error"],
+    ["err", "error"],
+    ["fatal", "error"],
+    ["warn", "warn"],
+    ["warning", "warn"],
+    ["debug", "debug"],
+    ["trace", "debug"],
+    ["verbose", "debug"],
+]);
+
 /**
  * Normalizes a `UXP/log` host event level string (`"error"`, `"warn"`,
- * `"debug"`, `"info"`, `"log"`, etc.) to a standard `LogLevel`.
+ * `"debug"`, `"info"`, `"log"`, etc.) to a standard `LogLevel`; unknown names are `info`.
  */
 export function parseHostLogLevel(level: string): LogLevel {
-    const normalized = level.trim().toLowerCase();
-    if (normalized === "error" || normalized === "err" || normalized === "fatal") {
-        return "ERROR";
-    }
-    if (normalized === "warn" || normalized === "warning") {
-        return "WARN";
-    }
-    if (normalized === "debug" || normalized === "trace" || normalized === "verbose") {
-        return "DEBUG";
-    }
-    if (normalized === "info" || normalized === "information") {
-        return "INFO";
-    }
-    return "INFO";
+    return HOST_LEVELS.get(level.trim().toLowerCase()) ?? "info";
 }
 
 /**
@@ -130,7 +123,7 @@ export function parseHostLogLevel(level: string): LogLevel {
  */
 export function formatLogLines(
     message: string,
-    level: LogLevel = "INFO",
+    level: LogLevel = "info",
     date = new Date(),
 ): string[] {
     const clean = stripAnsi(message);
@@ -147,7 +140,7 @@ export function formatLogLines(
             out.push(`    ${trimmed}`);
             continue;
         }
-        out.push(`${timestamp} [${level}] ${trimmed}`);
+        out.push(`${timestamp} [${level.toUpperCase()}] ${trimmed}`);
     }
 
     return out;

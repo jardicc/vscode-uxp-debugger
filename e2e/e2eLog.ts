@@ -96,7 +96,7 @@ export function resolveOrCreateE2eLogFile(repoRoot: string): string {
 export function appendLogEntry(
     logFilePath: string,
     message: string,
-    defaultLevel: LogLevel = "INFO",
+    defaultLevel: LogLevel = "info",
     date = new Date(),
 ): void {
     const lines = formatLogLines(message, defaultLevel, date);
@@ -129,7 +129,7 @@ export interface ChildOutputStreamOptions {
 export function createChildOutputStream(
     options: ChildOutputStreamOptions,
 ): Writable & { flush: () => void } {
-    const defaultLevel = options.defaultLevel ?? "INFO";
+    const defaultLevel = options.defaultLevel ?? "info";
     let remainder = "";
 
     const handleLine = (rawLine: string): void => {
@@ -193,30 +193,26 @@ export function createChildOutputStream(
  * terminal. Returns a function that restores the original `console` methods.
  */
 export function installConsoleToFileRedirect(logFilePath: string): () => void {
-    const origLog = console.log;
-    const origInfo = console.info;
-    const origDebug = console.debug;
-    const origWarn = console.warn;
-    const origError = console.error;
+    const methods = {
+        log: "info",
+        info: "info",
+        debug: "debug",
+        warn: "warn",
+        error: "error",
+    } as const satisfies Record<string, LogLevel>;
+    const originals = { ...console };
 
-    const write = (level: LogLevel, args: unknown[]): void => {
-        if (args.length === 0) {
-            return;
-        }
-        appendLogEntry(logFilePath, util.format(...args), level);
-    };
-
-    console.log = (...args: unknown[]) => write("INFO", args);
-    console.info = (...args: unknown[]) => write("INFO", args);
-    console.debug = (...args: unknown[]) => write("DEBUG", args);
-    console.warn = (...args: unknown[]) => write("WARN", args);
-    console.error = (...args: unknown[]) => write("ERROR", args);
+    for (const [method, level] of Object.entries(methods) as [keyof typeof methods, LogLevel][]) {
+        console[method] = (...args: unknown[]) => {
+            if (args.length > 0) {
+                appendLogEntry(logFilePath, util.format(...args), level);
+            }
+        };
+    }
 
     return () => {
-        console.log = origLog;
-        console.info = origInfo;
-        console.debug = origDebug;
-        console.warn = origWarn;
-        console.error = origError;
+        for (const method of Object.keys(methods) as (keyof typeof methods)[]) {
+            console[method] = originals[method];
+        }
     };
 }

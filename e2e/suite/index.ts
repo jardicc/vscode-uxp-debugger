@@ -45,7 +45,7 @@ function appendMochaReporterOutputToLog(logFilePath: string, text: string): void
         .filter((line) => line.length > 0);
 
     if (taggedLines.length > 0) {
-        appendLogEntry(logFilePath, taggedLines.join("\n"), "INFO");
+        appendLogEntry(logFilePath, taggedLines.join("\n"), "info");
     }
 }
 
@@ -61,9 +61,9 @@ export function run(): Promise<void> {
         appendLogEntry(
             logFilePath,
             `[e2e] E2E test run started (live=${process.env.UXP_E2E_PHOTOSHOP === "1"})`,
-            "INFO",
+            "info",
         );
-        appendLogEntry(logFilePath, startBanner, "INFO");
+        appendLogEntry(logFilePath, startBanner, "info");
     }
 
     Mocha.reporters.Base.consoleLog = (...args: unknown[]) => {
@@ -119,7 +119,7 @@ export function run(): Promise<void> {
         restoreConsole();
         if (!isCliRunner) {
             const endBanner = formatLogBanner("end", logFilePath);
-            appendLogEntry(logFilePath, endBanner, "INFO");
+            appendLogEntry(logFilePath, endBanner, "info");
             rawConsoleLog(endBanner);
         }
     };

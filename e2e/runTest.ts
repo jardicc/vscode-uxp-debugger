@@ -50,14 +50,14 @@ async function main(): Promise<void> {
     appendLogEntry(
         logFilePath,
         `[e2e] E2E test run started (live=${process.env.UXP_E2E_PHOTOSHOP === "1"})`,
-        "INFO",
+        "info",
     );
-    appendLogEntry(logFilePath, startBanner, "INFO");
+    appendLogEntry(logFilePath, startBanner, "info");
 
     let sawMochaOutput = false;
     const stdoutStream = createChildOutputStream({
         logFilePath,
-        defaultLevel: "INFO",
+        defaultLevel: "info",
         sourceTag: "vscode",
         onTerminalLine: (line) => {
             sawMochaOutput = true;
@@ -66,7 +66,7 @@ async function main(): Promise<void> {
     });
     const stderrStream = createChildOutputStream({
         logFilePath,
-        defaultLevel: "WARN",
+        defaultLevel: "warn",
         sourceTag: "vscode:stderr",
         onTerminalLine: (line) => {
             sawMochaOutput = true;
@@ -86,7 +86,7 @@ async function main(): Promise<void> {
     }
     catch (err) {
         const errText = err instanceof Error ? err.stack ?? err.message : String(err);
-        appendLogEntry(logFilePath, `[e2e] test run failed: ${errText}`, "ERROR");
+        appendLogEntry(logFilePath, `[e2e] test run failed: ${errText}`, "error");
         if (!sawMochaOutput as boolean) {
             writeTerminalError(`[e2e] test run failed before Mocha output: ${errText}`);
         }
@@ -97,7 +97,7 @@ async function main(): Promise<void> {
         stderrStream.flush();
         restoreConsole();
         const endBanner = formatLogBanner("end", logFilePath);
-        appendLogEntry(logFilePath, endBanner, "INFO");
+        appendLogEntry(logFilePath, endBanner, "info");
         writeTerminalLine(endBanner);
     }
 }
