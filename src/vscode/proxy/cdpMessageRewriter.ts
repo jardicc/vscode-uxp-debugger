@@ -83,16 +83,6 @@ export class CdpMessageRewriter {
     /** Whether cached state has already been replayed for the current client. */
     private hasReplayedForCurrentClient = false;
 
-    /**
-   * Whether the target is paused and the *current* client was told so
-   * (`Debugger.paused` forwarded, no `Debugger.resumed` since). UXP treats
-   * `Runtime.runIfWaitingForDebugger` as a resume even while paused at a
-   * breakpoint — see `rewriteFromClient`. Reset for every new client: a
-   * client reattaching via Restart never saw an earlier pause, so its nudge
-   * keeps being forwarded exactly as before.
-   */
-    private targetPausedForClient = false;
-
     /** Rolling console/exception capture for LM tools (LANGUAGE-MODEL-TOOLS.md §4). */
     private readonly eventBuffer: CdpEventBuffer;
 
@@ -226,7 +216,6 @@ export class CdpMessageRewriter {
         // breakpoints either.
         this.liveBreakpointIds.clear();
         this.pendingBreakpointRequestIds.clear();
-        this.targetPausedForClient = false;
     }
 
     /**
@@ -236,7 +225,6 @@ export class CdpMessageRewriter {
    */
     markNewClient(): void {
         this.hasReplayedForCurrentClient = false;
-        this.targetPausedForClient = false;
         this.pendingContextMessages.length = 0;
         this.pendingEvaluateIds.clear();
 
@@ -318,13 +306,6 @@ export class CdpMessageRewriter {
             // Side-effecting tap for LM tools (console output / exceptions) — never
             // blocks or alters the forwarding decision made below.
             this.eventBuffer.captureFromTarget(msg);
-
-            if (msg.method === "Debugger.paused") {
-                this.targetPausedForClient = true;
-            }
-            else if (msg.method === "Debugger.resumed") {
-                this.targetPausedForClient = false;
-            }
 
             // Swallow responses to proxy-internal requests (e.g. Runtime.enable)
             if (msg.id !== undefined && this.internalIds.has(msg.id)) {
@@ -498,21 +479,6 @@ export class CdpMessageRewriter {
                 return null;
             }
 
-            // js-debug sends Runtime.runIfWaitingForDebugger once its (child)
-            // session finishes configuring — which, for a break-on-load plugin,
-            // can land after UXP already paused at a startup breakpoint. UXP then
-            // resumes the paused runtime, so the breakpoint only flashes in the
-            // UI. The proxy already sends its own nudge on every target connect
-            // (`sendResumeNudge` in cdpProxy.ts), so while paused this request is
-            // only harmful: answer it locally instead of forwarding it.
-            if (msg.method === "Runtime.runIfWaitingForDebugger" && msg.id !== undefined && this.targetPausedForClient) {
-                this.log.appendLine(
-                    `[CDP] Swallowed Runtime.runIfWaitingForDebugger (id=${String(msg.id)}) — target is paused.`,
-                );
-                this.sendToClient(JSON.stringify({ id: msg.id, result: {} }));
-                return null;
-            }
-
             // A fresh js-debug client's first Debugger.enable — replay cached
             // execution-context/scriptParsed state (see `scriptParsedCache`) in
             // case this client attached to an already-open target connection
@@ -543,9 +509,61 @@ export class CdpMessageRewriter {
             // Track Runtime.evaluate requests so we can intercept UXP errors.
             // Append the captured uniqueContextId so UXP can resolve the context.
             if (msg.method === "Runtime.evaluate" && msg.id !== undefined) {
-                this.pendingEvaluateIds.add(msg.id);
                 msg.params ??= {};
                 const evaluateParams: CdpPayload<Protocol.Runtime.EvaluateRequest> = msg.params;
+                const expr = evaluateParams.expression;
+                if (
+                    typeof expr === "string"
+                    && (expr.endsWith(".cdp\n") || expr.endsWith(".cdp"))
+                ) {
+                    // js-debug (`pwa-node`) sends three internal startup probes via
+                    // Runtime.evaluate (`//# sourceURL=eval-<hex>.cdp`):
+                    //  1. `require('module').builtinModules`
+                    //  2. `typeof process === 'undefined' || process.pid === undefined ...`
+                    //  3. `WebAssembly` instantiate/compile wrapper
+                    // Executing any `eval-*.cdp` while UXP is mid-bootstrap inside
+                    // `uxp://uxp-internal/domjs_scripts.js` during `breakOnStart`
+                    // crashes Photoshop in `libdynamic-napi.dll` (`napi_unwrap`).
+                    // Match using O(1) suffix + prefix checks so user evaluations
+                    // (`.repl` or no sourceURL) pay no regex or full-string scan cost.
+                    if (expr.startsWith("require('module').builtinModules")) {
+                        this.log.appendLine(
+                            `[CDP] Swallowed js-debug builtinModules probe (id=${String(msg.id)})`,
+                        );
+                        this.sendToClient(
+                            JSON.stringify({
+                                id: msg.id,
+                                result: { result: { type: "object", value: [] } },
+                            }),
+                        );
+                        return null;
+                    }
+                    if (expr.startsWith("typeof process === 'undefined' || process.pid === undefined")) {
+                        this.log.appendLine(
+                            `[CDP] Swallowed js-debug process probe (id=${String(msg.id)})`,
+                        );
+                        this.sendToClient(
+                            JSON.stringify({
+                                id: msg.id,
+                                result: { result: { type: "string", value: "process not defined" } },
+                            }),
+                        );
+                        return null;
+                    }
+                    if (expr.startsWith("(()=>{let t=[\"instantiate\",\"instantiateStreaming\"")) {
+                        this.log.appendLine(
+                            `[CDP] Swallowed js-debug WebAssembly probe (id=${String(msg.id)})`,
+                        );
+                        this.sendToClient(
+                            JSON.stringify({
+                                id: msg.id,
+                                result: { result: { type: "undefined" } },
+                            }),
+                        );
+                        return null;
+                    }
+                }
+                this.pendingEvaluateIds.add(msg.id);
                 if (evaluateParams.contextId !== undefined) {
                     delete evaluateParams.contextId;
                 }

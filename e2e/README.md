@@ -24,6 +24,21 @@ and runs `node out/e2e/runTest.js`, which downloads (once, cached under
 `.vscode-test/`) and launches VS Code with `--extensionDevelopmentPath` set
 to the repo root and the workspace opened at `e2e/fixtures/plugin`.
 
+### Logging (`logs/e2e/test-run_DD-MM-YYYY_HH-mm.log`)
+
+To keep the terminal output readable, the terminal only displays:
+
+- A notice at the start and end of the run with the path to the `.log` file.
+- Mocha's test list (passed, pending/skipped, failed), summary, and any thrown
+  errors with stack traces.
+
+All progress and diagnostic output (`[UXP Debugger]` output channel lines,
+`[e2e]` traces, `[e2e][dap>]` / `[e2e][dap<]` DAP messages, multi-window
+takeover logs, and VS Code / Electron process stdout/stderr) is recorded into
+`logs/e2e/test-run_DD-MM-YYYY_HH-mm.log` using standard `.log` syntax
+(`YYYY-MM-DD HH:mm:ss.SSS [LEVEL] ...` and indented `at ...` stack frames)
+for VS Code `.log` syntax highlighting.
+
 ### Tests included
 
 - **`smoke.test.ts`** — always runs. No Photoshop required. Verifies the

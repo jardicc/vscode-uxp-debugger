@@ -15,7 +15,8 @@
 import * as assert from "assert";
 import * as fs from "fs";
 import * as vscode from "vscode";
-import { activateExtension, manifest2Path, TIMEOUT_DEFAULT, waitFor } from "./liveHelpers";
+import { installConsoleToFileRedirect, resolveOrCreateE2eLogFile } from "../e2eLog";
+import { activateExtension, manifest2Path, repoRoot, TIMEOUT_DEFAULT, waitFor } from "./liveHelpers";
 
 const TAKEN_OVER_MESSAGE = "UXP Debugger was taken over by another VS Code window.";
 
@@ -37,6 +38,8 @@ function withTimeout(promise: Promise<void>, ms: number, label: string): Promise
 }
 
 export async function run(): Promise<void> {
+    const logFilePath = resolveOrCreateE2eLogFile(repoRoot);
+    const restoreConsole = installConsoleToFileRedirect(logFilePath);
     console.log("[windowB] activating extension...");
     const api = await activateExtension();
     console.log("[windowB] extension activated");
@@ -126,5 +129,6 @@ export async function run(): Promise<void> {
     finally {
         warningTarget.showWarningMessage = originalWarning;
         infoTarget.showInformationMessage = originalInfo;
+        restoreConsole();
     }
 }

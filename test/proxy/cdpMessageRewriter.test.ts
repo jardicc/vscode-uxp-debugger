@@ -417,49 +417,89 @@ describe("CdpMessageRewriter — misc client-side rewriting", () => {
         expect(sendToClient).toHaveBeenCalledWith(JSON.stringify({ id: 3, result: {} }));
     });
 
+    it("swallows js-debug's builtinModules, process, and WebAssembly .cdp probes with harmless synthetic replies, but forwards non-.cdp evaluations", () => {
+        const { rewriter, sendToClient } = makeRewriter();
+        rewriter.rewriteFromTarget(
+            JSON.stringify({ method: "Runtime.executionContextCreated", params: { context: { uniqueId: "ctx-1" } } }),
+        );
+
+        const builtinProbe = rewriter.rewriteFromClient(
+            JSON.stringify({
+                id: 1005,
+                method: "Runtime.evaluate",
+                params: {
+                    expression: "require('module').builtinModules\n//# sourceURL=eval-6e1cf2c6.cdp\n",
+                    returnByValue: true,
+                    includeCommandLineAPI: true,
+                },
+            }),
+        );
+        expect(builtinProbe).toBeNull();
+        expect(sendToClient).toHaveBeenCalledWith(
+            JSON.stringify({
+                id: 1005,
+                result: { result: { type: "object", value: [] } },
+            }),
+        );
+
+        const processProbe = rewriter.rewriteFromClient(
+            JSON.stringify({
+                id: 1012,
+                method: "Runtime.evaluate",
+                params: {
+                    returnByValue: true,
+                    expression:
+                        "typeof process === 'undefined' || process.pid === undefined ? 'process not defined' : ({ processId: process.pid, nodeVersion: process.version, architecture: process.arch })\n//# sourceURL=eval-ff6a948c.cdp\n",
+                },
+            }),
+        );
+        expect(processProbe).toBeNull();
+        expect(sendToClient).toHaveBeenCalledWith(
+            JSON.stringify({
+                id: 1012,
+                result: { result: { type: "string", value: "process not defined" } },
+            }),
+        );
+
+        const wasmProbe = rewriter.rewriteFromClient(
+            JSON.stringify({
+                id: 1014,
+                method: "Runtime.evaluate",
+                params: {
+                    expression:
+                        "(()=>{let t=[\"instantiate\",\"instantiateStreaming\",\"compile\",\"compileStreaming\"];for(let e of t){let r=WebAssembly[e];WebAssembly[e]=function(...n){return r.apply(this,n).then(i=>{if(!(n[0]instanceof WebAssembly.Module))debugger;return i})}}})();\n\n//# sourceURL=eval-3dc1fafc.cdp\n",
+                    silent: true,
+                },
+            }),
+        );
+        expect(wasmProbe).toBeNull();
+        expect(sendToClient).toHaveBeenCalledWith(
+            JSON.stringify({
+                id: 1014,
+                result: { result: { type: "undefined" } },
+            }),
+        );
+
+        // Same expression coming from the user's Debug Console (.repl) or without
+        // a .cdp sourceURL must NOT be intercepted.
+        const replEval = rewriter.rewriteFromClient(
+            JSON.stringify({
+                id: 1020,
+                method: "Runtime.evaluate",
+                params: {
+                    expression: "require('module').builtinModules\n//# sourceURL=eval-6e1cf2c6.repl\n",
+                },
+            }),
+        );
+        expect(replEval).not.toBeNull();
+        expect(JSON.parse(replEval!).params.uniqueContextId).toBe("ctx-1");
+    });
+
     it("passes through unrelated messages unchanged", () => {
         const { rewriter } = makeRewriter();
         const raw = JSON.stringify({ id: 1, method: "Debugger.resume" });
 
         expect(rewriter.rewriteFromClient(raw)).toBe(raw);
-    });
-
-    it("swallows Runtime.runIfWaitingForDebugger while the target is paused (would resume it)", () => {
-        const { rewriter, sendToClient } = makeRewriter();
-        rewriter.rewriteFromTarget(JSON.stringify({ method: "Debugger.paused", params: { reason: "other", callFrames: [] } }));
-
-        const result = rewriter.rewriteFromClient(JSON.stringify({ id: 7, method: "Runtime.runIfWaitingForDebugger" }));
-
-        expect(result).toBeNull();
-        expect(sendToClient).toHaveBeenCalledWith(JSON.stringify({ id: 7, result: {} }));
-    });
-
-    it("forwards Runtime.runIfWaitingForDebugger when the target is not paused", () => {
-        const { rewriter, sendToClient } = makeRewriter();
-        const raw = JSON.stringify({ id: 7, method: "Runtime.runIfWaitingForDebugger" });
-
-        expect(rewriter.rewriteFromClient(raw)).toBe(raw);
-
-        rewriter.rewriteFromTarget(JSON.stringify({ method: "Debugger.paused", params: { reason: "other", callFrames: [] } }));
-        rewriter.rewriteFromTarget(JSON.stringify({ method: "Debugger.resumed", params: {} }));
-        expect(rewriter.rewriteFromClient(raw)).toBe(raw);
-
-        rewriter.rewriteFromTarget(JSON.stringify({ method: "Debugger.paused", params: { reason: "other", callFrames: [] } }));
-        rewriter.resetContextState();
-        expect(rewriter.rewriteFromClient(raw)).toBe(raw);
-
-        expect(sendToClient).not.toHaveBeenCalled();
-    });
-
-    it("forwards Runtime.runIfWaitingForDebugger from a new client that never saw the earlier pause (Restart)", () => {
-        const { rewriter, sendToClient } = makeRewriter();
-        const raw = JSON.stringify({ id: 7, method: "Runtime.runIfWaitingForDebugger" });
-        rewriter.rewriteFromTarget(JSON.stringify({ method: "Debugger.paused", params: { reason: "other", callFrames: [] } }));
-
-        rewriter.markNewClient();
-
-        expect(rewriter.rewriteFromClient(raw)).toBe(raw);
-        expect(sendToClient).not.toHaveBeenCalled();
     });
 
     it("returns the raw string unchanged if it is not valid JSON (defensive parse guard)", () => {

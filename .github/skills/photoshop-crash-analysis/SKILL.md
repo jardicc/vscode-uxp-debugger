@@ -59,10 +59,13 @@ def rot47(s: str) -> str:
 
 When correlating the last lines of `[UXP Debugger] [CDP]` output before `Host app disconnected`:
 
-1. **Startup / `breakOnStart` concurrency race in `libdynamic-napi.dll`:**
+1. **Startup / `breakOnStart` `Runtime.evaluate` (`eval-*.cdp`) race in `libdynamic-napi.dll`:**
    - When a plugin is loaded with `breakOnStart: true` (or `Plugin/runScript`), UXP arms its internal "pause on first statement executed" flag.
-   - After `CdpProxyServer` sends `Runtime.runIfWaitingForDebugger` and UXP emits `Runtime.executionContextCreated`, `js-debug` (root + child session) sends a burst of commands: duplicate `Debugger.enable`, `Profiler.enable`, `Debugger.setPauseOnExceptions`, and multiple `Runtime.evaluate` probes (`require('module').builtinModules` as `eval-*.cdp`, `typeof process === 'undefined' ...` as `eval-*.cdp`).
-   - If UXP begins parsing/pausing on the first `eval-*.cdp` probe while concurrent `Debugger.enable` / `Profiler.enable` / second `Runtime.evaluate` messages hit `libdynamic-napi.dll`, V8/N-API can fatally assert in `napi_unwrap`.
+   - After `CdpProxyServer` sends `Runtime.runIfWaitingForDebugger` and UXP emits `Runtime.executionContextCreated`, `js-debug` sends three internal startup probes (`//# sourceURL=eval-<hex>.cdp`):
+     1. `require('module').builtinModules`
+     2. `typeof process === 'undefined' || process.pid === undefined ...`
+     3. `(()=>{let t=["instantiate","instantiateStreaming",...];for(let e of t){let r=WebAssembly[e];...}})()`
+   - If **any** of these `eval-*.cdp` probes is compiled/executed by UXP while the top frame on UXP's call stack is `scriptId: "5"` (`uxp://uxp-internal/domjs_scripts.js`, visible in the `Debugger.scriptParsed` `stackTrace` right before the disconnect), V8/N-API fatally asserts in `libdynamic-napi.dll` (`napi_unwrap`). All three `.cdp` probes are therefore answered synthetically in `CdpMessageRewriter.rewriteFromClient`.
 2. **`autoAttachChildProcesses` probe (must always be `false`):**
    - `js-debug`'s default `autoAttachChildProcesses: true` evaluates a script that mutates `process.env` (`NODE_OPTIONS` / `VSCODE_INSPECTOR_OPTIONS`). Sending that eval to UXP crashes Photoshop immediately (see [UxpDebugSessionManager.ts](../../../src/vscode/debug/UxpDebugSessionManager.ts)).
 3. **Unsupported DevTools frontend CDP domains:**

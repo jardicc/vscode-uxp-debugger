@@ -27,6 +27,7 @@ import type { ConnectedApp } from "../../src/core/broker/UxpBroker";
 import type { UxpDebuggerTestApi } from "../../src/vscode/extension";
 import {
     activateExtension,
+    autoResumeStartupPauses,
     describeLive,
     TIMEOUT_DEFAULT,
     detachStrandedScriptSessions,
@@ -77,6 +78,7 @@ async function runScriptAndCaptureArgs(
             result = { ok: false, error: output.slice(ARGS_ERROR_MARKER.length).trimEnd() };
         }
     });
+    const resumer = autoResumeStartupPauses();
 
     try {
         const session = await api.service.runScript(scriptUri.fsPath, app, userArgs);
@@ -100,6 +102,7 @@ async function runScriptAndCaptureArgs(
         return result.value;
     }
     finally {
+        resumer.dispose();
         disposable.dispose();
     }
 }

@@ -36,7 +36,7 @@ import { PluginWatchManager } from "./panel/PluginWatchManager";
 import { PluginRegistry } from "./panel/PluginRegistry";
 import { CdpProxyRegistry } from "./proxy/CdpProxyRegistry";
 import { registerUxpLanguageModelTools, type UxpLanguageModelTools } from "./tools/registerTools";
-import { HostLogChannels } from "./ui/output";
+import { createUxpOutputChannel, HostLogChannels } from "./ui/output";
 
 function setBoolContext(key: string, value: boolean): void {
     void vscode.commands.executeCommand("setContext", key, value);
@@ -89,25 +89,16 @@ export interface UxpDebuggerTestApi {
 }
 
 export function activate(context: vscode.ExtensionContext): UxpDebuggerTestApi {
-    const output = vscode.window.createOutputChannel("UXP Debugger");
+    const isE2e = process.env.UXP_E2E_PHOTOSHOP === "1" || Boolean(process.env.UXP_E2E_LOG_FILE);
+    const output = createUxpOutputChannel("UXP Debugger", {
+        teeToConsolePrefix: isE2e ? "[UXP Debugger]" : undefined,
+    });
     output.appendLine("UXP Debugger extension activated.");
-
-    // e2e/ diagnostics only: OutputChannel has no read-back API, so when the
-    // live E2E test is running, tee every line to stdout (visible in the
-    // `npm run test:e2e` terminal) as well. No effect on normal usage.
-    if (process.env.UXP_E2E_PHOTOSHOP === "1") {
-        const originalAppendLine = output.appendLine.bind(output);
-        output.appendLine = (value: string) => {
-            originalAppendLine(value);
-            // eslint-disable-next-line no-console -- E2E diagnostics must be visible in the test runner.
-            console.log(`[UXP Debugger] ${value}`);
-        };
-    }
 
     const service = new UxpService(context, output);
     const proxyRegistry = new CdpProxyRegistry(output);
     const debugManager = new UxpDebugSessionManager(service, proxyRegistry, output);
-    const hostLogs = new HostLogChannels();
+    const hostLogs = new HostLogChannels(isE2e);
     const pluginRegistry = new PluginRegistry(context.globalState);
     // Absolute paths are machine-specific — keep the registry out of Settings Sync.
     context.globalState.setKeysForSync([]);

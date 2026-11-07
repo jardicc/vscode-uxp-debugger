@@ -95,8 +95,7 @@ export function registerPauseTracker(tracker: PauseTracker, output: vscode.Outpu
                             if (reason === "instrumentation") {
                                 // js-debug's own pauseForSourceMap bookkeeping pause (binds
                                 // startup breakpoints/source maps, then resumes on its own) —
-                                // not a real pause the agent should react to (see cdpProxy.ts's
-                                // handleBreakOnStartMessage doc comment).
+                                // not a real pause the agent should react to.
                                 output.appendLine(`[pauseTracker] client=${clientSessionId} ignored "instrumentation" stopped event`);
                                 return;
                             }

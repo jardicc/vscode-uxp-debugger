@@ -308,25 +308,61 @@ export function toolResultText(result: vscode.LanguageModelToolResult): string {
  * to `onMessage`. Dispose the returned `Disposable` in a `finally` block.
  */
 export function trackDapMessages(
-    onMessage: (message: Record<string, unknown>, direction: "send" | "receive") => void,
+    onMessage: (message: Record<string, unknown>, direction: "send" | "receive", session: vscode.DebugSession) => void,
 ): vscode.Disposable {
     return vscode.debug.registerDebugAdapterTrackerFactory("*", {
-        createDebugAdapterTracker() {
+        createDebugAdapterTracker(session) {
             return {
                 onDidSendMessage(message: Record<string, unknown>) {
                     console.log(`[e2e][dap>] ${JSON.stringify(message)}`);
-                    onMessage(message, "send");
+                    onMessage(message, "send", session);
                 },
                 onWillReceiveMessage(message: Record<string, unknown>) {
                     console.log(`[e2e][dap<] ${JSON.stringify(message)}`);
-                    onMessage(message, "receive");
+                    onMessage(message, "receive", session);
                 },
             };
         },
     });
 }
 
-/** Resolves with the thread id of the first "stopped"/"breakpoint" DAP event, or rejects after `timeoutMs`. */
+/**
+ * Break on load / script runs pause on the very first statement
+ * (`stopped`, reason "pause") before any breakpoint is reached — UXP's own
+ * break-on-start pause is no longer hidden by the proxy. Resumes such a
+ * pause so execution continues and returns `true`. "breakpoint" stops and
+ * js-debug's own "instrumentation" (source-map bookkeeping) pauses are left
+ * alone (`false`) — js-debug resumes the latter itself once breakpoints are bound.
+ */
+function resumeIfStartupPause(message: Record<string, unknown>, session: vscode.DebugSession): boolean {
+    const m = message as Partial<DebugProtocol.StoppedEvent>;
+    const reason = m.body?.reason;
+    if (m.type !== "event" || m.event !== "stopped" || reason === "breakpoint" || reason === "instrumentation") {
+        return false;
+    }
+    console.log(`[e2e] resuming startup pause (reason=${String(reason)})`);
+    session.customRequest("continue", { threadId: m.body?.threadId }).then(undefined, (err: unknown) => {
+        console.log(`[e2e] failed to resume startup pause: ${String(err)}`);
+    });
+    return true;
+}
+
+/**
+ * Keeps resuming startup pauses (see `resumeIfStartupPause`) until disposed.
+ * For flows that must run to completion without hitting a breakpoint.
+ */
+export function autoResumeStartupPauses(): vscode.Disposable {
+    return trackDapMessages((message, direction, session) => {
+        if (direction === "send") {
+            resumeIfStartupPause(message, session);
+        }
+    });
+}
+
+/**
+ * Resolves with the thread id of the first "stopped"/"breakpoint" DAP event, or rejects after `timeoutMs`.
+ * Startup pauses seen meanwhile are resumed (see `resumeIfStartupPause`).
+ */
 export function waitForBreakpointHit(timeoutMs = 15_000): Promise<number> & { dispose: () => void } {
     let disposable: vscode.Disposable | undefined;
     const promise = new Promise<number>((resolve, reject) => {
@@ -334,9 +370,12 @@ export function waitForBreakpointHit(timeoutMs = 15_000): Promise<number> & { di
             disposable?.dispose();
             reject(new Error(`Timed out (${timeoutMs}ms) waiting for a "stopped" (breakpoint) DAP event`));
         }, timeoutMs);
-        disposable = trackDapMessages((message, direction) => {
+        disposable = trackDapMessages((message, direction, session) => {
             // `onDidSendMessage` (adapter → VS Code) is labelled "send" by trackDapMessages.
             if (direction !== "send") {
+                return;
+            }
+            if (resumeIfStartupPause(message, session)) {
                 return;
             }
             const m = message as Partial<DebugProtocol.StoppedEvent>;

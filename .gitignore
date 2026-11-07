@@ -4,5 +4,6 @@ dist/
 installers/
 .vscode-test/
 out/
+logs/
 uxp-cli-v1/
 uxp-UDT-v2/

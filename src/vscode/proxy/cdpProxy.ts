@@ -120,16 +120,6 @@ export class CdpProxyServer {
    */
     private breakOnStartPending: boolean;
 
-    /**
-   * Set once the instrumentation breakpoint was armed. UXP's own
-   * break-on-start fires on the *first statement executed* — typically one
-   * of js-debug's `Runtime.evaluate` probes, not plugin code. That spurious
-   * pause (and its `Debugger.resumed`) is swallowed and auto-resumed; the
-   * flag clears on the first instrumentation pause, which js-debug handles
-   * itself (see `breakOnStartPending`).
-   */
-    private awaitingBreakOnStartPause = false;
-
     /** Request id of the internal `Debugger.setInstrumentationBreakpoint` (reply logging). */
     private instrumentationRequestId: number | undefined;
 
@@ -142,23 +132,6 @@ export class CdpProxyServer {
    * js-debug adopt the breakpoint and handle its pauses natively.
    */
     private instrumentationBreakpointId: string | undefined;
-
-    /**
-   * scriptIds seen in a `Debugger.scriptParsed` whose (pre-rewrite) `url` is
-   * neither one of js-debug's own `eval-*.cdp` probes nor a
-   * `uxp://uxp-internal/...` host script — i.e. real plugin/script code.
-   * Confirmed via a live trace (2026-08-19): UXP's instrumentation
-   * breakpoint does NOT reliably pause before the entry script's own
-   * top-level code runs, so a `debugger;` statement (or a user breakpoint)
-   * hit inside it was being misclassified as the expected "spurious /
-   * pre-context" pause and silently swallowed — see `handleBreakOnStartMessage`.
-   * A pause whose top frame is in this set is never spurious, regardless of
-   * `reason`.
-   */
-    private readonly realScriptIds = new Set<string>();
-
-    /** js-debug's own dynamic probe/REPL evals (`//# sourceURL=eval-<hex>.cdp`) — never real plugin code. */
-    private static readonly EVAL_PROBE_URL = /^eval-[0-9a-f]+\.cdp$/;
 
     /** Max number of reconnect attempts before giving up. */
     private static readonly MAX_RECONNECT_ATTEMPTS = 20;
@@ -755,7 +728,6 @@ export class CdpProxyServer {
             // breakpoints during that pause (see `breakOnStartPending`).
             if (this.breakOnStartPending) {
                 this.breakOnStartPending = false;
-                this.awaitingBreakOnStartPause = true;
                 this.log.appendLine(
                     "[CDP] breakOnStart session — arming an instrumentation breakpoint before resuming the runtime.",
                 );
@@ -781,7 +753,7 @@ export class CdpProxyServer {
         this.targetWs.on("message", (data) => {
             // WebSocket.RawData provides a meaningful text conversion for received frames.
             // eslint-disable-next-line @typescript-eslint/no-base-to-string
-            let raw: string | null = data.toString();
+            const raw: string | null = data.toString();
 
             // Replies to inspector-panel requests are consumed here; events are
             // broadcast to panel clients and continue to js-debug below.
@@ -789,14 +761,7 @@ export class CdpProxyServer {
                 return;
             }
 
-            this.trackRealScriptId(raw);
-
-            if (this.awaitingBreakOnStartPause) {
-                raw = this.handleBreakOnStartMessage(raw);
-                if (raw === null) {
-                    return; // swallowed (spurious pause / its resumed event)
-                }
-            }
+            this.captureInstrumentationReply(raw);
 
             const rewritten = this.rewriter.rewriteFromTarget(raw);
             if (rewritten !== null) {
@@ -827,32 +792,6 @@ export class CdpProxyServer {
     }
 
     /**
-   * Records `scriptId`s belonging to real plugin/script code (as opposed to
-   * js-debug's own `eval-*.cdp` probes) from `Debugger.scriptParsed` events —
-   * see `realScriptIds`. Called unconditionally (not just during
-   * break-on-start) since it's cheap and the set is only ever consulted
-   * during that phase.
-   */
-    private trackRealScriptId(raw: string): void {
-        try {
-            const msg = JSON.parse(raw) as CdpMessage;
-            const params: CdpPayload<Protocol.Debugger.ScriptParsedEvent> | undefined = msg.params;
-            if (
-                msg.method === "Debugger.scriptParsed"
-                && typeof params?.url === "string"
-                && typeof params.scriptId === "string"
-                && !CdpProxyServer.EVAL_PROBE_URL.test(params.url)
-                && !params.url.startsWith("uxp://uxp-internal/")
-            ) {
-                this.realScriptIds.add(params.scriptId);
-            }
-        }
-        catch {
-            // Not parseable — nothing to track.
-        }
-    }
-
-    /**
    * Send the "go ahead" nudge that resumes a runtime paused waiting for the
    * debugger. A no-op if the target wasn't actually waiting.
    */
@@ -866,73 +805,28 @@ export class CdpProxyServer {
     }
 
     /**
-   * Target-message handling while the break-on-start startup phase is
-   * active (see `awaitingBreakOnStartPause`).
-   *
-   *  - The first pause with reason "instrumentation", a hit user breakpoint,
-   *    or whose top frame belongs to real plugin/script code (`realScriptIds`
-   *    — e.g. a `debugger;` statement in the entry script) ends the phase
-   *    and is forwarded. The last case was added 2026-08-19 after a live
-   *    trace showed UXP does not always actually pause on
-   *    "beforeScriptWithSourceMapExecution" before the entry script's own
-   *    top-level code runs — without it, a `debugger;` statement (or a real
-   *    breakpoint) hit inside that code was wrongly swallowed as spurious.
-   *  - Any earlier pause is UXP's own break-on-start firing on the first
-   *    statement executed (typically a js-debug `Runtime.evaluate` probe);
-   *    it is swallowed and auto-resumed, as is its `Debugger.resumed`.
-   *
-   * Returns the message, or `null` to swallow it.
+   * Records the breakpoint id from the reply to the proxy's internal
+   * `Debugger.setInstrumentationBreakpoint` request (see
+   * `instrumentationBreakpointId`) and logs it verbatim so missing host
+   * support (an error reply) is diagnosable. The reply itself is swallowed
+   * later as an internal response by the rewriter.
    */
-    private handleBreakOnStartMessage(raw: string): string | null {
+    private captureInstrumentationReply(raw: string): void {
+        if (this.instrumentationRequestId === undefined) {
+            return;
+        }
         try {
             const msg = JSON.parse(raw) as CdpMessage;
-
-            if (msg.id !== undefined && msg.id === this.instrumentationRequestId) {
-                // Reply is swallowed as internal by the rewriter; log it verbatim so
-                // missing host support (an error reply) is diagnosable.
+            if (msg.id === this.instrumentationRequestId) {
                 const result:
                     CdpPayload<Protocol.Debugger.SetInstrumentationBreakpointResponse> | undefined = msg.result;
                 this.instrumentationBreakpointId = result?.breakpointId;
                 this.log.appendLine(`[CDP] Instrumentation breakpoint reply: ${raw}`);
-                return raw;
-            }
-
-            if (msg.method === "Debugger.paused") {
-                const params: CdpPayload<Protocol.Debugger.PausedEvent> | undefined = msg.params;
-                const hitUserBp
-                    = Array.isArray(params?.hitBreakpoints) && params.hitBreakpoints.length > 0;
-                const topScriptId = params?.callFrames?.[0]?.location?.scriptId;
-                const inRealScript = typeof topScriptId === "string" && this.realScriptIds.has(topScriptId);
-                if (params?.reason === "instrumentation" || hitUserBp || inRealScript) {
-                    this.awaitingBreakOnStartPause = false;
-                    this.log.appendLine(
-                        inRealScript && params?.reason !== "instrumentation" && !hitUserBp
-                            ? "[CDP] Pause inside real plugin/script code (e.g. a debugger; statement) — handing over to js-debug."
-                            : "[CDP] Startup instrumentation pause — handing over to js-debug.",
-                    );
-                    return raw;
-                }
-                // Spurious pause — swallow it and resume so execution reaches the
-                // plugin's sourcemapped scripts, where the instrumentation
-                // breakpoint is waiting.
-                this.log.appendLine("[CDP] Swallowed spurious break-on-start pause — auto-resuming.");
-                const resumeId = this.rewriter.allocateInternalId("Debugger.resume");
-                this.targetWs?.send(
-                    JSON.stringify({ id: resumeId, method: "Debugger.resume", params: {} }),
-                );
-                return null;
-            }
-
-            if (msg.method === "Debugger.resumed") {
-                // Follows a swallowed spurious pause — js-debug never saw the pause,
-                // so hide the resume as well.
-                return null;
             }
         }
         catch {
-            // Not parseable — forward as-is.
+            // Not parseable — nothing to capture.
         }
-        return raw;
     }
 
     /**
