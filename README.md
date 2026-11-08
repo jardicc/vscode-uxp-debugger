@@ -296,6 +296,16 @@ Workarounds:
 - Avoid typing DOM expressions into the Debug Console while debugging InDesign; use breakpoints and the Variables view instead.
 - Use `console.log` or logpoints to inspect DOM values.
 
+## Host app exists at the same time as VS Code
+
+- If you start host application e.g. Photoshop via UXP debugger those two processes are
+  coupled together. So host app is subprocess of VS Code. And when quit VS Code it takes down
+  host app with it.
+
+Workaround:
+
+- Start application manually outside of the VS Code
+
 ## Feedback & issues
 
 Source code, bug reports and feature requests:
