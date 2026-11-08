@@ -1,5 +1,60 @@
 # Changelog
 
+## [2.3.0](https://github.com/jardicc/vscode-uxp-debugger/compare/v2.2.0...v2.3.0) (2026-11-08)
+
+
+### New Features
+
+* add exclusion rules for packing plugin folders and validate outputPath extension ([30357f5](https://github.com/jardicc/vscode-uxp-debugger/commit/30357f586003dc92e273c9d7cd83cb9712f4c06e))
+* enhance Content Security Policy for inspector and add tests for enforcement ([f9d9eec](https://github.com/jardicc/vscode-uxp-debugger/commit/f9d9eece34552a7e514f6969b880bc31bf6cd06c))
+* enhance HTTP request handling with security checks and error responses ([656cc72](https://github.com/jardicc/vscode-uxp-debugger/commit/656cc7247e31e4d7e366e891e94c0b088586ac70))
+* ignore dotfile changes in file watcher ([f0e53cf](https://github.com/jardicc/vscode-uxp-debugger/commit/f0e53cf426a1c25c8c3db294894e5b43e5198f8a))
+* implement security checks for WebSocket upgrades and UUID-based session IDs ([8765a24](https://github.com/jardicc/vscode-uxp-debugger/commit/8765a24acc0952308b61507f933266b9b329493d))
+* integrate @jridgewell/trace-mapping for source map resolution in console and exception handling ([d40a5d6](https://github.com/jardicc/vscode-uxp-debugger/commit/d40a5d6bc1052b93daf485b307df374f2bdcd490))
+
+
+### Bug Fixes
+
+* add compare-versions package and refactor version comparison logic ([4da4a02](https://github.com/jardicc/vscode-uxp-debugger/commit/4da4a026897680b902fe8b234bed68f57bea52aa))
+* break on load tracing ([dd3ae40](https://github.com/jardicc/vscode-uxp-debugger/commit/dd3ae40b603d8f34ec1dde0b433342799122cc27))
+* clipboard functionality in HTML DOM inspector view on Macos ([3a17907](https://github.com/jardicc/vscode-uxp-debugger/commit/3a179077d41600f9f598b131d48289c02fe5a8a2))
+* disables clipboard shim ([eed5a4b](https://github.com/jardicc/vscode-uxp-debugger/commit/eed5a4b51ae2f1ca476ee142753e716253b93ee9))
+* enhance app matching and host app catalog functionality with case-insensitive comparisons and canonicalization ([3d8f4ce](https://github.com/jardicc/vscode-uxp-debugger/commit/3d8f4ce9fdccf570de414e389e24d0f6ef670491))
+* enhance probePauseSnapshot to handle empty stack frames ([4694fb7](https://github.com/jardicc/vscode-uxp-debugger/commit/4694fb7a573439411f96329ae2cf09194943bda7))
+* fix absolute sourcemap paths on macos ([d666765](https://github.com/jardicc/vscode-uxp-debugger/commit/d66676533bda6ad8d7e6f37111f15a46c94d44fb))
+* implement path case folding for breakpoint tools ([e303b64](https://github.com/jardicc/vscode-uxp-debugger/commit/e303b642778f9dd2fd07bc12e3f049775e084e24))
+* implements escaping of characters in elevation command when dev mode is enabled ([077edc8](https://github.com/jardicc/vscode-uxp-debugger/commit/077edc843fa5e3906b5f79d36ed84779a9051088))
+* improve session handling in UxpBroker, cleanup closed sessions ([c5a3454](https://github.com/jardicc/vscode-uxp-debugger/commit/c5a34546d4dc7715fdd3ab3fed9c2225c4d5547b))
+* Improves source map detection ([4b24902](https://github.com/jardicc/vscode-uxp-debugger/commit/4b24902a1047b59d4cdc87842b8aad87eb9a262f))
+* integrate DebugProtocol types and enhance pause tracking functionality ([cc79430](https://github.com/jardicc/vscode-uxp-debugger/commit/cc79430f6b9604b6ff58c38cb506458dedcb4fa3))
+* prevent crash of host app during script debugging, improve logging and tests ([f63453e](https://github.com/jardicc/vscode-uxp-debugger/commit/f63453e4a8f0e67fbffdb70b24454d36fb9f2b19))
+* prevent race conditions and duplicated debug connections ([c6f8892](https://github.com/jardicc/vscode-uxp-debugger/commit/c6f8892bbb559a49fab1fd9538a2486bf04b6145))
+* specify TypeScript support for UXP scripts in package.json ([657950a](https://github.com/jardicc/vscode-uxp-debugger/commit/657950a666eb66c7033761160982ccbe393d1fd8))
+* update PauseTracker to reject pending waiters on session forget ([d0a3f83](https://github.com/jardicc/vscode-uxp-debugger/commit/d0a3f837df07b9bd130ef27c32601116602d153a))
+* various fixes and documentation improvements ([521bd5e](https://github.com/jardicc/vscode-uxp-debugger/commit/521bd5e5161cf95459c938e744d13339a98d96c7))
+
+
+### Changed
+
+* improve comments for debug session termination logic in debugScriptCommand ([83218bf](https://github.com/jardicc/vscode-uxp-debugger/commit/83218bfb142cc00cc26ce7c0fe79a4dde0a4fd51))
+* improves logging ([8557140](https://github.com/jardicc/vscode-uxp-debugger/commit/8557140390001cfb63c162c46cb95a86b607c222))
+* remove deprecated `uxp.manifests` setting and clean up related code ([43aa1a2](https://github.com/jardicc/vscode-uxp-debugger/commit/43aa1a204d638be3aa0a5e3e781f87153a35a2ef))
+* remove unused inspector host and message router files ([978d57d](https://github.com/jardicc/vscode-uxp-debugger/commit/978d57dccfb6114625de78fb4b6e7914e16a38b1))
+* simplifies logging ([c0880c8](https://github.com/jardicc/vscode-uxp-debugger/commit/c0880c8d4d58053343ca993ee81fbdce010e76d5))
+
+
+### Documentation
+
+* add video tutorial section to README ([266348c](https://github.com/jardicc/vscode-uxp-debugger/commit/266348c4860b0c9bdf489c209062df5e1df5bc65))
+* clarify comments for Watch toggle and PluginView interface in panelProtocol.ts ([a932dd7](https://github.com/jardicc/vscode-uxp-debugger/commit/a932dd7d5664c010cd7bc760ac28e83f82bd31bb))
+* enhance README with debugging visuals and instructions ([c367952](https://github.com/jardicc/vscode-uxp-debugger/commit/c36795270bad156055562096a7e4d1c7cd504b49))
+* update readme ([09c9e93](https://github.com/jardicc/vscode-uxp-debugger/commit/09c9e930dfd5f637cbefa6d47455f20717c845e6))
+* update README ([7da7301](https://github.com/jardicc/vscode-uxp-debugger/commit/7da73012f38fe07e7cade73ce5c898929bb3cbd4))
+* update readme ([#30](https://github.com/jardicc/vscode-uxp-debugger/issues/30)) ([e88b5b8](https://github.com/jardicc/vscode-uxp-debugger/commit/e88b5b80d1a1bc2b60caef0f144c75ac85a21a02))
+* update README formatting for debugging visuals ([ce981e2](https://github.com/jardicc/vscode-uxp-debugger/commit/ce981e2dbc6c4eb17740737c5fa61ae5674c70fa))
+* Updates info how to solve issues with source maps ([79c3351](https://github.com/jardicc/vscode-uxp-debugger/commit/79c33519483aca459476bf46c4c46f17ecdf6fb8))
+* updates readme ([7d206ef](https://github.com/jardicc/vscode-uxp-debugger/commit/7d206ef6d7d9be2b396a6b1d5c698bafd7c66861))
+
 ## [2.2.0](https://github.com/jardicc/vscode-uxp-debugger/compare/v2.1.0...v2.2.0) (2026-10-07)
 
 
