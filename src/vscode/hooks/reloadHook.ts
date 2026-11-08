@@ -10,7 +10,7 @@
 
 import * as path from "path";
 import { requireStringField, optionalStringField, optionalBooleanField, type HookResult } from "./hooksHttp";
-import { loadErrorStatus } from "./hookErrors";
+import { loadErrorStatus, notRegisteredResult } from "./hookErrors";
 import { describeLoadError } from "../tools/toolErrors";
 import { UxpInspectorPanel } from "../inspector/UxpInspectorPanel";
 import { openInspectorForSession } from "../commands/openHtmlInspector";
@@ -23,6 +23,10 @@ export async function handleReload(
     const manifestPath = requireStringField(input, "manifestPath");
     const breakOnLoad = optionalBooleanField(input, "breakOnLoad");
     const appId = optionalStringField(input, "appId");
+
+    if (!deps.pluginRegistry.pluginByManifest(manifestPath)) {
+        return notRegisteredResult(manifestPath);
+    }
 
     await deps.service.ensureStarted();
     const sessions = deps.service.sessionsForManifest(manifestPath);

@@ -29,7 +29,10 @@ export class HookRequestError extends Error {
 /**
  * Reads and JSON-parses a request body (POST hooks only). An empty body
  * parses to `{}` so hooks with no required fields don't need a body at all.
+ * Non-empty bodies must carry `Content-Type: application/json` so browsers
+ * cannot send drive-by CORS simple requests (`text/plain`).
  * @throws {HookRequestError} (413) when the body exceeds {@link MAX_BODY_BYTES},
+ * (415) when a non-empty body does not have `Content-Type: application/json`,
  * or (400) when it isn't valid JSON.
  */
 export function readJsonBody(req: http.IncomingMessage): Promise<Record<string, unknown>> {
@@ -51,6 +54,10 @@ export function readJsonBody(req: http.IncomingMessage): Promise<Record<string, 
                 resolve({});
                 return;
             }
+            if (!hasJsonContentType(req)) {
+                reject(new HookRequestError("Content-Type must be \"application/json\".", 415));
+                return;
+            }
             try {
                 const parsed: unknown = JSON.parse(raw);
                 if (typeof parsed !== "object" || parsed === null || Array.isArray(parsed)) {
@@ -66,6 +73,15 @@ export function readJsonBody(req: http.IncomingMessage): Promise<Record<string, 
             reject(err);
         });
     });
+}
+
+function hasJsonContentType(req: http.IncomingMessage): boolean {
+    const header = req.headers["content-type"];
+    if (typeof header !== "string") {
+        return false;
+    }
+    const mediaType = header.split(";")[0]?.trim().toLowerCase();
+    return mediaType === "application/json";
 }
 
 /** Pulls a required, non-empty string field out of a parsed body/query, or throws a 400 `HookRequestError`. */

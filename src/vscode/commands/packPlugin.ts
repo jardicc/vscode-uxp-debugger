@@ -19,7 +19,7 @@ import { pickManifest } from "../ui/picks";
 
 export async function packPluginCommand(
     pluginRegistry: PluginRegistry,
-    output: vscode.OutputChannel,
+    output: vscode.LogOutputChannel,
 ): Promise<void> {
     const manifestPath = await pickManifest(pluginRegistry);
     if (!manifestPath) {
@@ -28,7 +28,7 @@ export async function packPluginCommand(
     await packManifest(manifestPath, output);
 }
 
-export async function packManifest(manifestPath: string, output: vscode.OutputChannel): Promise<void> {
+export async function packManifest(manifestPath: string, output: vscode.LogOutputChannel): Promise<void> {
     const parsed = validateManifestForPack(manifestPath);
 
     // Adobe only allows one HostDefinition at marketplace-submission time (an
@@ -69,7 +69,7 @@ export async function packManifest(manifestPath: string, output: vscode.OutputCh
     }
 
     packPluginFolder(pluginDir, saveUri.fsPath, manifestOverride);
-    output.appendLine(`Packed "${parsed.manifest.name}" to ${saveUri.fsPath}.`);
+    output.info(`Packed "${parsed.manifest.name}" to ${saveUri.fsPath}.`);
     void vscode.window.showInformationMessage(
         `UXP: Packed "${parsed.manifest.name}" to ${saveUri.fsPath}.`,
     );

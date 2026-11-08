@@ -34,7 +34,7 @@ export interface ToolDependencies {
     proxyRegistry: CdpProxyRegistry;
     pauseTracker: PauseTracker;
     context: vscode.ExtensionContext;
-    output: vscode.OutputChannel;
+    output: vscode.LogOutputChannel;
 }
 
 /**

@@ -17,7 +17,7 @@ function registryWith(overrides: Partial<RegistryData> = {}): RegistryData {
         v: 2,
         plugins: [{ manifestPath: MANIFEST, watch: false }],
         scripts: [{ scriptPath: SCRIPT, args: "", watch: false }],
-        breakOnLoad: { plugins: false, scripts: false },
+        breakOnLoad: { plugins: false },
         scriptTargetApp: undefined,
         compactView: false,
         ...overrides,
@@ -191,7 +191,7 @@ describe("buildPanelState", () => {
             inputsWith({
                 brokerStatus: "ownedElsewhere",
                 registry: registryWith({
-                    breakOnLoad: { plugins: true, scripts: false },
+                    breakOnLoad: { plugins: true },
                     scriptTargetApp: "PS",
                 }),
             }),

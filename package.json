@@ -2,7 +2,7 @@
   "name": "uxpdebugger",
   "displayName": "UXP Debugger",
   "description": "Load, reload and debug Adobe UXP plugins and scripts (Photoshop, InDesign, …) directly from VS Code — no Adobe UXP Developer Tools required.",
-  "version": "2.2.0",
+  "version": "2.3.0",
   "author": "Jaroslav Bereza",
   "publisher": "JaroslavBereza",
   "pricing": "Free",
@@ -716,6 +716,30 @@
         }
       ]
     },
+    "configuration": {
+      "title": "UXP Debugger",
+      "properties": {
+        "uxp.logLevel": {
+          "type": "string",
+          "enum": [
+            "off",
+            "error",
+            "warn",
+            "info",
+            "debug"
+          ],
+          "enumDescriptions": [
+            "Log nothing.",
+            "Log errors only.",
+            "Log warnings and errors.",
+            "Log informational messages, warnings and errors.",
+            "Log everything, including protocol messages (CDP and UXP broker traffic)."
+          ],
+          "default": "info",
+          "markdownDescription": "Minimum level the installed extension writes to the UXP Debugger and host app output channels. Development and E2E runs ignore this setting and always log everything. VS Code additionally hides messages below the output channel's own level, so to see `debug` messages also choose `Debug` via the gear icon in the Output panel (or `Developer: Set Log Level…`)."
+        }
+      }
+    },
     "debuggers": [
       {
         "type": "uxp",
@@ -753,7 +777,8 @@
         "type": "uxp-script",
         "label": "UXP Script",
         "languages": [
-          "javascript"
+          "javascript",
+          "typescript"
         ],
         "configurationAttributes": {
           "launch": {
@@ -792,28 +817,13 @@
           }
         ]
       }
-    ],
-    "configuration": {
-      "title": "UXP Debugger",
-      "properties": {
-        "uxp.manifests": {
-          "type": "array",
-          "items": {
-            "type": "string"
-          },
-          "default": [],
-          "scope": "resource",
-          "description": "Workspace-relative paths to UXP plugin manifest.json files. Kept in sync with the plugin list in the UXP Devtools panel."
-        }
-      }
-    }
+    ]
   },
   "scripts": {
     "vscode:prepublish": "npm run compile",
     "clean": "node -e \"require('node:fs').rmSync('dist',{recursive:true,force:true})\"",
     "precompile": "npm run clean",
-    "compile": "esbuild src/vscode/extension.ts --bundle --outfile=dist/extension.js --external:vscode --format=cjs --platform=node --minify && npm run compile:inspector && npm run compile:panel && npm run compile:devtools",
-    "compile:inspector": "esbuild src/vscode/inspector/host/mainHost.ts --bundle --outfile=dist/inspectorHost.js --format=iife --platform=browser",
+    "compile": "esbuild src/vscode/extension.ts --bundle --outfile=dist/extension.js --external:vscode --format=cjs --platform=node --minify && npm run compile:panel && npm run compile:devtools",
     "compile:panel": "esbuild src/vscode/panel/webview/index.tsx --bundle --outfile=dist/panel.js --format=iife --platform=browser --minify --loader:.ttf=file --define:process.env.NODE_ENV=\\\"production\\\"",
     "compile:devtools": "node scripts/bundle-devtools.mjs",
     "watch": "node scripts/watch.mjs",
@@ -836,6 +846,7 @@
     "@types/react-dom": "18.3.7",
     "@types/vscode": "^1.99.0",
     "@types/ws": "^8.18.2",
+    "@vscode/debugprotocol": "1.68.0",
     "@vscode/test-electron": "3.1.0",
     "@vscode/vsce": "^3.9.2",
     "devtools-protocol": "^0.0.1684464",
@@ -847,9 +858,11 @@
     "vitest": "^4.1.11"
   },
   "dependencies": {
+    "@jridgewell/trace-mapping": "0.3.31",
     "@vscode/codicons": "^0.0.46-36",
     "adm-zip": "^0.6.1",
     "clsx": "2.1.1",
+    "compare-versions": "6.1.1",
     "react": "18.3.1",
     "react-dom": "18.3.1",
     "ts-blank-space": "0.9.0",

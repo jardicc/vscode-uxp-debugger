@@ -8,6 +8,8 @@
  * id without any consumer noticing (ARCHITECTURE.md §5.4).
  */
 
+import { randomUUID } from "crypto";
+import * as path from "path";
 import { foldPathCase } from "../pathCase";
 import type { AppInfo } from "../protocol/types";
 
@@ -41,13 +43,12 @@ export interface PluginSession {
 }
 
 export class SessionRegistry {
-    private nextClientId = 1;
     private readonly byClientId_ = new Map<string, PluginSession>();
 
     add(input: Omit<PluginSession, "clientSessionId">): PluginSession {
         const session: PluginSession = {
             ...input,
-            clientSessionId: `uxp-session-${String(this.nextClientId++)}`,
+            clientSessionId: `uxp-session-${randomUUID()}`,
         };
         this.byClientId_.set(session.clientSessionId, session);
         return session;
@@ -76,9 +77,9 @@ export class SessionRegistry {
 
     /** Live sessions belonging to a given manifest file. */
     forManifest(manifestPath: string): PluginSession[] {
-        const key = foldPathCase(manifestPath);
+        const key = foldPathCase(path.normalize(manifestPath));
         return this.list().filter(
-            (s) => s.manifestPath !== undefined && foldPathCase(s.manifestPath) === key,
+            (s) => s.manifestPath !== undefined && foldPathCase(path.normalize(s.manifestPath)) === key,
         );
     }
 

@@ -3,7 +3,7 @@ import type { PauseTracker } from "../debug/pauseTracker";
 import type { UxpDebugSessionManager } from "../debug/UxpDebugSessionManager";
 import { raceWithTimeout, textResult } from "./toolResult";
 import { tryResolveAttachedSessionId } from "./toolSessionResolution";
-import { type DapVariable, positiveInteger, toVariableSummary } from "./variableInspection";
+import { positiveInteger, toVariableSummary } from "./variableInspection";
 
 interface GetVariableChildrenInput {
     variablesReference: number;
@@ -11,10 +11,6 @@ interface GetVariableChildrenInput {
     filter?: "named" | "indexed";
     start?: number;
     count?: number;
-}
-
-interface VariablesResponse {
-    variables?: DapVariable[];
 }
 
 /** Expands a DAP variable handle from the current paused state without evaluating code. */
@@ -25,7 +21,7 @@ export class UxpGetVariableChildrenTool implements vscode.LanguageModelTool<GetV
     constructor(
         private readonly debugManager: UxpDebugSessionManager,
         private readonly pauseTracker: PauseTracker,
-        private readonly output: vscode.OutputChannel,
+        private readonly output: vscode.LogOutputChannel,
     ) {}
 
     prepareInvocation(): vscode.PreparedToolInvocation {
@@ -65,7 +61,7 @@ export class UxpGetVariableChildrenTool implements vscode.LanguageModelTool<GetV
             return textResult(`Session "${sessionId}" has no active VS Code debug session yet — try again shortly.`);
         }
 
-        this.output.appendLine(
+        this.output.info(
             `[uxp_get_variable_children] session=${sessionId} variablesReference=${String(variablesReference)}`,
         );
         try {
@@ -75,7 +71,7 @@ export class UxpGetVariableChildrenTool implements vscode.LanguageModelTool<GetV
                     ...(filter ? { filter } : {}),
                     start,
                     count,
-                }) as Promise<VariablesResponse>,
+                }),
                 UxpGetVariableChildrenTool.REQUEST_TIMEOUT_MS,
                 "Timed out waiting for the debug adapter's variables response.",
             );
@@ -94,7 +90,7 @@ export class UxpGetVariableChildrenTool implements vscode.LanguageModelTool<GetV
         }
         catch (err) {
             const message = err instanceof Error ? err.message : String(err);
-            this.output.appendLine(`[uxp_get_variable_children] failed: ${message}`);
+            this.output.error(`[uxp_get_variable_children] failed: ${message}`);
             return textResult(
                 `Reading child variables failed: ${message}\nThe reference may be stale; call uxp_wait_for_pause and `
                 + "uxp_get_frame_variables again.",

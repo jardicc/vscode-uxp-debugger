@@ -6,6 +6,7 @@ vi.mock("../../src/core/vulcan/addonLoader", () => ({
 
 import { loadAddon } from "../../src/core/vulcan/addonLoader";
 import type { HostAppDescriptor } from "../../src/core/vulcan/hostAppCatalog";
+import { fakeLog } from "../fixtures/fakeVscode";
 import {
     resetControlAdapterGuardForTests,
     satisfiesMinVersion,
@@ -130,14 +131,14 @@ describe("VulcanHostAppController", () => {
     });
 
     it("launchSapCode() logs the callback error instead of swallowing it silently", async () => {
-        const logs: string[] = [];
+        const log = fakeLog();
         launchAppMock.mockImplementation((_sap, _focus, _args, cb) =>
             cb(new Error("boom"), false),
         );
-        const ctl = new VulcanHostAppController("/native", (m) => logs.push(m));
+        const ctl = new VulcanHostAppController("/native", log);
         const result = await ctl.launchSapCode("PHSP");
         expect(result).toBe(false);
-        expect(logs.some((l) => l.includes("callback error") && l.includes("boom"))).toBe(true);
+        expect(log.byLevel.error.some((l) => l.includes("callback error") && l.includes("boom"))).toBe(true);
     });
 
     it("launchSapCode() treats a non-strict-true ok as failure even without an error", async () => {
@@ -271,11 +272,29 @@ describe("satisfiesMinVersion", () => {
     });
 
     it("returns the first non-zero segment difference (later segments ignored)", () => {
-    // major matches (0), minor is lower (-1) -> fails even though patch is huge
+        // major matches (0), minor is lower (-1) -> fails even though patch is huge
         expect(satisfiesMinVersion("23.1.999", "23.2.0")).toBe(false);
     });
 
     it("a non-numeric segment after an equal prefix poisons the result to false", () => {
         expect(satisfiesMinVersion("26.0.0-beta", "26.0.0")).toBe(false);
+    });
+    it("rejects an installed version with fewer segments when minVersion has a non-zero trailing segment", () => {
+        expect(satisfiesMinVersion("15.4", "15.4.1")).toBe(false);
+        expect(satisfiesMinVersion("15", "15.0.1")).toBe(false);
+    });
+
+    it("accepts an installed version with fewer segments when minVersion has zero trailing segments", () => {
+        expect(satisfiesMinVersion("15.4", "15.4.0")).toBe(true);
+        expect(satisfiesMinVersion("23", "23.0.0")).toBe(true);
+    });
+
+    it("rejects invalid version strings safely without throwing", () => {
+        expect(satisfiesMinVersion("invalid", "23.2.0")).toBe(false);
+        expect(satisfiesMinVersion("23.2.0", "invalid")).toBe(false);
+    });
+
+    it("fails when installed has fewer segments than minVersion with a non-zero patch", () => {
+        expect(satisfiesMinVersion("15.4", "15.4.1")).toBe(false);
     });
 });

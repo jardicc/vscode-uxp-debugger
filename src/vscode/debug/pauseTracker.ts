@@ -26,8 +26,13 @@ export interface CancellationTokenLike {
     onCancellationRequested(listener: () => void): { dispose(): void };
 }
 
+interface PauseWaiter {
+    resolve(snapshot: PauseSnapshot): void;
+    reject(reason: Error): void;
+}
+
 export class PauseTracker {
-    private readonly waiters = new Map<string, ((snapshot: PauseSnapshot) => void)[]>();
+    private readonly waiters = new Map<string, PauseWaiter[]>();
     private readonly lastSnapshot = new Map<string, PauseSnapshot>();
 
     /** Called once a session's "stopped" event has been resolved into a snapshot. */
@@ -38,8 +43,8 @@ export class PauseTracker {
             return;
         }
         this.waiters.delete(sessionKey);
-        for (const resolve of waiting) {
-            resolve(snapshot);
+        for (const waiter of waiting) {
+            waiter.resolve(snapshot);
         }
     }
 
@@ -48,10 +53,18 @@ export class PauseTracker {
         this.lastSnapshot.delete(sessionKey);
     }
 
-    /** Drops all state for a session (its debug session ended). */
+    /** Drops all state for a session (its debug session ended) and rejects any pending waiters. */
     forgetSession(sessionKey: string): void {
         this.lastSnapshot.delete(sessionKey);
+        const waiting = this.waiters.get(sessionKey);
+        if (!waiting) {
+            return;
+        }
         this.waiters.delete(sessionKey);
+        const error = new Error("The debug session ended before the target paused.");
+        for (const waiter of waiting) {
+            waiter.reject(error);
+        }
     }
 
     getSnapshot(sessionKey: string): PauseSnapshot | undefined {
@@ -80,7 +93,7 @@ export class PauseTracker {
                 if (!current) {
                     return;
                 }
-                const idx = current.indexOf(onPause);
+                const idx = current.indexOf(waiter);
                 if (idx !== -1) {
                     current.splice(idx, 1);
                 }
@@ -100,12 +113,19 @@ export class PauseTracker {
                 );
             }, timeoutMs);
 
-            const onPause = (snapshot: PauseSnapshot): void => {
-                clearTimeout(timer);
-                cancelSub.dispose();
-                resolve(snapshot);
+            const waiter: PauseWaiter = {
+                resolve: (snapshot: PauseSnapshot): void => {
+                    clearTimeout(timer);
+                    cancelSub.dispose();
+                    resolve(snapshot);
+                },
+                reject: (err: Error): void => {
+                    clearTimeout(timer);
+                    cancelSub.dispose();
+                    reject(err);
+                },
             };
-            list.push(onPause);
+            list.push(waiter);
 
             const cancelSub = token.onCancellationRequested(() => {
                 clearTimeout(timer);

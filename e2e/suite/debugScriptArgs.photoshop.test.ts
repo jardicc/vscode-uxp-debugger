@@ -27,12 +27,12 @@ import type { ConnectedApp } from "../../src/core/broker/UxpBroker";
 import type { UxpDebuggerTestApi } from "../../src/vscode/extension";
 import {
     activateExtension,
+    autoResumeStartupPauses,
     describeLive,
     TIMEOUT_DEFAULT,
     detachStrandedScriptSessions,
     fixturePluginDir,
     scriptUri,
-    sleep,
     trackDapMessages,
     waitFor,
 } from "./liveHelpers";
@@ -78,6 +78,7 @@ async function runScriptAndCaptureArgs(
             result = { ok: false, error: output.slice(ARGS_ERROR_MARKER.length).trimEnd() };
         }
     });
+    const resumer = autoResumeStartupPauses();
 
     try {
         const session = await api.service.runScript(scriptUri.fsPath, app, userArgs);
@@ -101,6 +102,7 @@ async function runScriptAndCaptureArgs(
         return result.value;
     }
     finally {
+        resumer.dispose();
         disposable.dispose();
     }
 }
@@ -141,11 +143,9 @@ describeLive("Run script with arguments (live Photoshop)", function () {
     // SKIPPED: historical skip has no recorded rationale; keep these cases
     // pending repository-owner confirmation rather than silently enabling them.
     for (const { name, args } of cases) {
-        it.skip(`runs the script with ${name} and script.args matches what was sent`, async () => {
+        it(`runs the script with ${name} and script.args matches what was sent`, async () => {
             const received = await runScriptAndCaptureArgs(api, app, args);
             assert.deepStrictEqual(received, args);
-            // Photoshop has no readiness event after a script-heavy case.
-            await sleep(2000);
         });
     }
 });

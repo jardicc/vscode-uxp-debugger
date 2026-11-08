@@ -5,7 +5,8 @@
 - add new host apps support
 - feature to attach plugins without loading them via Debugger?
 - investigate Media Encoder launch hanging when the broker is already running
-- allow to fetch plugin/script entries from launch.json config? It contains all necessary data. Or would it be temporary only while workspace is opened?
+- allow to fetch plugin/script entries from launch.json config? It contains all necessary data. Or would it be temporary only while workspace is opened? (maybe store in launch.json by default and use pin icon button for transfer?)
+
 
 ## DONE
 

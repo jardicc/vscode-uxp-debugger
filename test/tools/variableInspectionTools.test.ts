@@ -10,6 +10,7 @@ vi.mock("vscode", () => ({
 }));
 
 import type * as vscode from "vscode";
+import { fakeLog } from "../fixtures/fakeVscode";
 import { PauseTracker } from "../../src/vscode/debug/pauseTracker";
 import type { UxpDebugSessionManager } from "../../src/vscode/debug/UxpDebugSessionManager";
 import { UxpGetFrameVariablesTool } from "../../src/vscode/tools/uxpGetFrameVariablesTool";
@@ -23,8 +24,8 @@ function resultText(result: vscode.LanguageModelToolResult): string {
     return (result as unknown as ToolResultBody).content[0].value;
 }
 
-function fakeOutput(): vscode.OutputChannel {
-    return { appendLine: vi.fn() } as unknown as vscode.OutputChannel;
+function fakeOutput(): vscode.LogOutputChannel {
+    return fakeLog();
 }
 
 function fakeManager(customRequest: ReturnType<typeof vi.fn>): UxpDebugSessionManager {

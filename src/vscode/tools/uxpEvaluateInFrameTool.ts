@@ -21,7 +21,7 @@ export class UxpEvaluateInFrameTool implements vscode.LanguageModelTool<Evaluate
 
     constructor(
         private readonly debugManager: UxpDebugSessionManager,
-        private readonly output: vscode.OutputChannel,
+        private readonly output: vscode.LogOutputChannel,
     ) {}
 
     prepareInvocation(
@@ -53,23 +53,23 @@ export class UxpEvaluateInFrameTool implements vscode.LanguageModelTool<Evaluate
             return textResult(`Session "${sessionId}" has no active VS Code debug session yet — try again shortly.`);
         }
 
-        this.output.appendLine(
+        this.output.info(
             `[uxp_evaluate_in_frame] session=${sessionId} frameId=${String(frameId)} expression=${expression}`,
         );
         try {
-            const result: unknown = await raceWithTimeout(
+            const result = await raceWithTimeout(
                 dapSession.customRequest("evaluate", { expression, frameId, context: "repl" }),
                 UxpEvaluateInFrameTool.EVALUATE_TIMEOUT_MS,
                 `Timed out after ${String(UxpEvaluateInFrameTool.EVALUATE_TIMEOUT_MS)}ms waiting for the debug adapter's `
                 + "\"evaluate\" response — it never replied. The target may have resumed since the last pause; call "
                 + "uxp_wait_for_pause again and retry with a fresh frameId.",
             );
-            this.output.appendLine(`[uxp_evaluate_in_frame] result: ${JSON.stringify(result)}`);
+            this.output.info(`[uxp_evaluate_in_frame] result: ${JSON.stringify(result)}`);
             return textResult(JSON.stringify(result, null, 2));
         }
         catch (err) {
             const message = err instanceof Error ? err.message : String(err);
-            this.output.appendLine(`[uxp_evaluate_in_frame] failed: ${message}`);
+            this.output.error(`[uxp_evaluate_in_frame] failed: ${message}`);
             return textResult(
                 `Evaluate failed: ${message}\n`
                 + "The target may have resumed since the last pause — call uxp_wait_for_pause again and retry "

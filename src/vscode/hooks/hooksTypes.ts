@@ -16,5 +16,5 @@ export interface HookDependencies {
     debugManager: UxpDebugSessionManager;
     proxyRegistry: CdpProxyRegistry;
     context: vscode.ExtensionContext;
-    output: vscode.OutputChannel;
+    output: vscode.LogOutputChannel;
 }

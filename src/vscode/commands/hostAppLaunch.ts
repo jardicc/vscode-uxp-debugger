@@ -6,7 +6,7 @@
 
 import * as vscode from "vscode";
 import { NativeAddonUnavailableError } from "../../core/errors";
-import { type HostAppDescriptor, HOST_APPS, isDebuggableVersion } from "../../core/vulcan/hostAppCatalog";
+import { findCatalogHostApp, type HostAppDescriptor, isDebuggableVersion, isSameHostApp } from "../../core/vulcan/hostAppCatalog";
 import { sleep } from "../../core/sleep";
 import type { IHostAppController } from "../../core/vulcan/IHostAppController";
 import type { UxpService } from "../UxpService";
@@ -34,11 +34,11 @@ const POST_CONNECT_SETTLE_MS = 3_000;
  */
 export async function resolveHostAppNotRunning(
     service: UxpService,
-    output: vscode.OutputChannel,
+    output: vscode.LogOutputChannel,
     requiredApps: string[],
 ): Promise<boolean> {
     const recognized = requiredApps
-        .map((id) => HOST_APPS.find((app) => app.value === id))
+        .map((id) => findCatalogHostApp(id))
         .filter((app): app is HostAppDescriptor => app !== undefined);
 
     if (recognized.length === 0) {
@@ -64,10 +64,10 @@ export async function resolveHostAppNotRunning(
  */
 export async function launchHostAppByValue(
     service: UxpService,
-    output: vscode.OutputChannel,
+    output: vscode.LogOutputChannel,
     appValue: string,
 ): Promise<{ debuggable: boolean } | undefined> {
-    const app = HOST_APPS.find((candidate) => candidate.value === appValue);
+    const app = findCatalogHostApp(appValue);
     if (!app) {
         void vscode.window.showInformationMessage(
             `UXP: "${appValue}" is not a launchable host application.`,
@@ -102,7 +102,7 @@ export async function launchHostAppByValue(
         return undefined;
     }
 
-    output.appendLine(`[hostapp] launching ${picked.sapCode}-${picked.version}`);
+    output.info(`[hostapp] launching ${picked.sapCode}-${picked.version}`);
     const launched = await launchCandidate(controller, picked);
     if (!launched) {
         void vscode.window.showErrorMessage(`UXP: Failed to launch ${app.name} ${picked.version}.`);
@@ -128,7 +128,7 @@ async function pickAppToLaunch(
 
 async function launchAndWaitFor(
     service: UxpService,
-    output: vscode.OutputChannel,
+    output: vscode.LogOutputChannel,
     app: HostAppDescriptor,
     requiredApps: string[],
 ): Promise<boolean> {
@@ -180,7 +180,7 @@ async function launchAndWaitFor(
         return false;
     }
 
-    output.appendLine(`[hostapp] launching ${picked.sapCode}-${picked.version}`);
+    output.info(`[hostapp] launching ${picked.sapCode}-${picked.version}`);
     const launched = await launchCandidate(controller, picked);
     if (!launched) {
         void vscode.window.showErrorMessage(`UXP: Failed to launch ${app.name} ${picked.version}.`);
@@ -252,12 +252,12 @@ async function pickVersion(
 
 async function waitForConnection(
     service: UxpService,
-    output: vscode.OutputChannel,
+    output: vscode.LogOutputChannel,
     app: HostAppDescriptor,
     requiredApps: string[],
 ): Promise<boolean> {
     const hasMatch = () =>
-        requiredApps.some((id) => service.connectedApps.some((connected) => connected.info.appId === id));
+        requiredApps.some((id) => service.connectedApps.some((connected) => isSameHostApp(connected.info.appId, id)));
 
     const connected = await vscode.window.withProgress(
         {
@@ -270,7 +270,7 @@ async function waitForConnection(
             if (!ok || token.isCancellationRequested) {
                 return ok;
             }
-            output.appendLine(
+            output.info(
                 `[hostapp] ${app.name} connected — settling ${String(POST_CONNECT_SETTLE_MS)}ms before retrying load`,
             );
             progress.report({ message: "connected, letting it finish starting up..." });
@@ -280,7 +280,7 @@ async function waitForConnection(
     );
 
     if (!connected) {
-        output.appendLine(`[hostapp] ${app.name} did not connect within ${String(CONNECT_TIMEOUT_MS)}ms`);
+        output.error(`[hostapp] ${app.name} did not connect within ${String(CONNECT_TIMEOUT_MS)}ms`);
         void vscode.window.showWarningMessage(
             `UXP: ${app.name} did not connect within ${String(CONNECT_TIMEOUT_MS / 1000)}s. `
             + "It may still be starting — run \"Load Plugin\" again in a moment.",

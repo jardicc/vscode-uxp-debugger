@@ -23,7 +23,7 @@ export class UxpResumeTool implements vscode.LanguageModelTool<ResumeInput> {
     constructor(
         private readonly debugManager: UxpDebugSessionManager,
         private readonly pauseTracker: PauseTracker,
-        private readonly output: vscode.OutputChannel,
+        private readonly output: vscode.LogOutputChannel,
     ) {}
 
     prepareInvocation(): vscode.PreparedToolInvocation {
@@ -50,7 +50,7 @@ export class UxpResumeTool implements vscode.LanguageModelTool<ResumeInput> {
             // can drop stackTrace right after a pause — see probePauseSnapshot).
             snapshot = await probePauseSnapshot(dapSession);
             if (snapshot) {
-                this.output.appendLine("[uxp_resume] recovered pause state via probe");
+                this.output.info("[uxp_resume] recovered pause state via probe");
                 this.pauseTracker.recordPause(sessionId, snapshot);
             }
         }
@@ -61,7 +61,7 @@ export class UxpResumeTool implements vscode.LanguageModelTool<ResumeInput> {
             );
         }
 
-        this.output.appendLine(`[uxp_resume] session=${sessionId} threadId=${String(snapshot.threadId)}`);
+        this.output.info(`[uxp_resume] session=${sessionId} threadId=${String(snapshot.threadId)}`);
         try {
             await raceWithTimeout(
                 dapSession.customRequest("continue", { threadId: snapshot.threadId }),
@@ -69,12 +69,12 @@ export class UxpResumeTool implements vscode.LanguageModelTool<ResumeInput> {
                 `Timed out after ${String(UxpResumeTool.CONTINUE_TIMEOUT_MS)}ms waiting for the debug adapter's "continue" `
                 + "response — it never replied.",
             );
-            this.output.appendLine(`[uxp_resume] resumed threadId=${String(snapshot.threadId)}`);
+            this.output.info(`[uxp_resume] resumed threadId=${String(snapshot.threadId)}`);
             return textResult(`Resumed. Call uxp_wait_for_pause again if you expect it to hit another breakpoint.`);
         }
         catch (err) {
             const message = err instanceof Error ? err.message : String(err);
-            this.output.appendLine(`[uxp_resume] failed: ${message}`);
+            this.output.error(`[uxp_resume] failed: ${message}`);
             return textResult(`Resume failed: ${message}`);
         }
     }

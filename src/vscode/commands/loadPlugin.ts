@@ -25,7 +25,7 @@ import { errorWithRetryDialog } from "../ui/dialogs";
 export async function loadWithDialogs(
     service: UxpService,
     manifestPath: string,
-    output: vscode.OutputChannel,
+    output: vscode.LogOutputChannel,
     breakOnStart = false,
     targetAppId?: string,
 ): Promise<LoadResult | undefined> {
@@ -54,13 +54,13 @@ export async function loadWithDialogs(
                 }
                 return undefined;
             }
-            output.appendLine(`Load failed: ${String(err instanceof Error ? err.message : err)}`);
+            output.error(`Load failed: ${String(err instanceof Error ? err.message : err)}`);
             throw err;
         }
     }
 }
 
-export function reportLoadResult(result: LoadResult, output: vscode.OutputChannel): void {
+export function reportLoadResult(result: LoadResult, output: vscode.LogOutputChannel): void {
     const loadedInto = result.sessions
         .map((s) => `${s.app.appName} ${s.app.appVersion}`)
         .join(", ");
@@ -69,7 +69,7 @@ export function reportLoadResult(result: LoadResult, output: vscode.OutputChanne
 
     for (const failure of result.failures) {
         const appLabel = `${failure.app.info.appName} ${failure.app.info.appVersion}`;
-        output.appendLine(`Load failed for ${appLabel}: ${failure.error.message}`);
+        output.error(`Load failed for ${appLabel}: ${failure.error.message}`);
         void vscode.window.showWarningMessage(
             `UXP: Loading into ${appLabel} failed — ${failure.error.message}`,
         );
@@ -79,7 +79,7 @@ export function reportLoadResult(result: LoadResult, output: vscode.OutputChanne
 export async function loadPluginCommand(
     service: UxpService,
     pluginRegistry: PluginRegistry,
-    output: vscode.OutputChannel,
+    output: vscode.LogOutputChannel,
 ): Promise<void> {
     const manifestPath = await pickManifest(pluginRegistry);
     if (!manifestPath) {
@@ -102,7 +102,7 @@ export async function loadPluginBreakOnStartCommand(
     service: UxpService,
     pluginRegistry: PluginRegistry,
     debugManager: UxpDebugSessionManager,
-    output: vscode.OutputChannel,
+    output: vscode.LogOutputChannel,
 ): Promise<void> {
     const manifestPath = await pickManifest(pluginRegistry);
     if (!manifestPath) {

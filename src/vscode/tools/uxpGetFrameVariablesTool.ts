@@ -4,8 +4,6 @@ import type { UxpDebugSessionManager } from "../debug/UxpDebugSessionManager";
 import { raceWithTimeout, textResult } from "./toolResult";
 import { tryResolveAttachedSessionId } from "./toolSessionResolution";
 import {
-    type DapScope,
-    type DapVariable,
     positiveInteger,
     scopeSortRank,
     toVariableSummary,
@@ -18,14 +16,6 @@ interface GetFrameVariablesInput {
     maxVariablesPerScope?: number;
 }
 
-interface ScopesResponse {
-    scopes?: DapScope[];
-}
-
-interface VariablesResponse {
-    variables?: DapVariable[];
-}
-
 /** Reads a paused frame's scopes and top-level variables without evaluating code. */
 export class UxpGetFrameVariablesTool implements vscode.LanguageModelTool<GetFrameVariablesInput> {
     private static readonly REQUEST_TIMEOUT_MS = 15_000;
@@ -34,7 +24,7 @@ export class UxpGetFrameVariablesTool implements vscode.LanguageModelTool<GetFra
     constructor(
         private readonly debugManager: UxpDebugSessionManager,
         private readonly pauseTracker: PauseTracker,
-        private readonly output: vscode.OutputChannel,
+        private readonly output: vscode.LogOutputChannel,
     ) {}
 
     prepareInvocation(
@@ -81,15 +71,15 @@ export class UxpGetFrameVariablesTool implements vscode.LanguageModelTool<GetFra
             return textResult(`Session "${sessionId}" has no active VS Code debug session yet — try again shortly.`);
         }
 
-        this.output.appendLine(`[uxp_get_frame_variables] session=${sessionId} frameId=${String(frameId)}`);
+        this.output.info(`[uxp_get_frame_variables] session=${sessionId} frameId=${String(frameId)}`);
         try {
             const scopeReply = await raceWithTimeout(
-                dapSession.customRequest("scopes", { frameId }) as Promise<ScopesResponse>,
+                dapSession.customRequest("scopes", { frameId }),
                 UxpGetFrameVariablesTool.REQUEST_TIMEOUT_MS,
                 "Timed out waiting for the debug adapter's scopes response.",
             );
             const scopes = (Array.isArray(scopeReply.scopes) ? scopeReply.scopes : [])
-                .filter((scope) => options.input.includeExpensive === true || scope.expensive !== true)
+                .filter((scope) => options.input.includeExpensive === true || !scope.expensive)
                 .sort((left, right) => scopeSortRank(left) - scopeSortRank(right));
 
             const summaries = [];
@@ -103,18 +93,18 @@ export class UxpGetFrameVariablesTool implements vscode.LanguageModelTool<GetFra
                                 variablesReference,
                                 start: 0,
                                 count: maxVariables,
-                            }) as Promise<VariablesResponse>,
+                            }),
                             UxpGetFrameVariablesTool.REQUEST_TIMEOUT_MS,
                             `Timed out waiting for variables in scope "${typeof scope.name === "string" ? scope.name : ""}".`,
                         )
-                    : {};
+                    : { variables: [] };
                 const variables = Array.isArray(variableReply.variables) ? variableReply.variables : [];
                 summaries.push({
                     name: typeof scope.name === "string" ? scope.name : "",
                     ...(typeof scope.presentationHint === "string"
                         ? { presentationHint: scope.presentationHint }
                         : {}),
-                    expensive: scope.expensive === true,
+                    expensive: scope.expensive,
                     variablesReference,
                     ...(typeof scope.namedVariables === "number" ? { namedVariables: scope.namedVariables } : {}),
                     ...(typeof scope.indexedVariables === "number" ? { indexedVariables: scope.indexedVariables } : {}),
@@ -132,7 +122,7 @@ export class UxpGetFrameVariablesTool implements vscode.LanguageModelTool<GetFra
         }
         catch (err) {
             const message = err instanceof Error ? err.message : String(err);
-            this.output.appendLine(`[uxp_get_frame_variables] failed: ${message}`);
+            this.output.error(`[uxp_get_frame_variables] failed: ${message}`);
             return textResult(
                 `Reading frame variables failed: ${message}\nCall uxp_wait_for_pause again if the target resumed.`,
             );

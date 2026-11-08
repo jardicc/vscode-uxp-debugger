@@ -116,4 +116,71 @@ describe("CDT tunnel", () => {
         await harness.broker.unloadPlugin(session.clientSessionId);
         await closed;
     });
+
+    it("generates UUID-based clientSessionId values instead of predictable sequential integers", async () => {
+        harness = await startBrokerHarness();
+        const { connected } = await harness.connectApp();
+        const session = await harness.broker.loadPlugin(
+            connected.connectionId,
+            "C:\\plugins\\demo",
+            "C:\\plugins\\demo\\manifest.json",
+            MANIFEST,
+        );
+
+        expect(session.clientSessionId).toMatch(
+            /^uxp-session-[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i,
+        );
+    });
+
+    it("rejects WebSocket upgrades carrying a browser Origin header (CSWSH protection)", async () => {
+        harness = await startBrokerHarness();
+        const { connected } = await harness.connectApp();
+        const session = await harness.broker.loadPlugin(
+            connected.connectionId,
+            "C:\\plugins\\demo",
+            "C:\\plugins\\demo\\manifest.json",
+            MANIFEST,
+        );
+
+        await expect(
+            new Promise<WebSocket>((resolve, reject) => {
+                const ws = new WebSocket(`ws://127.0.0.1:${harness!.port}/socket/cdt/${session.clientSessionId}`, {
+                    origin: "https://evil.example",
+                });
+                ws.once("open", () => resolve(ws));
+                ws.once("error", reject);
+            }),
+        ).rejects.toThrow(/403/);
+
+        await expect(
+            new Promise<WebSocket>((resolve, reject) => {
+                const ws = new WebSocket(`ws://127.0.0.1:${harness!.port}/socket/app`, {
+                    origin: "https://evil.example",
+                });
+                ws.once("open", () => resolve(ws));
+                ws.once("error", reject);
+            }),
+        ).rejects.toThrow(/403/);
+    });
+
+    it("rejects WebSocket upgrades with a non-loopback Host header (DNS-rebinding protection)", async () => {
+        harness = await startBrokerHarness();
+        const { connected } = await harness.connectApp();
+        const session = await harness.broker.loadPlugin(
+            connected.connectionId,
+            "C:\\plugins\\demo",
+            "C:\\plugins\\demo\\manifest.json",
+            MANIFEST,
+        );
+
+        await expect(
+            new Promise<WebSocket>((resolve, reject) => {
+                const ws = new WebSocket(`ws://127.0.0.1:${harness!.port}/socket/cdt/${session.clientSessionId}`, {
+                    headers: { Host: "attacker.example:14001" },
+                });
+                ws.once("open", () => resolve(ws));
+                ws.once("error", reject);
+            }),
+        ).rejects.toThrow(/403/);
+    });
 });

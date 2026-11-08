@@ -9,7 +9,7 @@ import { UxpError } from "../../core/errors";
 import { OperationCancelledError } from "../UxpService";
 
 export async function runUxpCommand(
-    output: vscode.OutputChannel,
+    output: vscode.LogOutputChannel,
     label: string,
     action: () => Promise<void>,
 ): Promise<void> {
@@ -21,9 +21,9 @@ export async function runUxpCommand(
             return;
         }
         const message = err instanceof Error ? err.message : String(err);
-        output.appendLine(`[${label}] Error: ${message}`);
+        output.error(`[${label}] Error: ${message}`);
         if (err instanceof Error && err.stack && !(err instanceof UxpError)) {
-            output.appendLine(err.stack);
+            output.error(err.stack);
         }
         void vscode.window.showErrorMessage(`UXP: ${message}`);
     }

@@ -19,6 +19,18 @@ import { activateExtension, describeLive, TIMEOUT_MULTI_SESSION, waitFor } from 
 
 const RELOAD_MARKER = "uxp-e2e-watch fixture loaded";
 
+/** Runs `action` every second until `condition` holds, or rejects after `timeoutMs`. */
+async function touchUntil(action: () => void, condition: () => boolean, timeoutMs: number): Promise<void> {
+    const start = Date.now();
+    while (!condition()) {
+        if (Date.now() - start > timeoutMs) {
+            throw new Error("timed out waiting for the watcher to react");
+        }
+        action();
+        await waitFor(condition, 1_000).catch(() => undefined);
+    }
+}
+
 function writeTempPlugin(dir: string): { manifestPath: string; scriptPath: string } {
     fs.mkdirSync(dir, { recursive: true });
     const manifestPath = path.join(dir, "manifest.json");
@@ -87,8 +99,15 @@ describeLive("Watch mode: file changes trigger refresh/reload (live Photoshop)",
 
             // Non-special file change (index.js) — expect a fast in-place refresh:
             // the script re-runs (log line reappears) but the session id is unchanged.
-            fs.appendFileSync(scriptPath, "// touched by e2e watch test (refresh)\n");
-            await waitFor(() => markerCount() > countAfterLoad, 15_000);
+            // `isWatching` only means the watcher was requested; VS Code registers it
+            // asynchronously, so an early write can be missed — keep touching until
+            // the refresh shows up.
+            let touches = 0;
+            await touchUntil(
+                () => fs.appendFileSync(scriptPath, `// touched by e2e watch test (refresh ${String(++touches)})\n`),
+                () => markerCount() > countAfterLoad,
+                15_000,
+            );
             assert.deepStrictEqual(
                 api.service.sessionsForManifest(manifestPath).map((s) => s.clientSessionId),
                 [originalSessionId],

@@ -68,4 +68,58 @@ describe("broker takeover route", () => {
 
         await expect(requestTakeover(port, 300)).resolves.toBe(false);
     });
+
+    it("rejects cross-origin browser POST with 403 and leaves the broker running", async () => {
+        const broker = new UxpBroker({ announcer: new NullAnnouncer() });
+        brokers.push(broker);
+        const port = await broker.start(0);
+
+        const status = await new Promise<number>((resolve, reject) => {
+            const req = http.request(
+                {
+                    host: "127.0.0.1",
+                    port,
+                    path: "/__uxp_debugger__/takeover",
+                    method: "POST",
+                    headers: { Origin: "https://evil.example" },
+                },
+                (res) => {
+                    res.resume();
+                    res.on("end", () => resolve(res.statusCode ?? 0));
+                },
+            );
+            req.on("error", reject);
+            req.end();
+        });
+
+        expect(status).toBe(403);
+        expect(broker.isRunning).toBe(true);
+    });
+
+    it("rejects DNS-rebinding Host headers with 403 and leaves the broker running", async () => {
+        const broker = new UxpBroker({ announcer: new NullAnnouncer() });
+        brokers.push(broker);
+        const port = await broker.start(0);
+
+        const status = await new Promise<number>((resolve, reject) => {
+            const req = http.request(
+                {
+                    host: "127.0.0.1",
+                    port,
+                    path: "/__uxp_debugger__/takeover",
+                    method: "POST",
+                    headers: { Host: "attacker.example:14001" },
+                },
+                (res) => {
+                    res.resume();
+                    res.on("end", () => resolve(res.statusCode ?? 0));
+                },
+            );
+            req.on("error", reject);
+            req.end();
+        });
+
+        expect(status).toBe(403);
+        expect(broker.isRunning).toBe(true);
+    });
 });

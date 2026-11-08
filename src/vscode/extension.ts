@@ -36,7 +36,7 @@ import { PluginWatchManager } from "./panel/PluginWatchManager";
 import { PluginRegistry } from "./panel/PluginRegistry";
 import { CdpProxyRegistry } from "./proxy/CdpProxyRegistry";
 import { registerUxpLanguageModelTools, type UxpLanguageModelTools } from "./tools/registerTools";
-import { HostLogChannels } from "./ui/output";
+import { createLogLevelProvider, createUxpOutputChannel, HostLogChannels } from "./ui/output";
 
 function setBoolContext(key: string, value: boolean): void {
     void vscode.commands.executeCommand("setContext", key, value);
@@ -89,25 +89,18 @@ export interface UxpDebuggerTestApi {
 }
 
 export function activate(context: vscode.ExtensionContext): UxpDebuggerTestApi {
-    const output = vscode.window.createOutputChannel("UXP Debugger");
-    output.appendLine("UXP Debugger extension activated.");
-
-    // e2e/ diagnostics only: OutputChannel has no read-back API, so when the
-    // live E2E test is running, tee every line to stdout (visible in the
-    // `npm run test:e2e` terminal) as well. No effect on normal usage.
-    if (process.env.UXP_E2E_PHOTOSHOP === "1") {
-        const originalAppendLine = output.appendLine.bind(output);
-        output.appendLine = (value: string) => {
-            originalAppendLine(value);
-            // eslint-disable-next-line no-console -- E2E diagnostics must be visible in the test runner.
-            console.log(`[UXP Debugger] ${value}`);
-        };
-    }
+    const isE2e = process.env.UXP_E2E_PHOTOSHOP === "1" || Boolean(process.env.UXP_E2E_LOG_FILE);
+    const getMinLevel = createLogLevelProvider(context, isE2e);
+    const output = createUxpOutputChannel("UXP Debugger", {
+        teeToConsolePrefix: isE2e ? "[UXP Debugger]" : undefined,
+        getMinLevel,
+    });
+    output.info("UXP Debugger extension activated.");
 
     const service = new UxpService(context, output);
     const proxyRegistry = new CdpProxyRegistry(output);
     const debugManager = new UxpDebugSessionManager(service, proxyRegistry, output);
-    const hostLogs = new HostLogChannels();
+    const hostLogs = new HostLogChannels(isE2e, getMinLevel);
     const pluginRegistry = new PluginRegistry(context.globalState);
     // Absolute paths are machine-specific — keep the registry out of Settings Sync.
     context.globalState.setKeysForSync([]);
@@ -185,7 +178,7 @@ export function activate(context: vscode.ExtensionContext): UxpDebuggerTestApi {
     // Fire-and-forget: never blocks activation, never shows a dialog — any
     // failure only updates `brokerState`/`brokerError` for the panel.
     service.startDiscoverySilently().catch((err: unknown) => {
-        output.appendLine(
+        output.error(
             `[broker] auto-start threw unexpectedly: ${err instanceof Error ? err.message : String(err)}`,
         );
     });
@@ -301,7 +294,9 @@ export function activate(context: vscode.ExtensionContext): UxpDebuggerTestApi {
         await setCompactViewContext(false);
     });
 
-    register("uxp._exp_hostAppMethods", () => expHostAppMethodsCommand(service, output));
+    if (context.extensionMode === vscode.ExtensionMode.Development) {
+        register("uxp._exp_hostAppMethods", () => expHostAppMethodsCommand(service, output));
+    }
 
     // Start/Stop UXP Debugger (view/title icon pair + Command Palette), same
     // two-command-plus-context-key pattern as the compact-view toggle above.

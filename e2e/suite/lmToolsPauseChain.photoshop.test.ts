@@ -13,9 +13,7 @@
  * very first statement — confirmed live (2026-08-22) that a breakpoint on a
  * breakOnStart entry script's LITERAL FIRST line can lose the race against
  * js-debug's source-map processing and never bind before the script runs to
- * completion (the instrumentation-breakpoint pause gets auto-resumed as
- * "spurious" before js-debug re-issues its predictive `setBreakpointByUrl`
- * for the just-parsed script). A line a couple of statements in gives that
+ * completion. A line a couple of statements in gives that
  * processing enough of a window. Not a fix attempt here, just avoiding a
  * known-flaky setup for a test whose actual goal is the 4 LM tools.
  *
@@ -76,8 +74,17 @@ describeLive("LM tools: set breakpoint -> wait_for_pause -> evaluate_in_frame ->
 
         await attachAndAssertStarted(api, session, fixturePluginSourcemapDir);
 
-        const waitResult = await invokeTool(api.tools.waitForPause, { timeoutMs: 15_000 });
-        const snapshot = JSON.parse(toolResultText(waitResult)) as PauseSnapshot & { sessionId: string };
+        // Break on load first pauses on the startup statement (before the
+        // breakpoint is reached) — resume until the paused frame is the breakpoint.
+        let snapshot!: PauseSnapshot & { sessionId: string };
+        for (let attempt = 0; attempt < 3; attempt++) {
+            const waitResult = await invokeTool(api.tools.waitForPause, { timeoutMs: 15_000 });
+            snapshot = JSON.parse(toolResultText(waitResult)) as PauseSnapshot & { sessionId: string };
+            if (snapshot.frames[0]?.line === BREAKPOINT_LINE) {
+                break;
+            }
+            await invokeTool(api.tools.resume, {});
+        }
         assert.strictEqual(snapshot.sessionId, session.clientSessionId);
         assert.ok(snapshot.frames.length > 0, "expected at least one paused frame");
         const topFrame = snapshot.frames[0];

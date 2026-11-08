@@ -6,7 +6,7 @@
 
 import clsx from "clsx";
 import type { ReactNode } from "react";
-import { HOST_APPS, type RunningApp } from "../../../core/vulcan/hostAppCatalog";
+import { HOST_APPS, isSameHostApp, type RunningApp } from "../../../core/vulcan/hostAppCatalog";
 import type { ConnectedAppView, PanelState } from "../panelProtocol";
 import { BrokerStatusBanner } from "./BrokerStatus";
 import { IconButton, SectionHeader, Spinner } from "./components";
@@ -55,22 +55,25 @@ export function AppsSection({
 }
 
 function getAppStatus(appId: string, state: AppsInfo): AppStatus {
-    const connected = state.connectedApps.find((a) => a.appId === appId);
+    const connected = state.connectedApps.find((a) => isSameHostApp(a.appId, appId));
     // Vulcan also lists the connected instance — only the others are extra info.
-    const otherRunning = state.runningApps.filter((a) => a.appId === appId && a.version !== connected?.version);
+    const otherRunning = state.runningApps.filter(
+        (a) => isSameHostApp(a.appId, appId) && a.version !== connected?.version,
+    );
     const running = !!connected || otherRunning.length > 0;
     // A supported connection wins; otherwise an unsupported connected/running version is flagged.
     const unsupported = connected
         ? !!connected.unsupportedReason
         : otherRunning.some((a) => a.unsupportedReason);
     // undefined installedApps = detection unavailable — don't assume "not installed".
-    const notInstalled = !running && !!state.installedApps && !state.installedApps.includes(appId);
+    const notInstalled
+        = !running && !!state.installedApps && !state.installedApps.some((id) => isSameHostApp(id, appId));
 
     return {
         connected,
         otherRunning,
         running,
-        launching: state.launchingApps.includes(appId),
+        launching: state.launchingApps.some((id) => isSameHostApp(id, appId)),
         unsupported,
         notInstalled,
     };

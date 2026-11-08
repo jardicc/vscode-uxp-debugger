@@ -31,15 +31,21 @@ Base URL used in the examples below: `http://127.0.0.1:14001`
 
 ## Request / response conventions
 
-- All mutating endpoints are `POST` with a JSON body (`Content-Type` is not
-  checked, but the body must parse as a JSON object). An endpoint with no
-  required fields also accepts an empty body.
+- All mutating endpoints are `POST` with a JSON body (`Content-Type: application/json`
+  is required whenever a body is present, and the body must parse as a JSON object).
+  An endpoint with no required fields also accepts an empty body.
+- Every endpoint requires the target `manifestPath` to be registered in the UXP
+  panel's plugin list (`404` if not registered).
+- Browser cross-origin requests (`Origin` header or `Sec-Fetch-Site: cross-site`)
+  and non-loopback `Host` headers are rejected with `403 Forbidden`.
 - Every response is JSON with an HTTP status code:
   - `200` — success (see each endpoint for the exact shape; always includes `"ok": true`).
   - `400` — bad request (missing/invalid field).
-  - `404` — unknown route, or (for `/watch*` and `/pack`) the plugin isn't registered in the panel.
+  - `403` — forbidden (`Host` is not loopback or request includes a browser `Origin` / `Sec-Fetch-Site: cross-site`).
+  - `404` — unknown route, or the plugin isn't registered in the panel.
   - `409` — ambiguous: more than one connected app matches the manifest, pass `appId`.
   - `413` — request body too large (>1 MB).
+  - `415` — unsupported media type (non-empty `POST` body without `Content-Type: application/json`).
   - `502` — the host app rejected the operation (e.g. refresh/unload failed on a live session).
   - `503` — no connected app matches the manifest's required host app(s).
   - `504` — the request to the host app timed out.
@@ -134,9 +140,10 @@ tool, without any interactive prompts.
 { "ok": true, "sessions": ["<clientSessionId>"], "failures": [] }
 ```
 
-**Common errors**: `503` (no matching app running/connected — start it and
-retry), `409` (ambiguous — pass `appId`, the error message lists the
-candidates), `504` (host app didn't answer in time — safe to retry).
+**Common errors**: `404` (plugin not registered in the panel — add it there first),
+`503` (no matching app running/connected — start it and retry), `409`
+(ambiguous — pass `appId`, the error message lists the candidates), `504`
+(host app didn't answer in time — safe to retry).
 
 ---
 
@@ -162,8 +169,9 @@ not an error.
 
 ### `POST /pack` — build the distributable `.ccx`
 
-Validates `manifest.json`, then zips the plugin folder (no exclusion rules
-— the whole folder is packed as-is, same as the panel's "Pack…" action).
+Validates `manifest.json`, then zips the plugin folder (excluding `.git`,
+`.DS_Store`, `.env*`, and `outputPath` itself, same as the panel's "Pack…"
+action).
 
 Only plugins **already registered in the panel's list** can be packed, and
 `outputPath` **must end with `.ccx`** — this endpoint is unauthenticated
@@ -188,8 +196,8 @@ manifests.
 validation, or the host is ambiguous and `host` wasn't given (the error
 lists the available host names).
 
-**404** if `manifestPath` isn't registered in the panel — same rule as the
-`/watch*` endpoints: add it there first, then retry.
+**404** if `manifestPath` isn't registered in the panel — same rule as all
+other hook endpoints: add it there first, then retry.
 
 ---
 

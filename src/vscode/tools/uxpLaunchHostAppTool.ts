@@ -1,6 +1,6 @@
 import type * as vscode from "vscode";
 import { NativeAddonUnavailableError } from "../../core/errors";
-import { HOST_APPS } from "../../core/vulcan/hostAppCatalog";
+import { findCatalogHostApp, HOST_APPS } from "../../core/vulcan/hostAppCatalog";
 import type { UxpService } from "../UxpService";
 import { textResult } from "./toolResult";
 
@@ -38,7 +38,7 @@ export class UxpLaunchHostAppTool implements vscode.LanguageModelTool<LaunchHost
         options: vscode.LanguageModelToolInvocationOptions<LaunchHostAppInput>,
     ): Promise<vscode.LanguageModelToolResult> {
         const { appId } = options.input;
-        const app = HOST_APPS.find((candidate) => candidate.value === appId);
+        const app = findCatalogHostApp(appId);
         if (!app) {
             return textResult(
                 `"${appId}" is not a recognized host app id. Known ids: ${HOST_APPS.map((a) => a.value).join(", ")}.`,

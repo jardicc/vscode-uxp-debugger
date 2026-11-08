@@ -1,6 +1,7 @@
 // Adapted from microsoft/vscode-edge-devtools (src/devtoolsPanel.ts).
 // Copyright (c) Microsoft Corporation. Licensed under the MIT License.
 
+import * as crypto from "crypto";
 import * as path from "path";
 import * as vscode from "vscode";
 import type { PluginSession } from "../../core/broker/SessionRegistry";
@@ -8,7 +9,11 @@ import { TypedEvent } from "../../core/events";
 import { DEFAULT_BROKER_PORT } from "../../core/protocol/types";
 import type { CdpProxyRegistry } from "../proxy/CdpProxyRegistry";
 import { CdpProxyServer } from "../proxy/cdpProxy";
-import { INSPECTOR_STATIC_PATH_PREFIX } from "./inspectorStaticServer";
+import {
+    buildWebviewClipboardRelayScript,
+    isInspectorCopyMessage,
+} from "./inspectorClipboardShim";
+import { INSPECTOR_ENTRYPOINT_HTML, INSPECTOR_STATIC_PATH_PREFIX } from "./inspectorStaticServer";
 
 /**
  * Self-hosted, trimmed DevTools-frontend build (Elements + Network only — see
@@ -19,7 +24,7 @@ import { INSPECTOR_STATIC_PATH_PREFIX } from "./inspectorStaticServer";
  * native `?ws=` query param.
  */
 const INSPECTOR_ORIGIN = `http://127.0.0.1:${String(DEFAULT_BROKER_PORT)}`;
-const INSPECTOR_ENTRYPOINT = `${INSPECTOR_ORIGIN}${INSPECTOR_STATIC_PATH_PREFIX}uxp_inspector_app.html`;
+const INSPECTOR_ENTRYPOINT = `${INSPECTOR_ORIGIN}${INSPECTOR_STATIC_PATH_PREFIX}${INSPECTOR_ENTRYPOINT_HTML}`;
 
 /**
  * The HTML/CSS inspector: a webview embedding the bundled DevTools
@@ -54,7 +59,7 @@ export class UxpInspectorPanel {
         session: PluginSession,
         proxyRegistry: CdpProxyRegistry,
         targetWsUrl: string,
-        output: vscode.OutputChannel,
+        output: vscode.LogOutputChannel,
     ): Promise<void> {
         const existing = UxpInspectorPanel.instances.get(session.clientSessionId);
         if (existing) {
@@ -86,7 +91,7 @@ export class UxpInspectorPanel {
         session: PluginSession,
         proxyRegistry: CdpProxyRegistry,
         targetWsUrl: string,
-        output: vscode.OutputChannel,
+        output: vscode.LogOutputChannel,
     ): Promise<void> {
         const sourceRootDir = session.manifestPath
             ? path.dirname(session.manifestPath)
@@ -135,11 +140,21 @@ export class UxpInspectorPanel {
         private readonly session: PluginSession,
         private readonly proxyRegistry: CdpProxyRegistry,
         private readonly proxyPort: number,
-        private readonly output: vscode.OutputChannel,
+        private readonly output: vscode.LogOutputChannel,
     ) {
         this.panel.onDidDispose(() => {
             this.dispose();
         }, this, this.disposables);
+
+        this.panel.webview.onDidReceiveMessage(
+            (message: unknown) => {
+                if (isInspectorCopyMessage(message)) {
+                    void vscode.env.clipboard.writeText(message.text);
+                }
+            },
+            this,
+            this.disposables,
+        );
 
         // Re-render (new theme param) when the user switches color themes.
         vscode.workspace.onDidChangeConfiguration(
@@ -166,11 +181,11 @@ export class UxpInspectorPanel {
             d.dispose();
         }
         this.proxyRegistry.release(this.session.clientSessionId).catch((err: unknown) => {
-            this.output.appendLine(
+            this.output.error(
                 `[inspector] Failed to release the CDP proxy: ${err instanceof Error ? err.message : String(err)}`,
             );
         });
-        this.output.appendLine(`[inspector] Panel for "${this.session.name}" closed.`);
+        this.output.info(`[inspector] Panel for "${this.session.name}" closed.`);
     }
 
     // ---------------------------------------------------------------------
@@ -182,10 +197,10 @@ export class UxpInspectorPanel {
     }
 
     private getHtmlForWebview(): string {
-        const webview = this.panel.webview;
         // Native ws:// connection straight to the CDP proxy's `/panel` endpoint.
         const wsTarget = `127.0.0.1:${String(this.proxyPort)}${CdpProxyServer.PANEL_PATH}`;
         const frontendUrl = `${INSPECTOR_ENTRYPOINT}?ws=${encodeURIComponent(wsTarget)}&panel=elements`;
+        const nonce = crypto.randomBytes(16).toString("base64");
 
         return `<!doctype html>
 <html>
@@ -197,17 +212,12 @@ export class UxpInspectorPanel {
     #devtools-frame { width: 100%; height: 100%; border: 0; }
   </style>
   <meta http-equiv="Content-Security-Policy"
-    content="default-src;
-    img-src 'self' data: ${webview.cspSource};
-    style-src 'self' 'unsafe-inline' ${webview.cspSource};
-    script-src 'self' 'unsafe-eval' ${webview.cspSource};
-    frame-src 'self' ${webview.cspSource} ${INSPECTOR_ORIGIN};
-    connect-src 'self' data: ${webview.cspSource};
-  ">
+    content="default-src 'none'; style-src 'unsafe-inline'; script-src 'nonce-${nonce}'; frame-src ${INSPECTOR_ORIGIN};">
 </head>
 <body>
-  <iframe id="devtools-frame" allow="clipboard-read; clipboard-write *"
+  <iframe id="devtools-frame" allow="clipboard-read ${INSPECTOR_ORIGIN}; clipboard-write ${INSPECTOR_ORIGIN}"
     frameborder="0" src="${frontendUrl}"></iframe>
+  <script nonce="${nonce}">${buildWebviewClipboardRelayScript(INSPECTOR_ORIGIN)}</script>
 </body>
 </html>`;
     }

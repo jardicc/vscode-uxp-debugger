@@ -53,13 +53,6 @@ const contexts = await Promise.all([
   }),
   context({
     ...common,
-    entryPoints: ["src/vscode/inspector/host/mainHost.ts"],
-    outfile: "dist/inspectorHost.js",
-    format: "iife",
-    platform: "browser",
-  }),
-  context({
-    ...common,
     entryPoints: ["src/vscode/panel/webview/index.tsx"],
     outfile: "dist/panel.js",
     format: "iife",

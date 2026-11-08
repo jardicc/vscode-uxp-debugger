@@ -53,7 +53,7 @@ export class UxpDebugSessionManager implements vscode.Disposable {
     constructor(
         private readonly service: UxpService,
         private readonly proxyRegistry: CdpProxyRegistry,
-        private readonly output: vscode.OutputChannel,
+        private readonly output: vscode.LogOutputChannel,
     ) {
         this.disposables.push(
             vscode.debug.onDidStartDebugSession((session) => {
@@ -71,7 +71,7 @@ export class UxpDebugSessionManager implements vscode.Disposable {
                 const attachment = inheritedId !== undefined ? this.active.get(inheritedId) : undefined;
                 if (attachment) {
                     attachment.delegateSession = session;
-                    this.output.appendLine(`Adopted js-debug child session for ${String(inheritedId)}.`);
+                    this.output.debug(`Adopted js-debug child session for ${String(inheritedId)}.`);
                 }
             }),
             vscode.debug.onDidTerminateDebugSession((session) => {
@@ -87,7 +87,7 @@ export class UxpDebugSessionManager implements vscode.Disposable {
                 if (!this.active.has(clientSessionId)) {
                     return;
                 }
-                this.output.appendLine(`Debug session ended — stopping CDP proxy (${clientSessionId}).`);
+                this.output.info(`Debug session ended — stopping CDP proxy (${clientSessionId}).`);
                 this.stopSessionInBackground(clientSessionId);
             }),
             // Plugin unloaded host-side / app disconnected → close the debugger.
@@ -95,14 +95,14 @@ export class UxpDebugSessionManager implements vscode.Disposable {
                 this.removePendingBreakSession(session.clientSessionId);
                 const attachment = this.active.get(session.clientSessionId);
                 if (attachment) {
-                    this.output.appendLine(
+                    this.output.info(
                         `Session "${session.name}" ended in the host app — stopping the debugger.`,
                     );
                     const vsSession = attachment.vsSession;
                     this.stopSessionInBackground(session.clientSessionId);
                     if (vsSession) {
                         vscode.debug.stopDebugging(vsSession).then(undefined, (err: unknown) => {
-                            this.output.appendLine(
+                            this.output.error(
                                 `Failed to stop the VS Code debug session: ${err instanceof Error ? err.message : String(err)}`,
                             );
                         });
@@ -208,7 +208,7 @@ export class UxpDebugSessionManager implements vscode.Disposable {
 
         const targetWsUrl = this.service.cdtUrlFor(session);
         const label = `${session.name} (${session.app.appName} ${session.app.appVersion})`;
-        this.output.appendLine(`Attaching debugger to ${label} via ${targetWsUrl}`);
+        this.output.info(`Attaching debugger to ${label} via ${targetWsUrl}`);
 
         const { port: proxyPort } = await this.proxyRegistry.acquire(
             session.clientSessionId,
@@ -217,7 +217,7 @@ export class UxpDebugSessionManager implements vscode.Disposable {
             sourceRootDir,
             shouldPauseForSourceMap,
         );
-        this.output.appendLine(`CDP proxy listening on port ${String(proxyPort)}`);
+        this.output.info(`CDP proxy listening on port ${String(proxyPort)}`);
         this.active.set(session.clientSessionId, { clientSessionId: session.clientSessionId });
 
         const workspaceFolder
@@ -232,6 +232,7 @@ export class UxpDebugSessionManager implements vscode.Disposable {
             // js-debug defaults to "localhost", which may resolve to ::1; the proxy binds IPv4 only.
             address: "127.0.0.1",
             port: proxyPort,
+            cwd: projectDir,
             webRoot: projectDir,
             sourceMaps: true,
             resolveSourceMapLocations: null,
@@ -251,15 +252,10 @@ export class UxpDebugSessionManager implements vscode.Disposable {
             // script's source map is processed and startup breakpoints are bound —
             // without it, js-debug resumes the instrumentation pause immediately.
             ...(shouldPauseForSourceMap ? { pauseForSourceMap: true } : {}),
-            sourceMapPathOverrides: {
-                "webpack-internal:///./src/*": `${projectDir}/src/*`,
-                "webpack-internal:///./*": `${projectDir}/*`,
-                "webpack-internal:///*": "*",
-                "webpack:///./~/*": `${projectDir}/node_modules/*`,
-                "webpack:///./*": `${projectDir}/*`,
-                "webpack:///*": "*",
-                "webpack:///src/*": `${projectDir}/*`,
-            },
+            // All bundler schemes and source roots are resolved against disk by
+            // `sourceMapRewriter.ts` in the CDP proxy; pass an empty map so
+            // js-debug does not apply its own hardcoded `webpack://` defaults.
+            sourceMapPathOverrides: {},
             [UXP_SESSION_KEY]: session.clientSessionId,
         };
 
@@ -285,7 +281,7 @@ export class UxpDebugSessionManager implements vscode.Disposable {
     /** Fire-and-forget {@link stopSession} — failures go to the output channel instead of an unhandled rejection. */
     private stopSessionInBackground(clientSessionId: string): void {
         this.stopSession(clientSessionId).catch((err: unknown) => {
-            this.output.appendLine(
+            this.output.error(
                 `Failed to stop the CDP proxy for ${clientSessionId}: ${err instanceof Error ? err.message : String(err)}`,
             );
         });
@@ -298,7 +294,7 @@ export class UxpDebugSessionManager implements vscode.Disposable {
 
     dispose(): void {
         this.stopAll().catch((err: unknown) => {
-            this.output.appendLine(
+            this.output.error(
                 `Failed to stop CDP proxies on dispose: ${err instanceof Error ? err.message : String(err)}`,
             );
         });

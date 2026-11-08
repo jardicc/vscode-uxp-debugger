@@ -1,6 +1,7 @@
 import * as fs from "fs";
 import * as os from "os";
 import * as path from "path";
+import { pathToFileURL } from "url";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { fakeLog } from "../fixtures/fakeVscode";
 
@@ -44,182 +45,130 @@ function scriptParsed(overrides: Record<string, unknown> = {}): string {
 }
 
 describe("CdpMessageRewriter — source map / script URL rewriting (rewriteFromTarget)", () => {
-    it("resolves a uxp:// scriptParsed url with no source map to a real file:// path on disk", () => {
-        const { rewriter, log } = makeRewriter("A:/plugins/my-plugin");
-        const raw = scriptParsed({ url: "uxp://com.adobe.plugin/index.js" });
-
-        const result = JSON.parse(rewriter.rewriteFromTarget(raw)!);
-
-        expect(result.params.url).toBe("file:///A:/plugins/my-plugin/index.js");
-        expect(log.lines).toContain(
-            "[CDP] Final source file: \"/index.js\" → \"file:///A:/plugins/my-plugin/index.js\"",
-        );
-    });
-
-    it("resolves a nested uxp:// scriptParsed url with no source map to a real file:// path on disk", () => {
-        const { rewriter } = makeRewriter("A:/plugins/my-plugin");
-        const raw = scriptParsed({ url: "uxp://com.adobe.plugin/assets/sub/index-abc123.js" });
-
-        const result = JSON.parse(rewriter.rewriteFromTarget(raw)!);
-
-        expect(result.params.url).toBe("file:///A:/plugins/my-plugin/assets/sub/index-abc123.js");
-    });
-
-    it("resolves the main script's raw Windows-path scriptParsed url (real Plugin/runScript shape, no uxp:// scheme) with no source map", () => {
-    // Real Photoshop log (2026-08-10): the main script's own Debugger.scriptParsed
-    // arrives with a raw OS path, not a uxp:// url — a "a:" drive letter regex
-    // false-positive left this completely unresolved (bug fixed alongside this test).
-        const pluginDir = "a:\\VS-projects\\uxp-debugger2\\e2e\\fixtures\\plugin";
-        const { rewriter } = makeRewriter(pluginDir);
-        const raw = scriptParsed({
-            url: "a:\\VS-projects\\uxp-debugger2\\e2e\\fixtures\\plugin\\index.js",
-            sourceMapURL: "",
-            endLine: 24,
-        });
-
-        const result = JSON.parse(rewriter.rewriteFromTarget(raw)!);
-
-        expect(result.params.url).toBe("file:///a:/VS-projects/uxp-debugger2/e2e/fixtures/plugin/index.js");
-        const map = decodeInlineSourceMap(result.params.sourceMapURL);
-        expect(map.sources).toEqual(["file:///a:/VS-projects/uxp-debugger2/e2e/fixtures/plugin/index.js"]);
-    });
-
-    it("rewrites the inline sourceMapURL's sourceRoot using the script's own subdirectory", () => {
-        const { rewriter } = makeRewriter("A:/plugins/my-plugin");
-        const raw = scriptParsed({
-            url: "./bundle/index.js",
-            sourceMapURL: buildInlineSourceMap({ version: 3, sources: ["../src/index.ts"], mappings: "" }),
-        });
-
-        const result = JSON.parse(rewriter.rewriteFromTarget(raw)!);
-        const map = decodeInlineSourceMap(result.params.sourceMapURL);
-
-        expect(map.sourceRoot).toBe("file:///A:/plugins/my-plugin/bundle/");
-    });
-
-    it("computes an empty subdirectory for a script at the plugin root", () => {
-        const { rewriter } = makeRewriter("A:/plugins/my-plugin");
-        const raw = scriptParsed({ url: "/index.js", sourceMapURL: buildInlineSourceMap() });
-
-        const result = JSON.parse(rewriter.rewriteFromTarget(raw)!);
-        const map = decodeInlineSourceMap(result.params.sourceMapURL);
-
-        expect(map.sourceRoot).toBe("file:///A:/plugins/my-plugin/");
-    });
-
-    it("derives the subdirectory from a uxp:// url AFTER normalization (real plugin shape: /assets/…)", () => {
-        const { rewriter } = makeRewriter("A:/plugins/my-plugin");
-        const raw = scriptParsed({
-            url: "uxp://com.adobe.plugin/assets/sub/index-abc123.js",
-            sourceMapURL: buildInlineSourceMap(),
-        });
-
-        const result = JSON.parse(rewriter.rewriteFromTarget(raw)!);
-
-        expect(result.params.url).toBe("/assets/sub/index-abc123.js");
-        expect(decodeInlineSourceMap(result.params.sourceMapURL).sourceRoot).toBe(
-            "file:///A:/plugins/my-plugin/assets/sub/",
-        );
-    });
-
-    it("resolves an external (non data:) sourceMapURL by reading the .map file off disk", () => {
+    it("resolves a uxp:// script with no source map to its file on disk and adds an identity map", () => {
         const pluginDir = fs.mkdtempSync(path.join(os.tmpdir(), "uxp-rewriter-test-"));
         try {
-            fs.writeFileSync(
-                path.join(pluginDir, "index.js.map"),
-                JSON.stringify({ version: 3, sources: ["index.ts"], mappings: "" }),
-            );
+            fs.writeFileSync(path.join(pluginDir, "index.js"), "// entry");
             const { rewriter } = makeRewriter(pluginDir);
-            const raw = scriptParsed({ url: "/index.js", sourceMapURL: "index.js.map" });
 
-            const result = JSON.parse(rewriter.rewriteFromTarget(raw)!);
+            const result = JSON.parse(rewriter.rewriteFromTarget(scriptParsed({ url: "uxp://com.adobe.plugin/index.js", endLine: 4 }))!);
 
-            expect(result.params.sourceMapURL.startsWith("data:application/json;")).toBe(true);
-            expect(decodeInlineSourceMap(result.params.sourceMapURL).sourceRoot).toBe(
-                `file:///${pluginDir.replace(/\\/g, "/")}/`,
-            );
+            const expected = pathToFileURL(path.join(pluginDir, "index.js")).href;
+            expect(result.params.url).toBe(expected);
+            const map = decodeInlineSourceMap(result.params.sourceMapURL);
+            expect(map.sources).toEqual([expected]);
+            expect((map.mappings as string).split(";")).toHaveLength(5);
         }
         finally {
             fs.rmSync(pluginDir, { recursive: true, force: true });
         }
     });
 
-    it("leaves sourceMapURL unchanged when the external .map file does not exist on disk", () => {
-        const { rewriter } = makeRewriter();
-        const raw = scriptParsed({ sourceMapURL: "index.js.map" });
-
-        const result = JSON.parse(rewriter.rewriteFromTarget(raw)!);
-
-        expect(result.params.sourceMapURL).toBe("index.js.map");
-    });
-
-    it("synthesizes an identity source map pointing back at the same file when the script has none", () => {
-        const { rewriter } = makeRewriter("A:/plugins/my-plugin");
-        const raw = scriptParsed({ url: "/index.js", endLine: 4 });
-
-        const result = JSON.parse(rewriter.rewriteFromTarget(raw)!);
-
-        expect(result.params.url).toBe("file:///A:/plugins/my-plugin/index.js");
-        const map = decodeInlineSourceMap(result.params.sourceMapURL);
-        expect(map.sources).toEqual(["file:///A:/plugins/my-plugin/index.js"]);
-        expect((map.mappings as string).split(";")).toHaveLength(5); // endLine 4 → 5 lines
-    });
-
-    it("fixes the real vite-uxp-plugin uxp-script:// bug end-to-end: sourceRoot resolves to the real src file, not dist/src", () => {
-    // Reproduces the exact reported bug (2026-08-10): vite-uxp-plugin's
-    // `debugger: "udt"` build mode reports the panel bundle's url as
-    // `uxp-script://assets/index-abc123.js` — naively dirname-ing that
-    // produces a garbage subdir, making `sources: ["../../src/main.tsx"]`
-    // (relative to "dist/assets/") resolve one level too high, to
-    // "dist/src/main.tsx" (a read-only CDP-fetched preview) instead of the
-    // real, editable "src/main.tsx" two levels up from "dist/assets/".
-        const projectDir = fs.mkdtempSync(path.join(os.tmpdir(), "uxp-e2e-sourcemap-test-"));
+    it("rewrites the sources of an inline source map to files on disk", () => {
+        const projectDir = fs.mkdtempSync(path.join(os.tmpdir(), "uxp-rewriter-test-"));
         try {
             const pluginDir = path.join(projectDir, "dist");
             fs.mkdirSync(path.join(pluginDir, "assets"), { recursive: true });
-            fs.mkdirSync(path.join(projectDir, "src"), { recursive: true });
-            fs.writeFileSync(path.join(projectDir, "src", "main.tsx"), "// real source");
-
+            fs.mkdirSync(path.join(projectDir, "src"));
+            fs.writeFileSync(path.join(pluginDir, "assets", "index-abc.js"), "// bundle");
+            fs.writeFileSync(path.join(projectDir, "src", "main.tsx"), "// source");
             const { rewriter } = makeRewriter(pluginDir);
-            const raw = scriptParsed({
-                url: "uxp-script://assets/index-abc123.js",
+
+            const result = JSON.parse(rewriter.rewriteFromTarget(scriptParsed({
+                url: "uxp-script://assets/index-abc.js",
                 sourceMapURL: buildInlineSourceMap({ version: 3, sources: ["../../src/main.tsx"], mappings: "" }),
-            });
+            }))!);
 
-            const result = JSON.parse(rewriter.rewriteFromTarget(raw)!);
-            const map = decodeInlineSourceMap(result.params.sourceMapURL);
-
-            expect(map.sourceRoot).toBe(`file:///${pluginDir.replace(/\\/g, "/")}/assets/`);
-            expect(path.resolve(pluginDir, "assets", (map.sources as string[])[0])).toBe(
-                path.join(projectDir, "src", "main.tsx"),
-            );
+            expect(decodeInlineSourceMap(result.params.sourceMapURL).sources).toEqual([
+                pathToFileURL(path.join(projectDir, "src", "main.tsx")).href,
+            ]);
         }
         finally {
             fs.rmSync(projectDir, { recursive: true, force: true });
         }
     });
 
-    it("resolves an opaque custom-scheme url with no source map by verifying the file exists on disk", () => {
-        const pluginDir = fs.mkdtempSync(path.join(os.tmpdir(), "uxp-e2e-scripturl-test-"));
+    it("resolves CdpEventBuffer console and exception locations through parsed source maps", () => {
+        const projectDir = fs.mkdtempSync(path.join(os.tmpdir(), "uxp-rewriter-test-"));
         try {
-            fs.mkdirSync(path.join(pluginDir, "assets"));
-            fs.writeFileSync(path.join(pluginDir, "assets", "index-abc123.js"), "// bundle");
-
+            const pluginDir = path.join(projectDir, "dist");
+            fs.mkdirSync(path.join(pluginDir, "assets"), { recursive: true });
+            fs.mkdirSync(path.join(projectDir, "src"));
+            fs.writeFileSync(path.join(pluginDir, "assets", "index-abc.js"), "// bundle");
+            fs.writeFileSync(path.join(projectDir, "src", "main.tsx"), "// source");
             const { rewriter } = makeRewriter(pluginDir);
-            const raw = scriptParsed({ url: "uxp-script://assets/index-abc123.js", sourceMapURL: "", endLine: 2 });
 
-            const result = JSON.parse(rewriter.rewriteFromTarget(raw)!);
+            // "AAKE" = genCol 0, source 0, origLine 0 + 5 = 5, origCol 0 + 2 = 2
+            rewriter.rewriteFromTarget(scriptParsed({
+                scriptId: "99",
+                url: "uxp-script://assets/index-abc.js",
+                sourceMapURL: buildInlineSourceMap({
+                    version: 3,
+                    sources: ["../../src/main.tsx"],
+                    names: [],
+                    mappings: "AAKE",
+                }),
+            }));
 
-            expect(result.params.url).toBe(`file:///${pluginDir.replace(/\\/g, "/")}/assets/index-abc123.js`);
-            const map = decodeInlineSourceMap(result.params.sourceMapURL);
-            expect(map.sources).toEqual([`file:///${pluginDir.replace(/\\/g, "/")}/assets/index-abc123.js`]);
+            rewriter.rewriteFromTarget(JSON.stringify({
+                method: "Runtime.consoleAPICalled",
+                params: {
+                    type: "warn",
+                    timestamp: 1000,
+                    args: [{ type: "string", value: "mapped warning" }],
+                    stackTrace: {
+                        callFrames: [{
+                            scriptId: "99",
+                            url: "uxp-script://assets/index-abc.js",
+                            lineNumber: 0,
+                            columnNumber: 0,
+                        }],
+                    },
+                },
+            }));
+
+            rewriter.rewriteFromTarget(JSON.stringify({
+                method: "Runtime.exceptionThrown",
+                params: {
+                    timestamp: 2000,
+                    exceptionDetails: {
+                        text: "Uncaught",
+                        scriptId: "99",
+                        url: "uxp-script://assets/index-abc.js",
+                        lineNumber: 0,
+                        columnNumber: 0,
+                        exception: { description: "Error: boom" },
+                        stackTrace: {
+                            callFrames: [{
+                                functionName: "render",
+                                scriptId: "99",
+                                url: "uxp-script://assets/index-abc.js",
+                                lineNumber: 0,
+                                columnNumber: 0,
+                            }],
+                        },
+                    },
+                },
+            }));
+
+            const expectedUrl = pathToFileURL(path.join(projectDir, "src", "main.tsx")).href;
+            const buffer = rewriter.getEventBuffer();
+            expect(buffer.console[0]).toMatchObject({
+                sourceUrl: expectedUrl,
+                line: 5,
+            });
+            expect(buffer.exceptions[0]).toMatchObject({
+                sourceUrl: expectedUrl,
+                line: 5,
+                stackTrace: `    at render (${expectedUrl}:6:3)`,
+            });
         }
         finally {
-            fs.rmSync(pluginDir, { recursive: true, force: true });
+            fs.rmSync(projectDir, { recursive: true, force: true });
         }
     });
 
-    it("leaves an opaque custom-scheme url with no source map unchanged when the file doesn't exist on disk", () => {
+    it("leaves a script that doesn't exist on disk untouched", () => {
         const { rewriter } = makeRewriter("A:/plugins/my-plugin");
         const raw = scriptParsed({ url: "uxp-script://assets/missing.js", sourceMapURL: "" });
 
@@ -391,6 +340,40 @@ describe("CdpMessageRewriter — Runtime.evaluate context handling (rewriteFromC
         expect(result.params.uniqueContextId).toBe("ctx-1");
         expect(result.params.contextId).toBeUndefined();
     });
+
+    it("clears pendingContextMessages and pendingEvaluateIds when markNewClient is called", () => {
+        const { rewriter, sendToTarget } = makeRewriter();
+
+        // First client queues a Runtime.evaluate before an execution context exists.
+        expect(
+            rewriter.rewriteFromClient(
+                JSON.stringify({ id: 5, method: "Runtime.evaluate", params: { expression: "stale()" } }),
+            ),
+        ).toBeNull();
+
+        // A new client attaches (Restart) before the context arrives.
+        rewriter.markNewClient();
+
+        // When the context finally arrives, the stale evaluate from the old client must NOT be flushed.
+        rewriter.rewriteFromTarget(
+            JSON.stringify({ method: "Runtime.executionContextCreated", params: { context: { uniqueId: "ctx-fresh" } } }),
+        );
+        expect(sendToTarget).not.toHaveBeenCalled();
+
+        // And an error reply with id=5 for the new client (e.g. a non-evaluate request) must not be
+        // rewritten as a synthetic Runtime.evaluate error result.
+        const nonEvalError = JSON.stringify({ id: 5, error: { code: -32000, message: "Some other error" } });
+        expect(rewriter.rewriteFromTarget(nonEvalError)).toBe(nonEvalError);
+    });
+
+    it("rejects in-flight sendRawRequestToTarget waiters when dispose() is called", async () => {
+        const { rewriter } = makeRewriter();
+        const pending = rewriter.sendRawRequestToTarget("Runtime.evaluate", { expression: "1+1" }, 30_000);
+
+        rewriter.dispose();
+
+        await expect(pending).rejects.toThrow(/stopped before the UXP target replied/);
+    });
 });
 
 describe("CdpMessageRewriter — breakpoint bookkeeping across client reattaches", () => {
@@ -434,6 +417,84 @@ describe("CdpMessageRewriter — misc client-side rewriting", () => {
         expect(sendToClient).toHaveBeenCalledWith(JSON.stringify({ id: 3, result: {} }));
     });
 
+    it("swallows js-debug's builtinModules, process, and WebAssembly .cdp probes with harmless synthetic replies, but forwards non-.cdp evaluations", () => {
+        const { rewriter, sendToClient } = makeRewriter();
+        rewriter.rewriteFromTarget(
+            JSON.stringify({ method: "Runtime.executionContextCreated", params: { context: { uniqueId: "ctx-1" } } }),
+        );
+
+        const builtinProbe = rewriter.rewriteFromClient(
+            JSON.stringify({
+                id: 1005,
+                method: "Runtime.evaluate",
+                params: {
+                    expression: "require('module').builtinModules\n//# sourceURL=eval-6e1cf2c6.cdp\n",
+                    returnByValue: true,
+                    includeCommandLineAPI: true,
+                },
+            }),
+        );
+        expect(builtinProbe).toBeNull();
+        expect(sendToClient).toHaveBeenCalledWith(
+            JSON.stringify({
+                id: 1005,
+                result: { result: { type: "object", value: [] } },
+            }),
+        );
+
+        const processProbe = rewriter.rewriteFromClient(
+            JSON.stringify({
+                id: 1012,
+                method: "Runtime.evaluate",
+                params: {
+                    returnByValue: true,
+                    expression:
+                        "typeof process === 'undefined' || process.pid === undefined ? 'process not defined' : ({ processId: process.pid, nodeVersion: process.version, architecture: process.arch })\n//# sourceURL=eval-ff6a948c.cdp\n",
+                },
+            }),
+        );
+        expect(processProbe).toBeNull();
+        expect(sendToClient).toHaveBeenCalledWith(
+            JSON.stringify({
+                id: 1012,
+                result: { result: { type: "string", value: "process not defined" } },
+            }),
+        );
+
+        const wasmProbe = rewriter.rewriteFromClient(
+            JSON.stringify({
+                id: 1014,
+                method: "Runtime.evaluate",
+                params: {
+                    expression:
+                        "(()=>{let t=[\"instantiate\",\"instantiateStreaming\",\"compile\",\"compileStreaming\"];for(let e of t){let r=WebAssembly[e];WebAssembly[e]=function(...n){return r.apply(this,n).then(i=>{if(!(n[0]instanceof WebAssembly.Module))debugger;return i})}}})();\n\n//# sourceURL=eval-3dc1fafc.cdp\n",
+                    silent: true,
+                },
+            }),
+        );
+        expect(wasmProbe).toBeNull();
+        expect(sendToClient).toHaveBeenCalledWith(
+            JSON.stringify({
+                id: 1014,
+                result: { result: { type: "undefined" } },
+            }),
+        );
+
+        // Same expression coming from the user's Debug Console (.repl) or without
+        // a .cdp sourceURL must NOT be intercepted.
+        const replEval = rewriter.rewriteFromClient(
+            JSON.stringify({
+                id: 1020,
+                method: "Runtime.evaluate",
+                params: {
+                    expression: "require('module').builtinModules\n//# sourceURL=eval-6e1cf2c6.repl\n",
+                },
+            }),
+        );
+        expect(replEval).not.toBeNull();
+        expect(JSON.parse(replEval!).params.uniqueContextId).toBe("ctx-1");
+    });
+
     it("passes through unrelated messages unchanged", () => {
         const { rewriter } = makeRewriter();
         const raw = JSON.stringify({ id: 1, method: "Debugger.resume" });
@@ -441,48 +502,63 @@ describe("CdpMessageRewriter — misc client-side rewriting", () => {
         expect(rewriter.rewriteFromClient(raw)).toBe(raw);
     });
 
-    it("swallows Runtime.runIfWaitingForDebugger while the target is paused (would resume it)", () => {
-        const { rewriter, sendToClient } = makeRewriter();
-        rewriter.rewriteFromTarget(JSON.stringify({ method: "Debugger.paused", params: { reason: "other", callFrames: [] } }));
-
-        const result = rewriter.rewriteFromClient(JSON.stringify({ id: 7, method: "Runtime.runIfWaitingForDebugger" }));
-
-        expect(result).toBeNull();
-        expect(sendToClient).toHaveBeenCalledWith(JSON.stringify({ id: 7, result: {} }));
-    });
-
-    it("forwards Runtime.runIfWaitingForDebugger when the target is not paused", () => {
-        const { rewriter, sendToClient } = makeRewriter();
-        const raw = JSON.stringify({ id: 7, method: "Runtime.runIfWaitingForDebugger" });
-
-        expect(rewriter.rewriteFromClient(raw)).toBe(raw);
-
-        rewriter.rewriteFromTarget(JSON.stringify({ method: "Debugger.paused", params: { reason: "other", callFrames: [] } }));
-        rewriter.rewriteFromTarget(JSON.stringify({ method: "Debugger.resumed", params: {} }));
-        expect(rewriter.rewriteFromClient(raw)).toBe(raw);
-
-        rewriter.rewriteFromTarget(JSON.stringify({ method: "Debugger.paused", params: { reason: "other", callFrames: [] } }));
-        rewriter.resetContextState();
-        expect(rewriter.rewriteFromClient(raw)).toBe(raw);
-
-        expect(sendToClient).not.toHaveBeenCalled();
-    });
-
-    it("forwards Runtime.runIfWaitingForDebugger from a new client that never saw the earlier pause (Restart)", () => {
-        const { rewriter, sendToClient } = makeRewriter();
-        const raw = JSON.stringify({ id: 7, method: "Runtime.runIfWaitingForDebugger" });
-        rewriter.rewriteFromTarget(JSON.stringify({ method: "Debugger.paused", params: { reason: "other", callFrames: [] } }));
-
-        rewriter.markNewClient();
-
-        expect(rewriter.rewriteFromClient(raw)).toBe(raw);
-        expect(sendToClient).not.toHaveBeenCalled();
-    });
-
     it("returns the raw string unchanged if it is not valid JSON (defensive parse guard)", () => {
         const { rewriter } = makeRewriter();
 
         expect(rewriter.rewriteFromTarget("not json")).toBe("not json");
         expect(rewriter.rewriteFromClient("not json")).toBe("not json");
+    });
+});
+
+describe("CdpMessageRewriter — resuming/stepping out of an instrumentation pause", () => {
+    const paused = (reason: string) => JSON.stringify({ method: "Debugger.paused", params: { reason, callFrames: [] } });
+    const methods = ["Debugger.resume", "Debugger.stepOver"];
+
+    beforeEach(() => vi.useFakeTimers());
+    afterEach(() => vi.useRealTimers());
+
+    it.each(methods)("forwards %s unchanged when the target is not paused by instrumentation", (method) => {
+        const { rewriter, sendToTarget } = makeRewriter();
+        const request = JSON.stringify({ id: 44, method, params: {} });
+        rewriter.rewriteFromTarget(paused("other"));
+
+        expect(rewriter.rewriteFromClient(request)).toBe(request);
+        expect(sendToTarget).not.toHaveBeenCalled();
+    });
+
+    it.each(methods)("resumes first and replays %s from the first real pause", (method) => {
+        const { rewriter, sendToTarget } = makeRewriter();
+        const request = JSON.stringify({ id: 44, method, params: {} });
+        rewriter.rewriteFromTarget(paused("instrumentation"));
+
+        expect(rewriter.rewriteFromClient(request)).toBeNull();
+        expect(JSON.parse(sendToTarget.mock.calls[0][0])).toMatchObject({ method: "Debugger.resume" });
+
+        expect(rewriter.rewriteFromTarget(paused("other"))).toBeNull();
+        expect(sendToTarget).toHaveBeenLastCalledWith(request);
+
+        const next = paused("step");
+        expect(rewriter.rewriteFromTarget(next)).toBe(next);
+        expect(rewriter.rewriteFromClient(request)).toBe(request);
+    });
+
+    it("answers the held request with an empty result when no pause follows in time", () => {
+        const { rewriter, sendToClient } = makeRewriter();
+        rewriter.rewriteFromTarget(paused("instrumentation"));
+        rewriter.rewriteFromClient(JSON.stringify({ id: 44, method: "Debugger.resume", params: {} }));
+
+        vi.advanceTimersByTime(3_000);
+
+        expect(sendToClient).toHaveBeenCalledExactlyOnceWith(JSON.stringify({ id: 44, result: {} }));
+    });
+
+    it("forgets the instrumentation pause for a new client", () => {
+        const { rewriter } = makeRewriter();
+        const request = JSON.stringify({ id: 44, method: "Debugger.resume", params: {} });
+        rewriter.rewriteFromTarget(paused("instrumentation"));
+
+        rewriter.markNewClient();
+
+        expect(rewriter.rewriteFromClient(request)).toBe(request);
     });
 });

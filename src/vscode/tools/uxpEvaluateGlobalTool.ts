@@ -32,7 +32,7 @@ export class UxpEvaluateGlobalTool implements vscode.LanguageModelTool<EvaluateG
     constructor(
         private readonly debugManager: UxpDebugSessionManager,
         private readonly proxyRegistry: CdpProxyRegistry,
-        private readonly output: vscode.OutputChannel,
+        private readonly output: vscode.LogOutputChannel,
     ) {}
 
     prepareInvocation(
@@ -59,10 +59,10 @@ export class UxpEvaluateGlobalTool implements vscode.LanguageModelTool<EvaluateG
         }
         const { sessionId } = resolution;
 
-        this.output.appendLine(`[uxp_evaluate_global] session=${sessionId} expression=${expression}`);
+        this.output.info(`[uxp_evaluate_global] session=${sessionId} expression=${expression}`);
         try {
             const reply = await this.proxyRegistry.evaluateGlobal(sessionId, expression);
-            this.output.appendLine(`[uxp_evaluate_global] result: ${JSON.stringify(reply)}`);
+            this.output.info(`[uxp_evaluate_global] result: ${JSON.stringify(reply)}`);
             if (reply.error) {
                 return textResult(`Evaluate failed: ${reply.error.message}`);
             }
@@ -70,7 +70,7 @@ export class UxpEvaluateGlobalTool implements vscode.LanguageModelTool<EvaluateG
         }
         catch (err) {
             const message = err instanceof Error ? err.message : String(err);
-            this.output.appendLine(`[uxp_evaluate_global] failed: ${message}`);
+            this.output.error(`[uxp_evaluate_global] failed: ${message}`);
             return textResult(`Evaluate failed: ${message}`);
         }
     }

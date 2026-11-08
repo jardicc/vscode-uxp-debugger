@@ -1,426 +1,364 @@
 import * as fs from "fs";
+import * as os from "os";
 import * as path from "path";
+import { fileURLToPath, pathToFileURL } from "url";
+import { originalPositionFor, type SourceMapInput, TraceMap } from "@jridgewell/trace-mapping";
+import type { Protocol } from "devtools-protocol";
 import type * as vscode from "vscode";
+import { foldPathCase } from "../../core/pathCase";
+import type { ResolvedCallFrameLocation } from "./cdpEventBuffer";
+import type { CdpPayload } from "./cdpTypes";
 
-// ---------------------------------------------------------------------------
-// Source-map & URL rewriting (pure functions)
-// ---------------------------------------------------------------------------
+/** The subset of `Debugger.scriptParsed` params rewritten here. */
+export type ScriptParsedParams = Pick<
+    Partial<Protocol.Debugger.ScriptParsedEvent>,
+    "scriptId" | "url" | "sourceMapURL" | "endLine"
+>;
 
 interface SourceMapV3 {
     [key: string]: unknown;
     version: 3;
     sources: string[];
-    mappings: string;
-    names?: string[];
     sourceRoot?: string;
-    sourcesContent?: (string | null)[];
-    file?: string;
 }
 
-/** Sets `map.sourceRoot` (in place) to a `file://` URL under `pluginDir/scriptSubdir`. */
-function setSourceRootForPluginDir(
-    map: SourceMapV3,
-    pluginDir: string,
-    scriptSubdir: string,
-): { oldRoot: string | undefined; newRoot: string } {
-    const baseDir = pluginDir.replace(/\\/g, "/") + (scriptSubdir ? "/" + scriptSubdir : "");
-    const root = "file:///" + baseDir + "/";
-    const oldRoot = map.sourceRoot;
-    map.sourceRoot = root;
-    return { oldRoot, newRoot: root };
-}
+const MAX_ANCESTORS = 5;
+const MAX_LOGGED_UNRESOLVED = 50;
+const STOP_DIRS = new Set([os.homedir(), os.tmpdir()].map((d) => foldPathCase(path.resolve(d))));
+const LEADING_DOTS_AND_SLASHES = /^(?:\.{0,2}[\\/])+/;
 
-function logResolvedSourceFiles(map: SourceMapV3, sourceRoot: string, log: vscode.OutputChannel): void {
-    // Avoid flooding the output for bundles whose source maps contain hundreds of files.
-    const sourcesToLog = map.sources.slice(0, 5);
-    for (const source of sourcesToLog) {
-        const resolvedSource = new URL(source, sourceRoot).href;
-        log.appendLine(`[CDP] Final source file: ${JSON.stringify(source)} → ${JSON.stringify(resolvedSource)}`);
+// ---------------------------------------------------------------------------
+// Path helpers (pure, apart from read-only fs probes)
+// ---------------------------------------------------------------------------
+
+function isFile(p: string): boolean {
+    try {
+        return fs.statSync(p, { throwIfNoEntry: false })?.isFile() ?? false;
     }
-    if (map.sources.length > sourcesToLog.length) {
-        log.appendLine(`[CDP] Final source files: ${String(map.sources.length - sourcesToLog.length)} more omitted`);
+    catch {
+        // e.g. characters invalid in a path on this OS (virtual bundler modules).
+        return false;
     }
 }
 
-/** Encodes `map` back into an inline `data:application/json;base64,...` URL. */
-function encodeInlineSourceMap(map: SourceMapV3): string {
-    const payload = Buffer.from(JSON.stringify(map), "utf-8").toString("base64");
-    return "data:application/json;charset=utf-8;base64," + payload;
+function dirUrl(dir: string): string {
+    return pathToFileURL(path.join(dir, path.sep)).href;
 }
 
-/** Matches a Windows drive-letter absolute path, e.g. `a:\foo` or `C:/foo`. */
-const WINDOWS_DRIVE_PATH = /^[a-zA-Z]:[\\/]/;
-
-/**
- * True when `url` already has a real URI scheme (`file:`, `http(s):`, ...).
- * A bare Windows drive letter (`a:\...`) matches a naive `scheme:` regex
- * too — excluded explicitly so absolute Windows paths aren't mistaken for
- * already-resolved URLs.
- */
-function hasUriScheme(url: string): boolean {
-    return !WINDOWS_DRIVE_PATH.test(url) && /^[a-z][a-z0-9+.-]*:/i.test(url);
+/** Splits `ref` into its path part and a `?query` / `#hash` suffix that has to survive the rewrite. */
+function splitSuffix(ref: string): [string, string] {
+    const i = ref.search(/[?#]/);
+    return i === -1 ? [ref, ""] : [ref.slice(0, i), ref.slice(i)];
 }
 
 /**
- * Schemes that always denote a real, externally-resolvable resource and must
- * never be reinterpreted as an opaque plugin-relative path (`uxp:` is
- * excluded too — it already has its own dedicated handling in
- * `normalizeScriptUrl`, by the time these checks run it's either already
- * stripped or genuinely meant to stay untouched).
+ * Turns a script url or a source map `sources` entry into the file paths it
+ * may denote, without knowing anything about specific URL schemes:
+ * - an OS path (relative or absolute) → itself,
+ * - a `file:` URL → its path,
+ * - any other `scheme://rest` URL → `rest` from its first `./` or `../`
+ *   anchor (dropping a bundler namespace such as `webpack://@scope/pkg/./`),
+ *   otherwise `rest` both with and without its first segment, since that
+ *   segment may be an id (`uxp://<plugin-id>/index.js`) or already part of
+ *   the path (`uxp-script://assets/index.js`),
+ * - opaque URLs (`data:`, ...) → nothing.
+ *
+ * The disk decides which candidate is right (see {@link findFile}).
  */
-const KNOWN_EXTERNAL_SCHEMES = new Set(["file:", "http:", "https:", "ws:", "wss:", "data:", "uxp:"]);
+function pathCandidates(ref: string): string[] {
+    if (path.isAbsolute(ref) || !URL.canParse(ref)) {
+        return [ref];
+    }
+    const url = new URL(ref);
+    try {
+        return [fileURLToPath(url)];
+    }
+    catch {
+        // Not a file: URL.
+    }
+    if (!ref.slice(url.protocol.length).startsWith("//")) {
+        return [];
+    }
+    const rest = ref.slice(url.protocol.length + 2).replace(/^\/+/, "");
+    const anchored = /(?:^|\/)(\.\.?\/.*)$/.exec(rest)?.[1];
+    const candidates = anchored ? [anchored] : [rest, rest.slice(rest.indexOf("/") + 1)];
+    // Webpack 1-4 `~/pkg` alias for node_modules.
+    return [...new Set(candidates.map((c) => c.replace(/^(?:\.\/)?~\//, "./node_modules/")))].filter(Boolean);
+}
 
 /**
- * Returns the lowercased `scheme:` prefix of `url`, or `undefined` if it has none
- * (a bare Windows drive letter never counts).
+ * Finds the existing file `ref` points to. Each candidate path is tried
+ * as-is relative to `dirs[0]`, then with its leading `./`, `../` and `/`
+ * stripped against every directory in `dirs`, nearest first.
  */
-function getUriScheme(url: string): string | undefined {
-    if (WINDOWS_DRIVE_PATH.test(url)) {
+function findFile(ref: string, dirs: readonly string[]): string | undefined {
+    for (const candidate of pathCandidates(ref)) {
+        const tail = candidate.replace(LEADING_DOTS_AND_SLASHES, "");
+        const hit = [path.resolve(dirs[0], candidate), ...dirs.map((d) => path.join(d, tail))].find(isFile);
+        if (hit) {
+            return hit;
+        }
+    }
+    return undefined;
+}
+
+function isStopDir(dir: string): boolean {
+    return path.dirname(dir) === dir || STOP_DIRS.has(foldPathCase(dir));
+}
+
+/**
+ * `dir` and its ancestors, nearest first, up to the repository root (`.git`)
+ * or a stop boundary (filesystem root, home, temp).
+ */
+function ancestors(dir: string): string[] {
+    const dirs = [path.resolve(dir)];
+    while (dirs.length <= MAX_ANCESTORS && !fs.existsSync(path.join(dirs[dirs.length - 1], ".git"))) {
+        const parent = path.dirname(dirs[dirs.length - 1]);
+        if (isStopDir(parent)) {
+            break;
+        }
+        dirs.push(parent);
+    }
+    return dirs;
+}
+
+function subdirs(dir: string): string[] {
+    try {
+        return fs.readdirSync(dir, { withFileTypes: true })
+            .filter((e) => e.isDirectory() && !e.name.startsWith(".") && e.name !== "node_modules")
+            .map((e) => path.join(dir, e.name));
+    }
+    catch {
+        return [];
+    }
+}
+
+/**
+ * Directories a source map's `sources` may be relative to, most likely
+ * first: the script's own directory, then every ancestor followed by its
+ * immediate subdirectories — which covers bundler contexts outside the
+ * plugin folder (`<project>/src/` next to `<project>/plugin/`), hoisted
+ * monorepo `node_modules`, and bundles moved after the map was emitted.
+ */
+function searchDirs(scriptDir: string): string[] {
+    return [...new Set(ancestors(scriptDir).flatMap((d) => [d, ...subdirs(d)]))];
+}
+
+// ---------------------------------------------------------------------------
+// Source map encoding
+// ---------------------------------------------------------------------------
+
+function isSourceMapV3(value: unknown): value is SourceMapV3 {
+    const map = value as Partial<SourceMapV3> | null;
+    return typeof map === "object" && map !== null && map.version === 3
+        && Array.isArray(map.sources) && map.sources.every((s) => typeof s === "string");
+}
+
+function toDataUrl(map: object): string {
+    return "data:application/json;charset=utf-8;base64," + Buffer.from(JSON.stringify(map), "utf-8").toString("base64");
+}
+
+/** Decodes a `data:` URL payload (base64 or percent-encoded), or returns `undefined` for anything else. */
+function decodeDataUrl(ref: string): string | undefined {
+    if (!URL.canParse(ref) || new URL(ref).protocol !== "data:") {
         return undefined;
     }
-    const match = /^([a-z][a-z0-9+.-]*):/i.exec(url);
-    return match ? match[1].toLowerCase() + ":" : undefined;
-}
-
-/**
- * True for custom/unrecognized URI schemes — e.g. `uxp-script://assets/x.js`,
- * injected by some bundlers' hot-reload tooling (observed: vite-uxp-plugin's
- * `debugger: "udt"` build mode) — that encode a *plugin-relative file path*
- * after `scheme://` rather than a real, externally-resolvable URL. Since
- * there's no fixed list of every such scheme a third-party tool might
- * invent, any scheme outside `KNOWN_EXTERNAL_SCHEMES` is treated as one of
- * these and resolved by checking the filesystem (see `resolveVerifiedSubdir`
- * / `resolveScriptFileUrl`) instead of guessed from the URL's shape alone.
- */
-function isOpaqueCustomScheme(url: string): boolean {
-    const scheme = getUriScheme(url);
-    return scheme !== undefined && !KNOWN_EXTERNAL_SCHEMES.has(scheme);
-}
-
-/** Strips `scheme://` from an opaque custom-scheme url, returning the remainder as a root-relative path — e.g. `uxp-script://assets/x.js` → `/assets/x.js`. */
-function stripOpaqueScheme(url: string): string {
-    const idx = url.indexOf("://");
-    const rest = idx === -1 ? url : url.slice(idx + 3);
-    return "/" + rest.replace(/^\/+/, "");
-}
-
-/**
- * Normalize a UXP script URL to a form that the built-in JS debugger
- * can map to local files.
- *
- * Common UXP URL schemes:
- *   uxp://com.adobe.plugin/index.js  →  /index.js
- *   file:///path/to/plugin/index.js  →  kept as-is
- *   http(s)://...                    →  kept as-is
- */
-export function normalizeScriptUrl(url: string): string {
-    if (url.startsWith("uxp://")) {
-    // Strip the scheme and plugin-id prefix, keep the relative path
-        const withoutScheme = url.replace(/^uxp:\/\/[^/]+/, "");
-        return withoutScheme || url;
+    const comma = ref.indexOf(",");
+    if (comma === -1) {
+        return undefined;
     }
-    return url;
-}
-
-/**
- * Resolve a normalized (root-relative) script url — e.g. `/index.js` — to an
- * absolute `file://` URL under `pluginDir`.
- *
- * When a script has no source map, its `Debugger.scriptParsed` url is the
- * only thing js-debug has to locate the file: a root-relative path like
- * `/index.js` doesn't resolve to anything on disk, so js-debug falls back
- * to fetching the source over CDP and showing it in a read-only virtual
- * document instead of the real, editable file. Since a `uxp://` url always
- * refers to a real file inside the plugin/script directory, rewriting it to
- * an absolute `file://` path lets js-debug open that file directly.
- *
- * Already-absolute urls (`file:`, `http(s):`, ...) are left untouched.
- */
-export function resolveScriptFileUrl(url: string, pluginDir: string): string {
-    if (isOpaqueCustomScheme(url)) {
-    // Verify against disk rather than trusting the scheme's shape: the
-    // "host"-looking segment right after `://` is actually part of the
-    // plugin-relative path for these schemes (unlike `uxp://`, where it's a
-    // plugin id to strip) — confirming the file exists avoids resolving to
-    // a wrong/garbage path when that assumption doesn't hold.
-        const relative = stripOpaqueScheme(url).replace(/^\/+/, "");
-        if (fs.existsSync(path.join(pluginDir, relative))) {
-            const baseDir = pluginDir.replace(/\\/g, "/");
-            return "file:///" + baseDir + (relative ? "/" + relative : "");
-        }
-        return url;
-    }
-    if (hasUriScheme(url)) {
-        return url;
-    }
-    if (WINDOWS_DRIVE_PATH.test(url)) {
-    // UXP sometimes reports the script's raw absolute OS path instead of a
-    // uxp:// url (observed on Windows: "a:\...\index.js") — already absolute,
-    // just needs a file:// prefix, not joining with pluginDir below.
-        return "file:///" + url.replace(/\\/g, "/");
-    }
-    const relative = url.replace(/^\.?\/+/, "");
-    const baseDir = pluginDir.replace(/\\/g, "/");
-    return "file:///" + baseDir + (relative ? "/" + relative : "");
+    const payload = ref.slice(comma + 1);
+    return /;base64$/i.test(ref.slice(0, comma))
+        ? Buffer.from(payload, "base64").toString("utf-8")
+        : decodeURIComponent(payload);
 }
 
 /**
  * Synthesizes an inline "identity" source map for a script that has none of
  * its own — mapping every generated line 1:1 (column 0) onto the same line
- * of `absoluteFilePath`, which is valid since there is no actual
- * transformation between what's on disk and what UXP executes.
+ * of `file`, which is valid since UXP executes the file exactly as on disk.
  *
- * This exists because js-debug (`pwa-node`) only treats a script as an
- * "authored", always-editable source when it comes through a source map;
- * a script resolved solely via its (even if correct, absolute) `url` is
- * instead verified against the on-disk file's content hash before being
- * treated as editable — and that check is Node-specific (it accounts for
- * the CommonJS module wrapper `require()` adds around every file's source
- * before compiling it), so it always fails for UXP scripts, which are
- * never wrapped that way. Routing the script through an identity source
- * map sidesteps that hash check entirely, exactly like `stripTypeScript.ts`
- * already does for `.ts` scripts (see `buildIdentitySourceMap` there).
+ * js-debug (`pwa-node`) only treats a script as an always-editable authored
+ * source when it comes through a source map; a script resolved solely via
+ * its url is verified against the on-disk content hash first, and that
+ * check accounts for Node's CommonJS wrapper, so it always fails for UXP.
  */
-export function buildIdentitySourceMapUrl(absoluteFilePath: string, lineCount: number): string {
-    const sourceUrl = "file:///" + absoluteFilePath.replace(/\\/g, "/");
+function identitySourceMapUrl(file: string, lineCount: number): string {
     // VLQ segments: [genColumn=0, sourceIndexDelta=0, sourceLineDelta, sourceColumn=0].
-    const lines = Array.from({ length: Math.max(lineCount, 1) }, (_, i) => (i === 0 ? "AAAA" : "AACA"));
-    return encodeInlineSourceMap({
-        version: 3,
-        sources: [sourceUrl],
-        names: [],
-        mappings: lines.join(";"),
-    });
+    const mappings = Array.from({ length: Math.max(lineCount, 1) }, (_, i) => (i === 0 ? "AAAA" : "AACA"));
+    return toDataUrl({ version: 3, sources: [pathToFileURL(file).href], names: [], mappings: mappings.join(";") });
 }
+
+// ---------------------------------------------------------------------------
+// Rewriter
+// ---------------------------------------------------------------------------
 
 /**
- * Extracts the string entries from a source map's `sources` array, if any.
- * Used to sample real source paths for `resolveVerifiedSubdir`'s
- * filesystem-existence check.
- */
-function extractStringSources(map: SourceMapV3): string[] {
-    return map.sources;
-}
-
-function isStringArray(value: unknown): value is string[] {
-    return Array.isArray(value) && value.every((item) => typeof item === "string");
-}
-
-function isRecord(value: unknown): value is Record<string, unknown> {
-    return typeof value === "object" && value !== null && !Array.isArray(value);
-}
-
-function isSourceMapV3(value: unknown): value is SourceMapV3 {
-    if (!isRecord(value)) {
-        return false;
-    }
-    return value.version === 3
-        && isStringArray(value.sources)
-        && typeof value.mappings === "string"
-        && (value.names === undefined || isStringArray(value.names))
-        && (value.sourceRoot === undefined || typeof value.sourceRoot === "string")
-        && (value.file === undefined || typeof value.file === "string");
-}
-
-function parseSourceMap(json: string): SourceMapV3 {
-    const parsed: unknown = JSON.parse(json);
-    if (!isSourceMapV3(parsed)) {
-        throw new TypeError("Invalid Source Map v3 JSON");
-    }
-    return parsed;
-}
-
-/**
- * Naive, purely-string-based guess at a script's subdirectory (relative to
- * `pluginDir`): normalizes `url` and takes its directory name. Correct for
- * the common cases (`uxp://` urls already stripped to a root-relative path
- * by `normalizeScriptUrl`, or a plain relative path) — used as the first
- * candidate and final fallback in `resolveVerifiedSubdir`.
- */
-export function deriveNaiveSubdir(url: string): string {
-    const cleanUrl = path.posix.normalize(url);
-    const dir = path.posix.dirname(cleanUrl);
-    return dir === "/" || dir === "." ? "" : dir.replace(/^\//, "");
-}
-
-/**
- * Builds an ordered, de-duplicated list of subdirectory candidates to try
- * for `url`: the naive dirname-based guess first, then — for opaque custom
- * schemes like `uxp-script://` — the same dirname logic applied to the
- * scheme-stripped path (since there the "host"-looking segment is actually
- * part of the relative path, not something to discard), and finally the
- * plugin root itself as a last resort.
- */
-function buildSubdirCandidates(url: string): string[] {
-    const candidates = [deriveNaiveSubdir(url)];
-    if (isOpaqueCustomScheme(url)) {
-        candidates.push(deriveNaiveSubdir(stripOpaqueScheme(url)));
-    }
-    candidates.push("");
-    return [...new Set(candidates)];
-}
-
-/**
- * Resolves the subdirectory (relative to `pluginDir`) that a script's
- * *original* source files actually live under, verifying candidates against
- * the real filesystem instead of trusting `url`'s shape alone.
+ * Rewrites `Debugger.scriptParsed` events so js-debug maps UXP scripts and
+ * their source maps onto the real, editable files on disk.
  *
- * Why this exists: `Debugger.scriptParsed.url` isn't always a well-behaved
- * `uxp://` or root-relative path — some bundlers report scripts under a
- * custom scheme (e.g. `uxp-script://assets/index.js`, emitted by
- * vite-uxp-plugin's `debugger: "udt"` build mode) whose "host" segment is
- * actually part of the relative path. Naively running `path.posix.dirname`
- * on such a url produces a garbage subdirectory, which then corrupts
- * `sourceRoot` and makes every `sources` entry resolve to the wrong file
- * (e.g. `dist/src/main.tsx` — a read-only, CDP-fetched preview — instead of
- * the real, editable `src/main.tsx`).
- *
- * `relativePathsToVerify` should be a small sample of paths that are
- * expected to resolve to real files once the correct subdir is found (e.g.
- * a source map's `sources` entries, or an external `.map` file's own name).
- * Each candidate subdir is scored by how many samples resolve to a file
- * that actually exists on disk; the first perfect-score candidate wins, and
- * the best-scoring one is used otherwise. If NO sample paths are available,
- * or none of them exist anywhere, this falls back to the naive guess —
- * exactly today's behavior — so already-working url shapes never regress.
+ * Every url / source is resolved purely by probing the filesystem (see
+ * {@link pathCandidates}), so no URL scheme is special-cased.
  */
-export function resolveVerifiedSubdir(
-    url: string,
-    pluginDir: string,
-    relativePathsToVerify: string[],
-): string {
-    const fallback = deriveNaiveSubdir(url);
-    if (relativePathsToVerify.length === 0) {
-        return fallback;
-    }
-
-    // Cap how many samples are probed on disk per candidate — enough for a
-    // reliable signal without doing excessive I/O for bundles with hundreds
-    // of original sources.
-    const samples = relativePathsToVerify.slice(0, 5);
-
-    let best = fallback;
-    let bestScore = -1;
-    for (const candidate of buildSubdirCandidates(url)) {
-        const baseDir = path.join(pluginDir, candidate);
-        const score = samples.reduce(
-            (count, sample) => count + (fs.existsSync(path.resolve(baseDir, sample)) ? 1 : 0),
-            0,
-        );
-        if (score === samples.length) {
-            return candidate; // every sample verified — good enough, stop looking.
-        }
-        if (score > bestScore) {
-            bestScore = score;
-            best = candidate;
-        }
-    }
-    return best;
+interface RegisteredScript {
+    resolvedUrl?: string;
+    traceMap?: TraceMap;
 }
 
-// ! This is bad for performance. Find out a way to avoid this if possible.
-/**
- * Rewrite the `sourceRoot` inside an inline (data-URL) source map so that
- * relative `sources` entries resolve to the correct local files.
- *
- * Webpack source maps typically contain paths like `../src/shared/store.ts`
- * which are relative to the output directory (one level below the project
- * root).  The correct subdirectory is derived from `scriptUrl` and verified
- * against disk (see `resolveVerifiedSubdir`) before being used to build
- * `sourceRoot`, so that `../<path>` resolves back to the real source file
- * even when `scriptUrl` uses an unusual/custom scheme.
- */
-export function rewriteInlineSourceMapRoot(
-    dataUrl: string,
-    pluginDir: string,
-    scriptUrl: string,
-    log: vscode.OutputChannel,
-): string {
-    try {
-    // data:application/json;base64,<payload>
-    // data:application/json;charset=utf-8;base64,<payload>
-    // Do not change if this is not data URL or does not look like an inline source map.
-        const requiredPrefix = "data:application/json";
-        if (!dataUrl.slice(0, requiredPrefix.length).toLowerCase().startsWith(requiredPrefix)) {
-            log.appendLine(`[CDP] Not an inline source map: ${dataUrl}`);
-            return dataUrl;
-        }
-        const commaIdx = dataUrl.indexOf(",");
-        if (commaIdx === -1) {
-            return dataUrl;
-        }
-        const header = dataUrl.slice(0, commaIdx); // everything before the comma
-        const payload = dataUrl.slice(commaIdx + 1);
+export class SourceMapRewriter {
+    private readonly byScriptId = new Map<string, RegisteredScript>();
+    private readonly byUrl = new Map<string, RegisteredScript>();
 
-        const json = Buffer.from(payload, "base64").toString("utf-8");
-        const map = parseSourceMap(json);
+    constructor(
+        private readonly pluginDir: string,
+        private readonly log: vscode.LogOutputChannel,
+    ) {}
 
-        // Use a file:// URL so that js-debug resolves paths as local files.
-        // Include the script's subdirectory so relative source entries resolve correctly.
-        const scriptSubdir = resolveVerifiedSubdir(scriptUrl, pluginDir, extractStringSources(map));
-        const { oldRoot, newRoot } = setSourceRootForPluginDir(map, pluginDir, scriptSubdir);
-        log.appendLine(
-            `[CDP] Rewrote sourceRoot: ${JSON.stringify(oldRoot)} → ${JSON.stringify(newRoot)}`,
-        );
-        logResolvedSourceFiles(map, newRoot, log);
-
-        const newJson = JSON.stringify(map);
-        const newPayload = Buffer.from(newJson, "utf-8").toString("base64");
-        return header + "," + newPayload;
+    /** Clears all cached script and source-map entries (e.g. when the target context resets). */
+    clear(): void {
+        this.byScriptId.clear();
+        this.byUrl.clear();
     }
-    catch (e) {
-        log.appendLine(
-            `[CDP] Failed to rewrite inline source map: ${e instanceof Error ? e.message : String(e)}`,
-        );
-        return dataUrl;
-    }
-}
 
-/**
- * Resolves an *external* `sourceMapURL` (a plain filename/relative path, as
- * opposed to an inline `data:` URL) by reading the `.map` file straight off
- * disk — the plugin's local directory (`pluginDir`) is already known here,
- * so there's no need for js-debug to fetch it over the network/CDP itself.
- * The result is re-emitted as an inline `data:` URL (with `sourceRoot`
- * rewritten exactly like {@link rewriteInlineSourceMapRoot}) so both cases
- * converge on the same code path downstream.
- *
- * Absolute URLs (`http(s):`, `file:`, ...) are left untouched — this only
- * handles the common bundler case of a relative `.map` filename sitting
- * next to its `.js` file.
- */
-export function resolveExternalSourceMap(
-    sourceMapURL: string,
-    pluginDir: string,
-    scriptUrl: string,
-    log: vscode.OutputChannel,
-): string {
-    try {
-        if (hasUriScheme(sourceMapURL)) {
-            log.appendLine(`[CDP] Not a relative external source map, leaving as-is: ${sourceMapURL}`);
-            return sourceMapURL;
+    /** Rewrites `params` in place and indexes the script/source map for location lookups. */
+    rewriteScriptParsed(params: ScriptParsedParams): void {
+        if (typeof params.url !== "string") {
+            return;
+        }
+        const originalUrl = params.url;
+        const scriptFile = findFile(originalUrl, [this.pluginDir]);
+        let resolvedUrl: string | undefined;
+        if (scriptFile) {
+            resolvedUrl = pathToFileURL(scriptFile).href;
+            this.log.debug(`[CDP] Script: ${JSON.stringify(originalUrl)} → ${JSON.stringify(resolvedUrl)}`);
+            params.url = resolvedUrl;
+        }
+        const scriptDir = scriptFile ? path.dirname(scriptFile) : this.pluginDir;
+
+        let traceMap: TraceMap | undefined;
+        if (params.sourceMapURL) {
+            const rewritten = this.rewriteSourceMap(params.sourceMapURL, scriptDir);
+            params.sourceMapURL = rewritten.url;
+            traceMap = rewritten.traceMap;
+        }
+        else if (scriptFile) {
+            params.sourceMapURL = identitySourceMapUrl(scriptFile, (params.endLine ?? 0) + 1);
         }
 
-        // The .map file's own name doubles as the sample to verify the
-        // subdirectory against — it must exist there for this to succeed anyway.
-        const scriptSubdir = resolveVerifiedSubdir(scriptUrl, pluginDir, [sourceMapURL]);
-        const mapPath = path.join(pluginDir, scriptSubdir, sourceMapURL);
-        const json = fs.readFileSync(mapPath, "utf-8");
-        const map = parseSourceMap(json);
-
-        const { oldRoot, newRoot } = setSourceRootForPluginDir(map, pluginDir, scriptSubdir);
-        log.appendLine(
-            `[CDP] Read external source map ${mapPath}, rewrote sourceRoot: `
-            + `${JSON.stringify(oldRoot)} → ${JSON.stringify(newRoot)}`,
-        );
-        logResolvedSourceFiles(map, newRoot, log);
-
-        return encodeInlineSourceMap(map);
+        const entry: RegisteredScript = { resolvedUrl, traceMap };
+        if (typeof params.scriptId === "string" && params.scriptId !== "") {
+            this.byScriptId.set(params.scriptId, entry);
+        }
+        if (originalUrl !== "") {
+            this.byUrl.set(originalUrl, entry);
+        }
+        if (resolvedUrl) {
+            this.byUrl.set(resolvedUrl, entry);
+        }
     }
-    catch (e) {
-        log.appendLine(
-            `[CDP] Failed to resolve external source map "${sourceMapURL}": ${e instanceof Error ? e.message : String(e)}`,
-        );
-        return sourceMapURL;
+
+    /**
+     * Resolves a 0-based CDP `Protocol.Runtime.CallFrame`-shaped location through
+     * any source map registered for that script, falling back to the script's
+     * resolved `file:` URL on disk when no source-map segment matches.
+     */
+    resolveGeneratedLocation(
+        location: CdpPayload<Protocol.Runtime.CallFrame>,
+    ): ResolvedCallFrameLocation | undefined {
+        const { url, lineNumber, columnNumber, scriptId } = location;
+        if (typeof lineNumber !== "number" || lineNumber < 0) {
+            return undefined;
+        }
+        const entry
+            = (typeof scriptId === "string" ? this.byScriptId.get(scriptId) : undefined)
+                ?? (typeof url === "string" ? this.byUrl.get(url) : undefined);
+        if (!entry) {
+            return undefined;
+        }
+        if (entry.traceMap) {
+            const pos = originalPositionFor(entry.traceMap, {
+                line: lineNumber + 1,
+                column: Math.max(typeof columnNumber === "number" ? columnNumber : 0, 0),
+            });
+            if (pos.source !== null) {
+                return {
+                    url: pos.source,
+                    lineNumber: pos.line - 1,
+                    columnNumber: pos.column,
+                };
+            }
+        }
+        if (entry.resolvedUrl) {
+            return {
+                url: entry.resolvedUrl,
+                lineNumber,
+                columnNumber: typeof columnNumber === "number" ? columnNumber : undefined,
+            };
+        }
+        return undefined;
+    }
+
+    /**
+     * Loads an inline (`data:`) or external (`.map` next to the script) source
+     * map and re-emits it inline with every resolvable source as an absolute
+     * `file:` URL. Returns `sourceMapURL` unchanged when it can't be loaded.
+     */
+    private rewriteSourceMap(sourceMapURL: string, scriptDir: string): { url: string; traceMap?: TraceMap } {
+        try {
+            const inline = decodeDataUrl(sourceMapURL);
+            const mapFile = inline === undefined ? findFile(sourceMapURL, [scriptDir]) : undefined;
+            const json = inline ?? (mapFile && fs.readFileSync(mapFile, "utf-8"));
+            if (json === undefined) {
+                this.log.warn(`[CDP] Source map not found: ${sourceMapURL}`);
+                return { url: sourceMapURL };
+            }
+            const map: unknown = JSON.parse(json);
+            if (!isSourceMapV3(map)) {
+                throw new TypeError("Invalid Source Map v3 JSON");
+            }
+            this.resolveSources(map, scriptDir);
+            let traceMap: TraceMap | undefined;
+            try {
+                traceMap = new TraceMap({ ...map, sourceRoot: undefined } as unknown as SourceMapInput);
+            }
+            catch {
+                // Ignore malformed mappings in the trace resolver; still emit the rewritten map URL.
+            }
+            return { url: toDataUrl(map), traceMap };
+        }
+        catch (e) {
+            this.log.error(`[CDP] Failed to rewrite source map: ${e instanceof Error ? e.message : String(e)}`);
+            return { url: sourceMapURL };
+        }
+    }
+
+    private resolveSources(map: SourceMapV3, scriptDir: string): void {
+        const dirs = searchDirs(scriptDir);
+        const root = map.sourceRoot ? map.sourceRoot.replace(/\/?$/, "/") : "";
+        let resolved = 0;
+        const unresolved: string[] = [];
+
+        map.sources = map.sources.map((source) => {
+            const [bare, suffix] = splitSuffix(source);
+            const file = (root ? findFile(root + bare, dirs) : undefined) ?? findFile(bare, dirs);
+            if (!file) {
+                unresolved.push(source);
+                return source;
+            }
+            const url = pathToFileURL(file).href + suffix;
+            if (resolved++ < 25) {
+                this.log.debug(`[CDP] Source: ${JSON.stringify(source)} → ${JSON.stringify(url)}`);
+            }
+            return url;
+        });
+        // Unresolved relative sources fall back to the script's own directory.
+        map.sourceRoot = dirUrl(scriptDir);
+        this.log.info(`[CDP] Resolved ${String(resolved)}/${String(map.sources.length)} source map sources on disk`);
+        for (const source of unresolved.slice(0, MAX_LOGGED_UNRESOLVED)) {
+            this.log.warn(`[CDP] Unresolved source: ${JSON.stringify(source)}`);
+        }
+        if (unresolved.length > MAX_LOGGED_UNRESOLVED) {
+            this.log.warn(`[CDP] ...and ${String(unresolved.length - MAX_LOGGED_UNRESOLVED)} more unresolved`);
+        }
     }
 }

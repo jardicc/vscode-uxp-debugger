@@ -12,10 +12,75 @@
 
 import * as fs from "fs";
 import * as path from "path";
+import * as util from "util";
 import Mocha from "mocha";
-import { sleep } from "./liveHelpers";
+import {
+    appendLogEntry,
+    E2E_CLI_RUNNER_ENV,
+    E2E_TERMINAL_PREFIX,
+    formatLogBanner,
+    installConsoleToFileRedirect,
+    resolveOrCreateE2eLogFile,
+    stripAnsi,
+} from "../e2eLog";
+import { repoRoot, sleep } from "./liveHelpers";
+
+// ! TODO - Ultimately, we want to get rid of this arbitrary delay.
+const PS_RECOVERY_DELAY = 500;
+
+function appendMochaReporterOutputToLog(logFilePath: string, text: string): void {
+    const clean = stripAnsi(text);
+    const taggedLines = clean
+        .split(/\r?\n/)
+        .map((line) => {
+            const trimmed = line.trim();
+            if (trimmed.length === 0) {
+                return "";
+            }
+            if (/^at\s+/.test(trimmed)) {
+                return `    ${trimmed}`;
+            }
+            return `[mocha] ${trimmed}`;
+        })
+        .filter((line) => line.length > 0);
+
+    if (taggedLines.length > 0) {
+        appendLogEntry(logFilePath, taggedLines.join("\n"), "info");
+    }
+}
 
 export function run(): Promise<void> {
+    const logFilePath = resolveOrCreateE2eLogFile(repoRoot);
+    const isCliRunner = process.env[E2E_CLI_RUNNER_ENV] === "1";
+    const rawConsoleLog = console.log.bind(console);
+    const originalMochaConsoleLog = Mocha.reporters.Base.consoleLog;
+
+    if (!isCliRunner) {
+        const startBanner = formatLogBanner("start", logFilePath);
+        rawConsoleLog(startBanner);
+        appendLogEntry(
+            logFilePath,
+            `[e2e] E2E test run started (live=${process.env.UXP_E2E_PHOTOSHOP === "1"})`,
+            "info",
+        );
+        appendLogEntry(logFilePath, startBanner, "info");
+    }
+
+    Mocha.reporters.Base.consoleLog = (...args: unknown[]) => {
+        const formatted = args.length === 0 ? "" : util.format(...args);
+        if (isCliRunner) {
+            for (const line of formatted.split(/\r?\n/)) {
+                rawConsoleLog(`${E2E_TERMINAL_PREFIX}${line}`);
+            }
+        }
+        else {
+            rawConsoleLog(formatted);
+        }
+        appendMochaReporterOutputToLog(logFilePath, formatted);
+    };
+
+    const restoreConsole = installConsoleToFileRedirect(logFilePath);
+
     const mocha = new Mocha({
         ui: "bdd",
         timeout: 60_000,
@@ -25,9 +90,9 @@ export function run(): Promise<void> {
             // so give it a moment to recover before the next test starts.
             afterEach: async () => {
                 if (process.env.UXP_E2E_PHOTOSHOP === "1") {
-                    console.log("[e2e] waiting 2000ms after test to avoid PS 'not responding' state");
+                    console.log(`[e2e] waiting ${PS_RECOVERY_DELAY}ms after test to avoid PS 'not responding' state`);
                     // Photoshop has no readiness event after a live test case.
-                    await sleep(500);
+                    await sleep(PS_RECOVERY_DELAY);
                 }
             },
         },
@@ -49,9 +114,20 @@ export function run(): Promise<void> {
         mocha.addFile(path.join(suiteDir, file));
     }
 
+    const cleanupLogging = (): void => {
+        Mocha.reporters.Base.consoleLog = originalMochaConsoleLog;
+        restoreConsole();
+        if (!isCliRunner) {
+            const endBanner = formatLogBanner("end", logFilePath);
+            appendLogEntry(logFilePath, endBanner, "info");
+            rawConsoleLog(endBanner);
+        }
+    };
+
     return new Promise((resolve, reject) => {
         try {
-            mocha.run((failures) => {
+            const runner = mocha.run((failures) => {
+                cleanupLogging();
                 if (failures > 0) {
                     reject(new Error(`${failures} e2e test(s) failed.`));
                 }
@@ -59,8 +135,12 @@ export function run(): Promise<void> {
                     resolve();
                 }
             });
+            runner.on(Mocha.Runner.constants.EVENT_TEST_BEGIN, (test: Mocha.Test) => {
+                console.log(`[mocha] Starting test: ${test.fullTitle()}`);
+            });
         }
         catch (err) {
+            cleanupLogging();
             reject(err instanceof Error ? err : new Error(String(err)));
         }
     });

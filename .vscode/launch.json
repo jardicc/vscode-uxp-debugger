@@ -8,7 +8,8 @@
       "args": [
         "${workspaceFolder}/e2e/fixtures/plugin",
         "--extensionDevelopmentPath=${workspaceFolder}",
-        "--disable-extensions"
+        "--disable-extensions",
+        "--log=JaroslavBereza.uxpdebugger:trace"
       ],
       "outFiles": ["${workspaceFolder}/dist/**/*.js"],
       "preLaunchTask": "npm: watch"
@@ -23,7 +24,8 @@
         // extensionDevelopmentPath string-matches an existing one, so this differs textually
         // while resolving to the same folder.
         "--extensionDevelopmentPath=${workspaceFolder}/.",
-        "--disable-extensions"
+        "--disable-extensions",
+        "--log=JaroslavBereza.uxpdebugger:trace"
       ],
       "outFiles": ["${workspaceFolder}/dist/**/*.js"],
       "preLaunchTask": "npm: watch"

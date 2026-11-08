@@ -56,9 +56,9 @@ export type PanelAction
         | { kind: "addScriptPick" }
         | { kind: "addActiveScript" }
         | { kind: "removeScript"; scriptPath: string }
-        | { kind: "setBreakOnLoad"; scope: "plugins" | "scripts"; value: boolean }
+        | { kind: "setBreakOnLoad"; scope: "plugins"; value: boolean }
         | { kind: "setScriptTargetApp"; appId: string | undefined }
-  /** Persists §5.2; the watch feature itself is a v1 stub. */
+  /** Persists the per-entry Watch toggle (§5.2) reconciled by `PluginWatchManager` (§8). */
         | { kind: "setWatch"; target: TargetRef; value: boolean }
   /** Validates manifest.json, then shows a Save dialog and writes a `.ccx` zip. */
         | { kind: "packPlugin"; manifestPath: string }
@@ -117,7 +117,7 @@ export interface PluginView {
     /** Loaded with break-on-start and still waiting for its first attach. */
     pendingBreakOnStart: boolean;
     inspectorOpen: boolean;
-    /** Persisted toggle (§5.2); feature dormant in v1. */
+    /** Persisted Watch toggle (§5.2); active while the plugin is loaded (§8). */
     watching: boolean;
     /** PanelAction kind currently in flight for this row. */
     busy?: string;

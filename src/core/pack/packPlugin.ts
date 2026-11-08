@@ -1,14 +1,17 @@
 /**
  * "Pack" feature (CONTROL-PANEL.md §8): zips a UXP plugin folder into a
  * distributable `.ccx` archive (plain zip content, `.ccx` extension per
- * user decision) after validating `manifest.json`. v1 has no exclusion
- * rules — the entire plugin folder is packed as-is.
+ * user decision) after validating `manifest.json`. Excludes `.git`,
+ * `.DS_Store`, `.env*`, and the destination `outputPath` itself.
  */
 
 import * as fs from "fs";
+import * as path from "path";
 import AdmZip from "adm-zip";
 import { type ParsedManifest, parseManifestContent } from "../manifest/manifest";
+import { foldPathCase } from "../pathCase";
 import type { UxpManifestHost, UxpPluginManifest } from "../protocol/types";
+import { isSameHostApp } from "../vulcan/hostAppCatalog";
 
 type HostEntry = UxpManifestHost | string;
 
@@ -55,7 +58,7 @@ export function resolveHostOverride(parsed: ParsedManifest, host?: string): stri
                 + "Specify \"host\" to pick which one the packed manifest.json should target.",
             );
         }
-        const index = parsed.hosts.findIndex((h) => h.app === host);
+        const index = parsed.hosts.findIndex((h) => isSameHostApp(h.app, host));
         if (index === -1) {
             throw new Error(
                 `"${host}" is not one of this manifest's host apps (${parsed.hosts.map((h) => h.app).join(", ")}).`,
@@ -80,8 +83,26 @@ export function defaultPackFileName(manifest: { name: string; version: string })
     return `${sanitizeFileNamePart(manifest.name)}-${sanitizeFileNamePart(manifest.version)}.ccx`;
 }
 
+/** Validates that `outputPath` ends with `.ccx` (case-insensitive). */
+export function validatePackOutputPath(outputPath: string): void {
+    if (path.extname(outputPath).toLowerCase() !== ".ccx") {
+        throw new Error(`"outputPath" must end with .ccx (got "${outputPath}").`);
+    }
+}
+
+function isExcludedSegment(segment: string): boolean {
+    const lower = segment.toLowerCase();
+    return (
+        lower === ".git"
+        || lower === ".ds_store"
+        || lower === ".env"
+        || lower.startsWith(".env.")
+    );
+}
+
 /**
- * Zips the entire plugin folder (no exclusions) into `outputPath`. When
+ * Zips the plugin folder into `outputPath` (must end with `.ccx`), excluding
+ * `.git`, `.DS_Store`, `.env*`, and `outputPath` itself. When
  * `manifestJsonOverride` is given, it replaces `manifest.json`'s content in
  * the archive (used to collapse an array `host` down to a single entry).
  */
@@ -90,8 +111,26 @@ export function packPluginFolder(
     outputPath: string,
     manifestJsonOverride?: string,
 ): void {
+    validatePackOutputPath(outputPath);
+
+    const resolvedPluginDir = path.resolve(pluginDir);
+    const foldedOutputPath = foldPathCase(path.resolve(outputPath));
+
     const zip = new AdmZip();
-    zip.addLocalFolder(pluginDir);
+    zip.addLocalFolder(pluginDir, undefined, (relativeEntryPath) => {
+        const segments = relativeEntryPath.split(/[\\/]+/).filter(Boolean);
+        if (segments.some(isExcludedSegment)) {
+            return false;
+        }
+        const entryAbsPath = path.resolve(resolvedPluginDir, relativeEntryPath);
+        if (foldPathCase(entryAbsPath) === foldedOutputPath) {
+            return false;
+        }
+        return true;
+    });
+    if (!zip.getEntry("manifest.json")) {
+        throw new Error("manifest.json not found in the plugin folder.");
+    }
     if (manifestJsonOverride !== undefined) {
         zip.updateFile("manifest.json", Buffer.from(manifestJsonOverride, "utf-8"));
     }

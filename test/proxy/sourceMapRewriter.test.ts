@@ -1,455 +1,395 @@
 import * as fs from "fs";
 import * as os from "os";
 import * as path from "path";
+import { pathToFileURL } from "url";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { fakeLog } from "../fixtures/fakeVscode";
-import {
-    buildIdentitySourceMapUrl,
-    deriveNaiveSubdir,
-    normalizeScriptUrl,
-    resolveExternalSourceMap,
-    resolveScriptFileUrl,
-    resolveVerifiedSubdir,
-    rewriteInlineSourceMapRoot,
-} from "../../src/vscode/proxy/sourceMapRewriter";
+import { type ScriptParsedParams, SourceMapRewriter } from "../../src/vscode/proxy/sourceMapRewriter";
 
-/** Builds an inline (data-URL) source map, mirroring what webpack/UXP emit. */
-function buildInlineSourceMap(
-    map: Record<string, unknown>,
-    mimeHeader = "data:application/json;charset=utf-8;base64",
-): string {
-    const payload = Buffer.from(JSON.stringify(map), "utf-8").toString("base64");
-    return `${mimeHeader},${payload}`;
+function inlineMap(map: Record<string, unknown>, header = "data:application/json;charset=utf-8;base64"): string {
+    return `${header},${Buffer.from(JSON.stringify(map), "utf-8").toString("base64")}`;
 }
 
-/** Decodes an inline (data-URL) source map back into its JSON object. */
-function decodeInlineSourceMap(dataUrl: string): Record<string, unknown> {
-    const payload = dataUrl.slice(dataUrl.indexOf(",") + 1);
-    return JSON.parse(Buffer.from(payload, "base64").toString("utf-8"));
+function decodeMap(dataUrl: string): { sources: string[]; sourceRoot?: string; mappings: string } {
+    return JSON.parse(Buffer.from(dataUrl.slice(dataUrl.indexOf(",") + 1), "base64").toString("utf-8"));
 }
 
-describe("normalizeScriptUrl", () => {
-    it("strips the uxp:// scheme and plugin-id, keeping only the path", () => {
-        expect(normalizeScriptUrl("uxp://com.adobe.plugin/index.js")).toBe("/index.js");
-    });
+const fileUrl = (p: string) => pathToFileURL(p).href;
 
-    it("keeps nested paths after stripping the plugin-id prefix", () => {
-        expect(normalizeScriptUrl("uxp://com.adobe.plugin/assets/index-abc123.js")).toBe(
-            "/assets/index-abc123.js",
-        );
-    });
+let root: string;
 
-    it("falls back to the original url when nothing remains after the scheme", () => {
-    // "uxp://com.adobe.plugin" (no trailing path) → the regex consumes the
-    // whole string, leaving an empty string, which is falsy → the original
-    // url is returned unchanged instead of an empty string.
-        expect(normalizeScriptUrl("uxp://com.adobe.plugin")).toBe("uxp://com.adobe.plugin");
-    });
+/** Creates `files` (relative to the temp project root) with dummy content. */
+function project(...files: string[]): void {
+    for (const file of files) {
+        fs.mkdirSync(path.dirname(path.join(root, file)), { recursive: true });
+        fs.writeFileSync(path.join(root, file), "// " + file);
+    }
+}
 
-    it("leaves file:// URLs untouched", () => {
-        const url = "file:///C:/plugins/my-plugin/index.js";
-        expect(normalizeScriptUrl(url)).toBe(url);
-    });
+function rewrite(pluginDir: string, params: ScriptParsedParams) {
+    const log = fakeLog();
+    new SourceMapRewriter(pluginDir, log).rewriteScriptParsed(params);
+    return { params, log };
+}
 
-    it("leaves http(s):// URLs untouched", () => {
-        expect(normalizeScriptUrl("https://example.com/index.js")).toBe("https://example.com/index.js");
-    });
+/** Rewrites a script whose inline map lists `sources`, returning the rewritten map. */
+function rewriteSources(pluginDir: string, url: string, sources: string[], extra: Record<string, unknown> = {}) {
+    const { params } = rewrite(pluginDir, { url, sourceMapURL: inlineMap({ version: 3, sources, mappings: "AAAA", ...extra }) });
+    return decodeMap(params.sourceMapURL!);
+}
 
-    it("leaves already-relative urls untouched", () => {
-        expect(normalizeScriptUrl("./index.js")).toBe("./index.js");
-    });
+beforeEach(() => {
+    root = fs.mkdtempSync(path.join(os.tmpdir(), "uxp-sourcemap-test-"));
 });
 
-describe("resolveScriptFileUrl", () => {
-    it("resolves a root-relative url to an absolute file:// path under pluginDir", () => {
-        expect(resolveScriptFileUrl("/index.js", "A:/plugins/my-plugin")).toBe(
-            "file:///A:/plugins/my-plugin/index.js",
-        );
-    });
-
-    it("resolves a nested root-relative url, preserving subdirectories", () => {
-        expect(resolveScriptFileUrl("/assets/sub/index-abc123.js", "A:/plugins/my-plugin")).toBe(
-            "file:///A:/plugins/my-plugin/assets/sub/index-abc123.js",
-        );
-    });
-
-    it("resolves a script at the plugin root (empty relative path) without a trailing slash", () => {
-        expect(resolveScriptFileUrl("/", "A:/plugins/my-plugin")).toBe("file:///A:/plugins/my-plugin");
-    });
-
-    it("normalizes backslashes in pluginDir", () => {
-        expect(resolveScriptFileUrl("/index.js", "A:\\plugins\\my-plugin")).toBe(
-            "file:///A:/plugins/my-plugin/index.js",
-        );
-    });
-
-    it("resolves a raw Windows absolute path (drive letter, no scheme) to file://, not root-relative", () => {
-    // Real bug (2026-08-10): a naive "already has a scheme" check mistook
-    // the "a:" drive letter for a URI scheme and left the path completely
-    // untouched — UXP reports scripts this way (instead of uxp://) at least
-    // for the initial Plugin/runScript entry point.
-        expect(
-            resolveScriptFileUrl(
-                "a:\\VS-projects\\uxp-debugger2\\e2e\\fixtures\\plugin\\index.js",
-                "a:\\VS-projects\\uxp-debugger2\\e2e\\fixtures\\plugin",
-            ),
-        ).toBe("file:///a:/VS-projects/uxp-debugger2/e2e/fixtures/plugin/index.js");
-    });
-
-    it("leaves already-absolute urls (file:, http(s):) untouched", () => {
-        expect(resolveScriptFileUrl("file:///C:/plugins/my-plugin/index.js", "A:/plugins/my-plugin")).toBe(
-            "file:///C:/plugins/my-plugin/index.js",
-        );
-        expect(resolveScriptFileUrl("https://example.com/index.js", "A:/plugins/my-plugin")).toBe(
-            "https://example.com/index.js",
-        );
-    });
-
-    it("resolves an opaque custom-scheme url (e.g. uxp-script://) when the file exists under pluginDir", () => {
-    // Real case (2026-08-10): vite-uxp-plugin's `debugger: "udt"` build mode
-    // appends `//# sourceURL=uxp-script://<outputRelativePath>` — the whole
-    // "host" position is part of the relative path, not something to strip.
-        const pluginDir = fs.mkdtempSync(path.join(os.tmpdir(), "uxp-scriptfileurl-test-"));
-        try {
-            fs.mkdirSync(path.join(pluginDir, "assets"));
-            fs.writeFileSync(path.join(pluginDir, "assets", "index-abc123.js"), "// bundle");
-
-            expect(resolveScriptFileUrl("uxp-script://assets/index-abc123.js", pluginDir)).toBe(
-                `file:///${pluginDir.replace(/\\/g, "/")}/assets/index-abc123.js`,
-            );
-        }
-        finally {
-            fs.rmSync(pluginDir, { recursive: true, force: true });
-        }
-    });
-
-    it("leaves an opaque custom-scheme url unchanged when it doesn't resolve to a real file", () => {
-        expect(resolveScriptFileUrl("uxp-script://assets/missing.js", "A:/plugins/my-plugin")).toBe(
-            "uxp-script://assets/missing.js",
-        );
-    });
+afterEach(() => {
+    fs.rmSync(root, { recursive: true, force: true });
 });
 
-describe("deriveNaiveSubdir", () => {
-    it("returns the directory of a nested root-relative url", () => {
-        expect(deriveNaiveSubdir("/assets/sub/index.js")).toBe("assets/sub");
+describe("SourceMapRewriter — script url (no source map)", () => {
+    it.each([
+        ["uxp://com.adobe.plugin/index.js", "index.js"],
+        ["uxp://com.adobe.plugin/assets/sub/index-abc.js", "assets/sub/index-abc.js"],
+        ["uxp-script://assets/index-abc.js", "assets/index-abc.js"],
+        ["/index.js", "index.js"],
+        ["./index.js", "index.js"],
+    ])("resolves %s to the real file under pluginDir", (url, file) => {
+        project(`plugin/${file}`);
+        const { params } = rewrite(path.join(root, "plugin"), { url, endLine: 2 });
+
+        const expected = fileUrl(path.join(root, "plugin", file));
+        expect(params.url).toBe(expected);
+        const map = decodeMap(params.sourceMapURL!);
+        expect(map.sources).toEqual([expected]);
+        expect(map.mappings.split(";")).toEqual(["AAAA", "AACA", "AACA"]);
     });
 
-    it("returns an empty string for a script at the plugin root", () => {
-        expect(deriveNaiveSubdir("/index.js")).toBe("");
-        expect(deriveNaiveSubdir("./index.js")).toBe("");
+    it("resolves a raw absolute OS path inside pluginDir without doubling it", () => {
+        project("plugin/dist/index.js");
+        const scriptFile = path.join(root, "plugin", "dist", "index.js");
+
+        const { params } = rewrite(path.join(root, "plugin"), { url: scriptFile });
+
+        expect(params.url).toBe(fileUrl(scriptFile));
     });
+
+    it("keeps a file: url that points at an existing script", () => {
+        project("index.js");
+        const url = fileUrl(path.join(root, "index.js"));
+
+        expect(rewrite(root, { url }).params.url).toBe(url);
+    });
+
+    it("still emits one mapped line when endLine is missing", () => {
+        project("index.js");
+        const { params } = rewrite(root, { url: "/index.js" });
+
+        expect(decodeMap(params.sourceMapURL!).mappings).toBe("AAAA");
+    });
+
+    it.each([
+        "uxp-script://assets/missing.js",
+        "https://example.com/index.js",
+        "/missing.js",
+        "uxp://com.adobe.plugin",
+        "file:///missing/index.js",
+    ])(
+        "leaves %s untouched when it doesn't exist on disk",
+        (url) => {
+            const { params } = rewrite(root, { url, sourceMapURL: "" });
+
+            expect(params).toEqual({ url, sourceMapURL: "" });
+        },
+    );
 });
 
-describe("resolveVerifiedSubdir", () => {
-    it("falls back to the naive dirname guess when there are no samples to verify", () => {
-        expect(resolveVerifiedSubdir("/bundle/index.js", "A:/plugins/my-plugin", [])).toBe("bundle");
-    });
-
-    it("falls back to the naive dirname guess when no candidate verifies against disk", () => {
-        expect(resolveVerifiedSubdir("/bundle/index.js", "A:/plugins/my-plugin", ["../src/index.ts"])).toBe(
-            "bundle",
-        );
-    });
-
-    it("fixes the real vite-uxp-plugin uxp-script:// bug: resolves to the real source, not a garbage subdir", () => {
-    // Reproduces the exact reported shape: pluginDir is the built "dist"
-    // folder, the bundle sits under "assets/", and the original source lives
-    // two levels up in the project's "src/" folder — `sources` entries are
-    // relative to "dist/assets/", e.g. "../../src/main.tsx".
-        const projectDir = fs.mkdtempSync(path.join(os.tmpdir(), "uxp-verifiedsubdir-test-"));
-        try {
-            const pluginDir = path.join(projectDir, "dist");
-            fs.mkdirSync(path.join(pluginDir, "assets"), { recursive: true });
-            fs.mkdirSync(path.join(projectDir, "src"), { recursive: true });
-            fs.writeFileSync(path.join(projectDir, "src", "main.tsx"), "// real source");
-
-            const subdir = resolveVerifiedSubdir("uxp-script://assets/index-abc123.js", pluginDir, [
-                "../../src/main.tsx",
-            ]);
-
-            expect(subdir).toBe("assets");
-            expect(path.resolve(pluginDir, subdir, "../../src/main.tsx")).toBe(
-                path.join(projectDir, "src", "main.tsx"),
-            );
-        }
-        finally {
-            fs.rmSync(projectDir, { recursive: true, force: true });
-        }
-    });
-});
-
-describe("buildIdentitySourceMapUrl", () => {
-    it("maps every generated line 1:1 onto the same absolute file", () => {
-        const dataUrl = buildIdentitySourceMapUrl("A:/plugins/my-plugin/index.js", 3);
-        const map = decodeInlineSourceMap(dataUrl);
-
-        expect(map.sources).toEqual(["file:///A:/plugins/my-plugin/index.js"]);
-        expect((map.mappings as string).split(";")).toEqual(["AAAA", "AACA", "AACA"]);
-    });
-
-    it("produces at least one mapped line even for a zero/negative line count", () => {
-        const map = decodeInlineSourceMap(buildIdentitySourceMapUrl("A:/plugins/my-plugin/index.js", 0));
-        expect((map.mappings as string).split(";")).toEqual(["AAAA"]);
-    });
-});
-
-describe("rewriteInlineSourceMapRoot", () => {
-    it("rewrites sourceRoot to a file:// URL under pluginDir + scriptSubdir", () => {
-        const log = fakeLog();
-        const dataUrl = buildInlineSourceMap({
-            version: 3,
-            sources: ["../src/shared/store.ts"],
-            names: [],
-            mappings: "AAAA",
+describe("SourceMapRewriter — loading source maps", () => {
+    it("re-emits an inline map with its sourceRoot pointing at the script's directory", () => {
+        project("plugin/bundle/index.js", "plugin/src/index.ts");
+        const map = rewriteSources(path.join(root, "plugin"), "/bundle/index.js", ["../src/index.ts"], {
+            sourceRoot: "webpack:///",
             file: "index.js",
         });
 
-        const result = rewriteInlineSourceMapRoot(dataUrl, "A:/plugins/my-plugin", "/bundle/index.js", log);
-        const map = decodeInlineSourceMap(result);
-
-        expect(map.sourceRoot).toBe("file:///A:/plugins/my-plugin/bundle/");
-        // Everything else in the map must be preserved untouched.
-        expect(map.sources).toEqual(["../src/shared/store.ts"]);
-        expect(map.mappings).toBe("AAAA");
-        expect(map.file).toBe("index.js");
-    });
-
-    it("omits the subdir segment when the script lives at the plugin root", () => {
-        const log = fakeLog();
-        const dataUrl = buildInlineSourceMap({ version: 3, sources: [], mappings: "" });
-
-        const result = rewriteInlineSourceMapRoot(dataUrl, "A:/plugins/my-plugin", "/index.js", log);
-
-        expect(decodeInlineSourceMap(result).sourceRoot).toBe("file:///A:/plugins/my-plugin/");
-    });
-
-    it("normalizes Windows backslashes in pluginDir to forward slashes", () => {
-        const log = fakeLog();
-        const dataUrl = buildInlineSourceMap({ version: 3, sources: [], mappings: "" });
-
-        const result = rewriteInlineSourceMapRoot(dataUrl, "A:\\plugins\\my-plugin", "/assets/sub/index.js", log);
-
-        expect(decodeInlineSourceMap(result).sourceRoot).toBe(
-            "file:///A:/plugins/my-plugin/assets/sub/",
-        );
-    });
-
-    it("overwrites a pre-existing sourceRoot rather than merging with it", () => {
-        const log = fakeLog();
-        const dataUrl = buildInlineSourceMap({
-            version: 3,
-            sourceRoot: "webpack:///./",
-            sources: ["index.ts"],
-            mappings: "",
-        });
-
-        const result = rewriteInlineSourceMapRoot(dataUrl, "A:/plugins/p", "/index.js", log);
-
-        expect(decodeInlineSourceMap(result).sourceRoot).toBe("file:///A:/plugins/p/");
-    });
-
-    it("logs the old and new sourceRoot values", () => {
-        const log = fakeLog();
-        const dataUrl = buildInlineSourceMap({ version: 3, sourceRoot: "old-root", sources: [], mappings: "" });
-
-        rewriteInlineSourceMapRoot(dataUrl, "A:/plugins/p", "/index.js", log);
-
-        expect(log.lines.some((l) => l.includes("Rewrote sourceRoot"))).toBe(true);
-        expect(log.lines.some((l) => l.includes("\"old-root\""))).toBe(true);
-    });
-
-    it("logs the final source file resolved from sourceRoot and the source entry", () => {
-        const log = fakeLog();
-        const dataUrl = buildInlineSourceMap({
-            version: 3,
-            sources: ["../src/main.ts"],
+        expect(map).toMatchObject({
+            sources: [fileUrl(path.join(root, "plugin", "src", "index.ts"))],
+            sourceRoot: fileUrl(path.join(root, "plugin", "bundle")) + "/",
             mappings: "AAAA",
+            file: "index.js",
+        });
+    });
+
+    it.each(["data:application/json;base64", "DATA:APPLICATION/JSON;BASE64", "data:application/json;charset=utf-8;base64"])(
+        "accepts the %s header",
+        (header) => {
+            project("index.js", "index.ts");
+            const sourceMapURL = inlineMap({ version: 3, sources: ["index.ts"], mappings: "" }, header);
+            const { params } = rewrite(root, { url: "/index.js", sourceMapURL });
+
+            expect(decodeMap(params.sourceMapURL!).sources).toEqual([fileUrl(path.join(root, "index.ts"))]);
+        },
+    );
+
+    it("accepts a percent-encoded (non-base64) inline map", () => {
+        project("index.js", "index.ts");
+        const json = JSON.stringify({ version: 3, sources: ["index.ts"], mappings: "" });
+        const { params } = rewrite(root, { url: "/index.js", sourceMapURL: "data:application/json," + encodeURIComponent(json) });
+
+        expect(decodeMap(params.sourceMapURL!).sources).toEqual([fileUrl(path.join(root, "index.ts"))]);
+    });
+
+    it("reads an external .map file next to the script and inlines it", () => {
+        project("plugin/assets/index-abc.js", "src/main.tsx");
+        fs.writeFileSync(
+            path.join(root, "plugin", "assets", "index-abc.js.map"),
+            JSON.stringify({ version: 3, sources: ["../../src/main.tsx"], mappings: "AAAA" }),
+        );
+
+        const { params, log } = rewrite(path.join(root, "plugin"), {
+            url: "uxp-script://assets/index-abc.js",
+            sourceMapURL: "index-abc.js.map",
         });
 
-        rewriteInlineSourceMapRoot(dataUrl, "A:/plugins/p", "/dist/index.js", log);
+        expect(params.sourceMapURL!.startsWith("data:application/json;")).toBe(true);
+        expect(decodeMap(params.sourceMapURL!).sources).toEqual([fileUrl(path.join(root, "src", "main.tsx"))]);
+        expect(log.lines.some((l) => l.includes("Resolved 1/1"))).toBe(true);
+    });
 
-        expect(log.lines).toContain(
-            "[CDP] Final source file: \"../src/main.ts\" → \"file:///A:/plugins/p/src/main.ts\"",
+    it.each([
+        ["a missing external .map", "missing.js.map", "Source map not found"],
+        ["a remote map url", "https://cdn.example.com/index.js.map", "Source map not found"],
+        ["a non-JSON payload", "data:application/json;base64," + Buffer.from("{ nope").toString("base64"), "Failed"],
+        ["a non-JSON mime type", "data:text/plain;base64," + Buffer.from("hello").toString("base64"), "Failed"],
+        ["an empty payload", "data:application/json;base64,", "Failed"],
+        ["a non-v3 map", inlineMap({ version: 2, sources: [] }), "Failed"],
+        ["a data url without a payload separator", "data:application/json;base64", "Source map not found"],
+        ["an external .map that is not valid JSON", "bad.js.map", "Failed"],
+    ])("leaves %s untouched", (_, sourceMapURL, logged) => {
+        project("index.js");
+        fs.writeFileSync(path.join(root, "bad.js.map"), "{ not json");
+        const { params, log } = rewrite(root, { url: "/index.js", sourceMapURL });
+
+        expect(params.sourceMapURL).toBe(sourceMapURL);
+        expect(log.lines.some((l) => l.includes(logged))).toBe(true);
+    });
+
+    it("logs at most 25 resolved sources plus a summary", () => {
+        const files = Array.from({ length: 30 }, (_, i) => `src/f${String(i)}.ts`);
+        project("index.js", ...files);
+        const { log } = rewrite(root, { url: "/index.js", sourceMapURL: inlineMap({ version: 3, sources: files, mappings: "" }) });
+
+        expect(log.byLevel.debug).toContain(
+            `[CDP] Source: "src/f0.ts" → ${JSON.stringify(fileUrl(path.join(root, "src", "f0.ts")))}`,
         );
+        expect(log.lines.filter((l) => l.startsWith("[CDP] Source:"))).toHaveLength(25);
+        expect(log.byLevel.info).toContain("[CDP] Resolved 30/30 source map sources on disk");
+        expect(log.lines.some((l) => l.startsWith("[CDP] Unresolved source:"))).toBe(false);
     });
 
-    it("accepts the charset-less data:application/json;base64 header form", () => {
-        const log = fakeLog();
-        const dataUrl = buildInlineSourceMap(
-            { version: 3, sources: [], mappings: "" },
-            "data:application/json;base64",
-        );
+    it("logs a sample of at most 50 unresolved sources", () => {
+        const missing = Array.from({ length: 52 }, (_, i) => `webpack:///./missing${String(i)}.ts`);
+        project("index.js", "found.ts");
+        const { log } = rewrite(root, {
+            url: "/index.js",
+            sourceMapURL: inlineMap({ version: 3, sources: ["found.ts", ...missing], mappings: "" }),
+        });
 
-        const result = rewriteInlineSourceMapRoot(dataUrl, "A:/plugins/p", "/sub/index.js", log);
-
-        expect(result.startsWith("data:application/json;base64,")).toBe(true);
-        expect(decodeInlineSourceMap(result).sourceRoot).toBe("file:///A:/plugins/p/sub/");
-    });
-
-    it("is case-insensitive when detecting the data:application/json prefix", () => {
-        const log = fakeLog();
-        const dataUrl = buildInlineSourceMap(
-            { version: 3, sources: [], mappings: "" },
-            "DATA:APPLICATION/JSON;base64",
-        );
-
-        const result = rewriteInlineSourceMapRoot(dataUrl, "A:/plugins/p", "/index.js", log);
-
-        expect(decodeInlineSourceMap(result).sourceRoot).toBe("file:///A:/plugins/p/");
-    });
-
-    it("returns the input unchanged when it is not a data: URL at all", () => {
-        const log = fakeLog();
-        const url = "https://cdn.example.com/index.js.map";
-
-        expect(rewriteInlineSourceMapRoot(url, "A:/plugins/p", "/index.js", log)).toBe(url);
-        expect(log.lines.some((l) => l.includes("Not an inline source map"))).toBe(true);
-    });
-
-    it("returns the input unchanged for a non-JSON data: mime type", () => {
-        const log = fakeLog();
-        const dataUrl = "data:text/plain;base64," + Buffer.from("hello").toString("base64");
-
-        expect(rewriteInlineSourceMapRoot(dataUrl, "A:/plugins/p", "/index.js", log)).toBe(dataUrl);
-    });
-
-    it("returns the input unchanged when the data: URL has no comma separator", () => {
-        const log = fakeLog();
-        const malformed = "data:application/json;base64";
-
-        expect(rewriteInlineSourceMapRoot(malformed, "A:/plugins/p", "/index.js", log)).toBe(malformed);
-    });
-
-    it("falls back to the original dataUrl when the payload is not valid JSON", () => {
-        const log = fakeLog();
-        const payload = Buffer.from("{ this is not json", "utf-8").toString("base64");
-        const dataUrl = `data:application/json;base64,${payload}`;
-
-        const result = rewriteInlineSourceMapRoot(dataUrl, "A:/plugins/p", "/index.js", log);
-
-        expect(result).toBe(dataUrl);
-        expect(log.lines.some((l) => l.includes("Failed to rewrite inline source map"))).toBe(true);
-    });
-
-    it("falls back to the original dataUrl when the base64 payload cannot decode to text at all", () => {
-    // An empty payload decodes to an empty string, which fails JSON.parse —
-    // exercising the same catch path with a degenerate (not just malformed) input.
-        const log = fakeLog();
-        const dataUrl = "data:application/json;base64,";
-
-        expect(rewriteInlineSourceMapRoot(dataUrl, "A:/plugins/p", "/index.js", log)).toBe(dataUrl);
-    });
-
-    it("supports a deeply nested scriptSubdir (multi-level /assets/ path)", () => {
-        const log = fakeLog();
-        const dataUrl = buildInlineSourceMap({ version: 3, sources: [], mappings: "" });
-
-        const result = rewriteInlineSourceMapRoot(dataUrl, "A:/plugins/p", "/assets/sub/deep/index.js", log);
-
-        expect(decodeInlineSourceMap(result).sourceRoot).toBe("file:///A:/plugins/p/assets/sub/deep/");
-    });
-
-    it("produces a quadruple-slash root when pluginDir is itself posix-absolute (documented quirk)", () => {
-    // pluginDir starting with "/" is not de-duplicated against the fixed
-    // "file:///" prefix — this repo only ever passes Windows-style drive
-    // paths in practice, so this is captured as a known quirk, not "fixed".
-        const log = fakeLog();
-        const dataUrl = buildInlineSourceMap({ version: 3, sources: [], mappings: "" });
-
-        const result = rewriteInlineSourceMapRoot(dataUrl, "/plugins/p", "/index.js", log);
-
-        expect(decodeInlineSourceMap(result).sourceRoot).toBe("file:////plugins/p/");
+        expect(log.byLevel.info).toContain("[CDP] Resolved 1/53 source map sources on disk");
+        const sample = log.byLevel.warn.filter((l) => l.startsWith("[CDP] Unresolved source:"));
+        expect(sample).toHaveLength(50);
+        expect(sample[0]).toBe("[CDP] Unresolved source: \"webpack:///./missing0.ts\"");
+        expect(log.byLevel.warn).toContain("[CDP] ...and 2 more unresolved");
     });
 });
 
-describe("resolveExternalSourceMap", () => {
-    let pluginDir: string;
-
-    beforeEach(() => {
-        pluginDir = fs.mkdtempSync(path.join(os.tmpdir(), "uxp-sourcemap-test-"));
-    });
-
-    afterEach(() => {
-        fs.rmSync(pluginDir, { recursive: true, force: true });
-    });
-
-    it("reads a .map file next to the script and rewrites its sourceRoot to an inline data: URL", () => {
-        const log = fakeLog();
-        fs.writeFileSync(
-            path.join(pluginDir, "bundle.js.map"),
-            JSON.stringify({ version: 3, sources: ["original.ts"], mappings: "AAAA" }),
+describe("SourceMapRewriter — resolving sources across project layouts", () => {
+    it("resolves a webpack PSX layout (context src/ next to plugin/), keeping queries and virtual modules", () => {
+        fs.mkdirSync(path.join(root, ".git"));
+        project(
+            "plugin/bundle/bundled.js",
+            "src/Log.ts",
+            "src/UI/Accordion.tsx",
+            "src/UI/Accordion.less",
+            "tests/assets/GradientMatrix.ts",
+            "node_modules/@reduxjs/toolkit/dist/rtk.mjs",
         );
 
-        const result = resolveExternalSourceMap("bundle.js.map", pluginDir, "/bundle.js", log);
+        const map = rewriteSources(path.join(root, "plugin"), "uxp://com.adobe.plugin/bundle/bundled.js", [
+            "webpack:///../node_modules/@reduxjs/toolkit/dist/rtk.mjs",
+            "webpack:///./UI/Accordion.less?b7cf",
+            "webpack:///../tests/assets/GradientMatrix.ts",
+            "webpack:///./Log.ts",
+            "webpack:///./UI/Accordion.tsx",
+            "webpack:///webpack/bootstrap",
+            "webpack:///external commonjs2 \"photoshop\"",
+        ]);
 
-        expect(result.startsWith("data:application/json;")).toBe(true);
-        const map = decodeInlineSourceMap(result);
-        expect(map.sourceRoot).toBe(`file:///${pluginDir.replace(/\\/g, "/")}/`);
-        expect(map.sources).toEqual(["original.ts"]);
-        expect(log.lines).toContain(
-            `[CDP] Final source file: \"original.ts\" → \"file:///${pluginDir.replace(/\\/g, "/")}/original.ts\"`,
-        );
+        expect(map.sources).toEqual([
+            fileUrl(path.join(root, "node_modules", "@reduxjs", "toolkit", "dist", "rtk.mjs")),
+            fileUrl(path.join(root, "src", "UI", "Accordion.less")) + "?b7cf",
+            fileUrl(path.join(root, "tests", "assets", "GradientMatrix.ts")),
+            fileUrl(path.join(root, "src", "Log.ts")),
+            fileUrl(path.join(root, "src", "UI", "Accordion.tsx")),
+            "webpack:///webpack/bootstrap",
+            "webpack:///external commonjs2 \"photoshop\"",
+        ]);
     });
 
-    it("resolves the .map path under the script's own subdirectory", () => {
-        const log = fakeLog();
-        fs.mkdirSync(path.join(pluginDir, "assets"));
-        fs.writeFileSync(
-            path.join(pluginDir, "assets", "bundle.js.map"),
-            JSON.stringify({ version: 3, sources: [], mappings: "" }),
-        );
+    it("drops a webpack 5 package namespace before the ./ anchor", () => {
+        fs.mkdirSync(path.join(root, ".git"));
+        project("dist/bundle.js", "src/index.ts", "node_modules/immer/dist/immer.mjs");
 
-        const result = resolveExternalSourceMap("bundle.js.map", pluginDir, "/assets/bundle.js", log);
+        const map = rewriteSources(path.join(root, "dist"), "/bundle.js", [
+            "webpack://@scope/my-plugin/./src/index.ts",
+            "webpack://@scope/my-plugin/./node_modules/immer/dist/immer.mjs",
+        ]);
 
-        expect(decodeInlineSourceMap(result).sourceRoot).toBe(
-            `file:///${pluginDir.replace(/\\/g, "/")}/assets/`,
-        );
+        expect(map.sources).toEqual([
+            fileUrl(path.join(root, "src", "index.ts")),
+            fileUrl(path.join(root, "node_modules", "immer", "dist", "immer.mjs")),
+        ]);
     });
 
-    it("returns the input unchanged when the .map file does not exist on disk", () => {
-        const log = fakeLog();
+    it("finds hoisted node_modules in a monorepo", () => {
+        fs.mkdirSync(path.join(root, ".git"));
+        project("packages/ps/plugin/bundled.js", "packages/ps/src/index.ts", "node_modules/reselect/dist/reselect.mjs");
 
-        const result = resolveExternalSourceMap("missing.js.map", pluginDir, "/missing.js", log);
+        const map = rewriteSources(path.join(root, "packages", "ps", "plugin"), "/bundled.js", [
+            "webpack:///./index.ts",
+            "webpack:///../node_modules/reselect/dist/reselect.mjs",
+        ]);
 
-        expect(result).toBe("missing.js.map");
-        expect(log.lines.some((l) => l.includes("Failed to resolve external source map"))).toBe(true);
+        expect(map.sources).toEqual([
+            fileUrl(path.join(root, "packages", "ps", "src", "index.ts")),
+            fileUrl(path.join(root, "node_modules", "reselect", "dist", "reselect.mjs")),
+        ]);
     });
 
-    it("leaves absolute URLs (http/https/file schemes) untouched", () => {
-        const log = fakeLog();
-        const url = "https://cdn.example.com/bundle.js.map";
+    it("rebases sources of a bundle moved to a shallower folder after the map was emitted", () => {
+        project("dist/bundle.js", "src/main.tsx");
 
-        expect(resolveExternalSourceMap(url, pluginDir, "/index.js", log)).toBe(url);
-        expect(log.lines.some((l) => l.includes("Not a relative external source map"))).toBe(true);
+        const map = rewriteSources(path.join(root, "dist"), "/bundle.js", ["../../src/main.tsx"]);
+
+        expect(map.sources).toEqual([fileUrl(path.join(root, "src", "main.tsx"))]);
     });
 
-    it("falls back to the original value when the .map file is not valid JSON", () => {
-        const log = fakeLog();
-        fs.writeFileSync(path.join(pluginDir, "bundle.js.map"), "{ not json");
+    it("strips a namespace segment without an anchor (turbopack [project]) and maps the legacy ~/ alias", () => {
+        project("dist/bundle.js", "src/index.ts", "node_modules/redux/dist/redux.mjs");
 
-        const result = resolveExternalSourceMap("bundle.js.map", pluginDir, "/bundle.js", log);
+        const map = rewriteSources(path.join(root, "dist"), "/bundle.js", [
+            "turbopack:///[project]/src/index.ts",
+            "webpack:///./~/redux/dist/redux.mjs",
+        ]);
 
-        expect(result).toBe("bundle.js.map");
+        expect(map.sources).toEqual([
+            fileUrl(path.join(root, "src", "index.ts")),
+            fileUrl(path.join(root, "node_modules", "redux", "dist", "redux.mjs")),
+        ]);
     });
 
-    it("resolves an opaque custom-scheme url (uxp-script://) by verifying the .map file's real location", () => {
-        const log = fakeLog();
-        fs.mkdirSync(path.join(pluginDir, "assets"));
-        fs.writeFileSync(
-            path.join(pluginDir, "assets", "index-abc123.js.map"),
-            JSON.stringify({ version: 3, sources: [], mappings: "" }),
-        );
+    it.each([
+        "webpack-internal:///./src/index.ts",
+        "future-bundler://custom-ns/./src/index.ts",
+        "webpack://my-plugin/src/index.ts",
+        "src/index.ts",
+    ])("resolves %s without knowing its scheme", (source) => {
+        project("dist/bundle.js", "src/index.ts");
 
-        const result = resolveExternalSourceMap(
-            "index-abc123.js.map",
-            pluginDir,
-            "uxp-script://assets/index-abc123.js",
-            log,
-        );
+        expect(rewriteSources(path.join(root, "dist"), "/bundle.js", [source]).sources).toEqual([
+            fileUrl(path.join(root, "src", "index.ts")),
+        ]);
+    });
 
-        expect(decodeInlineSourceMap(result).sourceRoot).toBe(
-            `file:///${pluginDir.replace(/\\/g, "/")}/assets/`,
-        );
+    it("leaves remote and opaque sources untouched", () => {
+        project("index.js");
+        const sources = ["https://example.com/app.js", "uxp://com.adobe.plugin/missing.js", "data:text/plain,x"];
+
+        expect(rewriteSources(root, "/index.js", sources).sources).toEqual(sources);
+    });
+
+    it("honors the map's original sourceRoot before falling back to a plain lookup", () => {
+        project("dist/bundle.js", "dist/a.ts", "src/a.ts");
+
+        const map = rewriteSources(path.join(root, "dist"), "/bundle.js", ["a.ts"], { sourceRoot: "../src" });
+
+        expect(map.sources).toEqual([fileUrl(path.join(root, "src", "a.ts"))]);
+    });
+
+    it("keeps absolute file: sources that exist (e.g. stripped TypeScript scripts)", () => {
+        project("index.js", "original.ts");
+        const source = fileUrl(path.join(root, "original.ts"));
+
+        expect(rewriteSources(root, "/index.js", [source]).sources).toEqual([source]);
+    });
+
+    it("leaves unresolvable sources untouched, relative to the script's directory", () => {
+        project("dist/bundle.js");
+
+        const map = rewriteSources(path.join(root, "dist"), "/bundle.js", ["../src/missing.ts"]);
+
+        expect(map.sources).toEqual(["../src/missing.ts"]);
+        expect(map.sourceRoot).toBe(fileUrl(path.join(root, "dist")) + "/");
+    });
+
+    it("resolves generated (line, column) positions back to original sources via TraceMap", () => {
+        project("plugin/bundle.js", "plugin/src/main.ts");
+        const rewriter = new SourceMapRewriter(path.join(root, "plugin"), fakeLog());
+        // Line 0 col 0 in bundle.js -> line 2 col 4 in src/main.ts ("AAEI": genCol=0, srcIdx=0, srcLine=+2, srcCol=+4)
+        rewriter.rewriteScriptParsed({
+            scriptId: "12",
+            url: "uxp://com.adobe.plugin/bundle.js",
+            sourceMapURL: inlineMap({
+                version: 3,
+                sources: ["./src/main.ts"],
+                names: [],
+                mappings: "AAEI",
+            }),
+        });
+
+        const expectedSource = fileUrl(path.join(root, "plugin", "src", "main.ts"));
+        expect(
+            rewriter.resolveGeneratedLocation({
+                url: "uxp://com.adobe.plugin/bundle.js",
+                lineNumber: 0,
+                columnNumber: 0,
+            }),
+        ).toEqual({
+            url: expectedSource,
+            lineNumber: 2,
+            columnNumber: 4,
+        });
+        expect(
+            rewriter.resolveGeneratedLocation({
+                scriptId: "12",
+                lineNumber: 0,
+                columnNumber: 0,
+            }),
+        ).toEqual({
+            url: expectedSource,
+            lineNumber: 2,
+            columnNumber: 4,
+        });
+    });
+
+    it("falls back to the resolved script file URL when a script has no source map", () => {
+        project("plugin/index.js");
+        const rewriter = new SourceMapRewriter(path.join(root, "plugin"), fakeLog());
+        rewriter.rewriteScriptParsed({
+            scriptId: "5",
+            url: "uxp://com.adobe.plugin/index.js",
+            endLine: 10,
+        });
+
+        expect(
+            rewriter.resolveGeneratedLocation({
+                url: "uxp://com.adobe.plugin/index.js",
+                lineNumber: 3,
+                columnNumber: 2,
+            }),
+        ).toEqual({
+            url: fileUrl(path.join(root, "plugin", "index.js")),
+            lineNumber: 3,
+            columnNumber: 2,
+        });
     });
 });

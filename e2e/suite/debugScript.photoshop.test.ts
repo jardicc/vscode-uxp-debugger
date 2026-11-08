@@ -31,6 +31,7 @@ import * as assert from "assert";
 import type { UxpDebuggerTestApi } from "../../src/vscode/extension";
 import {
     activateExtension,
+    autoResumeStartupPauses,
     describeLive,
     TIMEOUT_DEFAULT,
     detachStrandedScriptSessions,
@@ -72,14 +73,21 @@ describeLive("Run script (live Photoshop)", function () {
         // Resume the script (paused waiting for a debugger, see module doc
         // above). Don't assert on `vscode.debug.activeDebugSession` staying set
         // afterwards — the script finishes almost immediately and may already
-        // be gone by the time we'd check.
-        const started = await api.debugManager.attach(session, fixturePluginDir);
-        assert.strictEqual(started, true, "expected the JS debug session to start");
+        // be gone by the time we'd check. The script also pauses on its first
+        // statement once attached, so that pause is resumed too.
+        const resumer = autoResumeStartupPauses();
+        try {
+            const started = await api.debugManager.attach(session, fixturePluginDir);
+            assert.strictEqual(started, true, "expected the JS debug session to start");
 
-        // The script runs to completion on its own; wait for the manager's
-        // auto-teardown to clear the active session rather than detaching
-        // manually.
-        await waitFor(() => !api.debugManager.hasActiveSession, 5_000);
-        assert.strictEqual(api.debugManager.hasActiveSession, false);
+            // The script runs to completion on its own; wait for the manager's
+            // auto-teardown to clear the active session rather than detaching
+            // manually.
+            await waitFor(() => !api.debugManager.hasActiveSession, 5_000);
+            assert.strictEqual(api.debugManager.hasActiveSession, false);
+        }
+        finally {
+            resumer.dispose();
+        }
     });
 });

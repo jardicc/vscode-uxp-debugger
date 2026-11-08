@@ -14,7 +14,7 @@ import { buildPluginLaunchConfig, buildScriptLaunchConfig } from "../../core/lau
 import { parseArgsText } from "../../core/protocol/messages";
 import { isScriptPath, scriptDialogExtensions, scriptExtensionsLabel } from "../../core/scriptCatalog";
 import type { PluginSession } from "../../core/broker/SessionRegistry";
-import { connectedAppUnsupportedReason, HOST_APPS, parseRunningApps, type RunningApp } from "../../core/vulcan/hostAppCatalog";
+import { connectedAppUnsupportedReason, HOST_APPS, isSameHostApp, parseRunningApps, type RunningApp } from "../../core/vulcan/hostAppCatalog";
 import { sortInstalledCandidates } from "../../core/vulcan/VulcanHostAppController";
 import type { UxpService } from "../UxpService";
 import { addLaunchConfiguration, launchFolderFor } from "../commands/addLaunchConfig";
@@ -105,7 +105,7 @@ export class PanelController implements vscode.Disposable {
         private readonly debugManager: UxpDebugSessionManager,
         private readonly proxyRegistry: CdpProxyRegistry,
         private readonly context: vscode.ExtensionContext,
-        private readonly output: vscode.OutputChannel,
+        private readonly output: vscode.LogOutputChannel,
     ) {
         const refresh = () => {
             this.postState();
@@ -137,8 +137,8 @@ export class PanelController implements vscode.Disposable {
         if (
             target
             && this.installedAppIds
-            && !this.installedAppIds.includes(target)
-            && !this.service.connectedApps.some((app) => app.info.appId === target)
+            && !this.installedAppIds.some((id) => isSameHostApp(id, target))
+            && !this.service.connectedApps.some((app) => isSameHostApp(app.info.appId, target))
         ) {
             void this.pluginRegistry.setScriptTargetApp(undefined);
         }
@@ -261,7 +261,7 @@ export class PanelController implements vscode.Disposable {
     dispatch(action: PanelAction): void {
         const key = rowKeyForAction(action);
         if (key && this.busyRows.has(key)) {
-            this.output.appendLine(
+            this.output.info(
                 `[panel] Ignoring "${action.kind}" — "${this.busyRows.get(key)}" is still running for ${key}.`,
             );
             return;
@@ -301,7 +301,7 @@ export class PanelController implements vscode.Disposable {
         return this.execute(action)
             .catch((err: unknown) => {
                 const message = err instanceof Error ? err.message : String(err);
-                this.output.appendLine(`[panel] "${action.kind}" failed: ${message}`);
+                this.output.error(`[panel] "${action.kind}" failed: ${message}`);
                 void vscode.window.showErrorMessage(`UXP: ${message}`);
             })
             .finally(() => {
@@ -398,7 +398,7 @@ export class PanelController implements vscode.Disposable {
                 // Exhaustiveness guard — webview messages are untrusted, so an
                 // unknown kind is also reachable at runtime.
                 const unhandled: never = action;
-                this.output.appendLine(`[panel] Ignored unknown panel action: ${JSON.stringify(unhandled)}`);
+                this.output.warn(`[panel] Ignored unknown panel action: ${JSON.stringify(unhandled)}`);
                 return;
             }
         }
@@ -594,7 +594,7 @@ export class PanelController implements vscode.Disposable {
             if (breakOnLoad && !wasDebugging) {
                 // Break-on-start sessions have no execution context until a debugger
                 // attaches (§9.4) — cannot restore the inspector yet.
-                this.output.appendLine(
+                this.output.info(
                     "[panel] Skipping inspector restore — session is waiting for a debugger.",
                 );
                 return;
@@ -879,7 +879,7 @@ export class PanelController implements vscode.Disposable {
             return;
         }
         await this.service.waitForConnection(
-            () => this.service.connectedApps.some((app) => app.info.appId === appId),
+            () => this.service.connectedApps.some((app) => isSameHostApp(app.info.appId, appId)),
             CONNECT_TIMEOUT_MS,
         );
     }
@@ -919,7 +919,7 @@ export class PanelController implements vscode.Disposable {
             if (err instanceof NativeAddonUnavailableError) {
                 return undefined;
             }
-            this.output.appendLine(`[panel] Installed-app detection failed: ${err instanceof Error ? err.message : String(err)}`);
+            this.output.error(`[panel] Installed-app detection failed: ${err instanceof Error ? err.message : String(err)}`);
             return undefined;
         }
     }

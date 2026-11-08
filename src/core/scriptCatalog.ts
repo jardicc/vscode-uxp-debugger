@@ -12,7 +12,7 @@
  * them in sync.
  */
 
-import { HOST_APPS, type HostAppDescriptor } from "./vulcan/hostAppCatalog";
+import { HOST_APPS, type HostAppDescriptor, isSameHostApp } from "./vulcan/hostAppCatalog";
 
 /** Extensions runnable in any UXP host app. */
 const UNIVERSAL_SCRIPT_EXTENSIONS: readonly string[] = [".js", ".ts", ".ccjs"];
@@ -76,10 +76,7 @@ export function isAppAllowedForScript(extension: string, appId: string): boolean
     if (!hosts) {
         return true;
     }
-    const wanted = appId.toLowerCase();
-    return hosts.some((app) =>
-        [app.value, ...(app.appIdAliases ?? [])].some((id) => id.toLowerCase() === wanted),
-    );
+    return hosts.some((app) => isSameHostApp(app.value, appId));
 }
 
 /** Implied host badge for a script path (`"ANY"` when unrestricted). */

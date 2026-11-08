@@ -28,7 +28,7 @@ import {
 } from "../../core/scriptCatalog";
 import { sleep } from "../../core/sleep";
 import { stripTypeScriptFile } from "../../core/stripTypeScript";
-import { connectedAppUnsupportedReason } from "../../core/vulcan/hostAppCatalog";
+import { connectedAppUnsupportedReason, isSameHostApp } from "../../core/vulcan/hostAppCatalog";
 import type { UxpService } from "../UxpService";
 import {
     getStampedUxpClientSessionId,
@@ -67,7 +67,7 @@ export async function debugScriptCommand(
     service: UxpService,
     debugManager: UxpDebugSessionManager,
     context: vscode.ExtensionContext,
-    output: vscode.OutputChannel,
+    output: vscode.LogOutputChannel,
     args?: DebugScriptArgs,
 ): Promise<PluginSession | undefined> {
     // 1. Resolve the script file.
@@ -117,7 +117,7 @@ export async function debugScriptCommand(
     }
 
     // 5. Run + attach.
-    output.appendLine(
+    output.info(
         `Running script ${scriptPath} in ${app.info.appName} ${app.info.appVersion} `
         + `with userArgs ${JSON.stringify(userArgs)}`,
     );
@@ -133,15 +133,14 @@ export async function debugScriptCommand(
     if (cleanupStripped) {
         const cleanup = cleanupStripped;
         // Registered before attach so a script that finishes instantly can't
-        // terminate before the listener exists; also tracked in `subscriptions`
-        // so a window close can't leak it (dispose is idempotent).
+        // terminate before the listener exists; extension deactivation is
+        // covered by `cleanupAllStrippedScripts` in `extension.ts`.
         terminateListener = vscode.debug.onDidTerminateDebugSession((vsSession) => {
             if (getStampedUxpClientSessionId(vsSession.configuration) === session.clientSessionId) {
                 cleanup();
                 terminateListener?.dispose();
             }
         });
-        context.subscriptions.push(terminateListener);
     }
     let attached = false;
     try {
@@ -168,7 +167,7 @@ async function runScriptWithModalRetry(
     app: ConnectedApp,
     userArgs: unknown[],
     scriptPath: string,
-    output: vscode.OutputChannel,
+    output: vscode.LogOutputChannel,
 ): Promise<PluginSession> {
     for (let attempt = 1; ; attempt++) {
         try {
@@ -178,7 +177,7 @@ async function runScriptWithModalRetry(
             if (!isHostModalError(err) || attempt >= MODAL_RETRY_ATTEMPTS) {
                 throw err;
             }
-            output.appendLine(
+            output.warn(
                 `[script] Photoshop is still modal (previous run tearing down) — retrying `
                 + `(${String(attempt)}/${String(MODAL_RETRY_ATTEMPTS)})…`,
             );
@@ -223,7 +222,7 @@ async function pickScriptTargetApp(
             (app) => isAppAllowedForScript(extension, app.info.appId),
         );
         if (appIdFilter) {
-            apps = apps.filter((app) => app.info.appId === appIdFilter);
+            apps = apps.filter((app) => isSameHostApp(app.info.appId, appIdFilter));
         }
         return apps;
     };

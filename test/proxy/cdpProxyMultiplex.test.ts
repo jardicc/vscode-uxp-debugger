@@ -25,10 +25,13 @@ async function waitFor(predicate: () => boolean, timeoutMs = 2_000): Promise<voi
     }
 }
 
-function connect(url: string): Promise<{ ws: WebSocket; received: string[] }> {
+function connect(
+    url: string,
+    options?: WebSocket.ClientOptions,
+): Promise<{ ws: WebSocket; received: string[] }> {
     return new Promise((resolve, reject) => {
         const received: string[] = [];
-        const ws = new WebSocket(url);
+        const ws = new WebSocket(url, options);
         ws.on("message", (data) => received.push(data.toString()));
         ws.on("open", () => resolve({ ws, received }));
         ws.on("error", reject);
@@ -182,6 +185,70 @@ describe("CdpProxyServer — multi-client multiplexing (panel + js-debug)", () =
         const forwarded = JSON.parse(targetReceived.find((m) => m.includes("CSS.enable"))!);
         expect(forwarded.id).toBeGreaterThanOrEqual(1_000_000);
 
+        panel.ws.close();
+    });
+
+    it("rejects js-debug WebSocket upgrades carrying a browser Origin header", async () => {
+        await expect(
+            connect(jsDebugUrl(), { origin: "https://evil.example" }),
+        ).rejects.toThrow(/403/);
+    });
+
+    it("rejects /panel WebSocket upgrades from an unauthorized browser Origin", async () => {
+        await expect(
+            connect(panelUrl(), { origin: "https://evil.example" }),
+        ).rejects.toThrow(/403/);
+    });
+
+    it("accepts /panel WebSocket upgrades from the self-hosted inspector origin", async () => {
+        const panel = await connect(panelUrl(), { origin: "http://127.0.0.1:14001" });
+        panel.ws.close();
+    });
+
+    it("rejects WebSocket upgrades with a non-loopback Host header", async () => {
+        await expect(
+            connect(jsDebugUrl(), { headers: { Host: "attacker.example:9222" } }),
+        ).rejects.toThrow(/403/);
+        await expect(
+            connect(panelUrl(), { headers: { Host: "attacker.example:9222" } }),
+        ).rejects.toThrow(/403/);
+    });
+
+    it("closes the previous js-debug client WebSocket when a new client connects", async () => {
+        const firstClient = await connect(jsDebugUrl());
+        let firstClosed = false;
+        firstClient.ws.on("close", () => {
+            firstClosed = true;
+        });
+
+        const secondClient = await connect(jsDebugUrl());
+        await waitFor(() => firstClosed);
+
+        expect(firstClient.ws.readyState).toBe(WebSocket.CLOSED);
+        expect(secondClient.ws.readyState).toBe(WebSocket.OPEN);
+
+        secondClient.ws.close();
+    });
+
+    it("cancels a pending reconnect timer when a new client triggers connectToTarget during the backoff window", async () => {
+        const firstClient = await connect(jsDebugUrl());
+        await waitFor(() => targetConnections === 1 && targetSocket !== undefined);
+
+        // Drop the target connection to schedule the 1500ms reconnect timer.
+        targetSocket!.close();
+        await waitFor(() => targetSocket?.readyState === WebSocket.CLOSED);
+
+        // Before the 1500ms timer fires, connect a panel client, which triggers
+        // connectToTarget() immediately.
+        const panel = await connect(panelUrl());
+        await waitFor(() => targetConnections === 2);
+
+        // Wait past the 1500ms reconnect delay — the cancelled timer must NOT
+        // open a third target connection.
+        await new Promise((r) => setTimeout(r, 1_700));
+        expect(targetConnections).toBe(2);
+
+        firstClient.ws.close();
         panel.ws.close();
     });
 });

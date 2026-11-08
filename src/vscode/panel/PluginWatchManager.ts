@@ -5,7 +5,8 @@
  * debugger creates no watcher at all (dormant, per §8's design note).
  *
  * Plugin changes: every changed path within a 350 ms debounce window is
- * batched, then a full Unload+Load ("reload") runs when the batch includes
+ * batched (ignoring files and subfolders whose name starts with `.`), then a
+ * full Unload+Load ("reload") runs when the batch includes
  * `manifest.json` itself, a `*.uxpaddon` file, or a manifest-declared icon
  * (matched by stripping the on-disk `@2x`/`@3x` scale suffix — the manifest
  * never lists it); otherwise a fast in-place `Plugin/reload` ("refresh").
@@ -19,6 +20,7 @@ import * as fs from "fs";
 import * as path from "path";
 import * as vscode from "vscode";
 import { collectManifestIconPaths, isIconFileMatch, parseManifestContent } from "../../core/manifest/manifest";
+import { foldPathCase } from "../../core/pathCase";
 import type { UxpDebugSessionManager } from "../debug/UxpDebugSessionManager";
 import type { UxpService } from "../UxpService";
 import type { PanelController } from "./PanelController";
@@ -27,6 +29,19 @@ import { sessionsForScript } from "./scriptSessions";
 
 const DEBOUNCE_MS = 350;
 const ADDON_EXTENSION = ".uxpaddon";
+
+/**
+ * Whether `changedFilePath` is a dotfile or inside a dot-subfolder relative to
+ * `pluginDir` (e.g. `.git/...`, `.vscode/...`, `.DS_Store`, `.env`).
+ */
+export function isDotPathInPluginDir(changedFilePath: string, pluginDir: string): boolean {
+    const rel = path.relative(
+        foldPathCase(path.resolve(pluginDir)),
+        foldPathCase(path.resolve(changedFilePath)),
+    );
+    const segments = rel.split(/[\\/]+/).filter(Boolean);
+    return segments.some((segment) => segment.startsWith("."));
+}
 
 interface PluginWatchEntry {
     subscriptions: vscode.Disposable[];
@@ -50,7 +65,7 @@ export class PluginWatchManager implements vscode.Disposable {
         private readonly service: UxpService,
         private readonly debugManager: UxpDebugSessionManager,
         private readonly panelController: PanelController,
-        private readonly output: vscode.OutputChannel,
+        private readonly output: vscode.LogOutputChannel,
     ) {
         const reconcile = () => {
             this.reconcile();
@@ -136,6 +151,9 @@ export class PluginWatchManager implements vscode.Disposable {
         const entry: PluginWatchEntry = { subscriptions: [watcher], pending: new Set() };
 
         const onEvent = (uri: vscode.Uri): void => {
+            if (isDotPathInPluginDir(uri.fsPath, pluginDir)) {
+                return;
+            }
             entry.pending.add(uri.fsPath);
             if (entry.timer) {
                 clearTimeout(entry.timer);
@@ -162,7 +180,7 @@ export class PluginWatchManager implements vscode.Disposable {
         }
 
         const special = changed.some((file) => this.isSpecialPluginFile(file, manifestPath));
-        this.output.appendLine(
+        this.output.info(
             `[watch] ${String(changed.length)} file(s) changed under ${path.basename(path.dirname(manifestPath))} — `
             + (special ? "reloading (manifest/addon/icon changed)." : "refreshing."),
         );
@@ -233,7 +251,7 @@ export class PluginWatchManager implements vscode.Disposable {
         if (!stillDebugging) {
             return; // debugger detached during the debounce window — nothing to restart
         }
-        this.output.appendLine(`[watch] ${path.basename(scriptPath)} changed — restarting debug session.`);
+        this.output.info(`[watch] ${path.basename(scriptPath)} changed — restarting debug session.`);
         void this.panelController.dispatchQueued({ kind: "restartScript", scriptPath });
     }
 

@@ -13,6 +13,7 @@
  * (matches the CDP proxy's reconnect behaviour on plugin reload).
  */
 
+import { type Logger, NOOP_LOGGER } from "../logFormat";
 import type { AppConnection, SocketLike } from "./AppConnection";
 import type { PluginSession } from "./SessionRegistry";
 
@@ -30,7 +31,10 @@ export class CdtTunnelManager {
     /** clientSessionId → active tunnel. */
     private readonly tunnels = new Map<string, ActiveTunnel>();
 
-    constructor(private readonly log: (message: string) => void = () => undefined) {}
+    constructor(
+        private readonly log: Logger = NOOP_LOGGER,
+        private readonly onFrontendDetached?: (session: PluginSession) => void,
+    ) {}
 
     /** Attach a DevTools frontend socket to a plugin session. */
     attach(frontend: SocketLike, session: PluginSession, app: AppConnection): void {
@@ -41,7 +45,7 @@ export class CdtTunnelManager {
             existing.unsubscribeCdt();
             existing.frontend.close();
             this.tunnels.delete(session.clientSessionId);
-            this.log(`cdt: replaced existing frontend for ${session.clientSessionId}`);
+            this.log.info(`cdt: replaced existing frontend for ${session.clientSessionId}`);
         }
 
         // Flips on "error"/"close" — stops CDP frames being written into a dead socket.
@@ -71,7 +75,7 @@ export class CdtTunnelManager {
         });
         frontend.on("error", (err) => {
             frontendAlive = false;
-            this.log(`cdt: frontend socket error (${session.clientSessionId}): ${err.message}`);
+            this.log.error(`cdt: frontend socket error (${session.clientSessionId}): ${err.message}`);
             // "close" usually follows "error", but SocketLike doesn't guarantee
             // it — tear down here too so a zombie tunnel can't leak its
             // onCdtFrame listener or leave the app thinking a CDT is attached.
@@ -79,7 +83,7 @@ export class CdtTunnelManager {
         });
 
         app.notifyCdtState(session.hostSessionId, true);
-        this.log(`cdt: frontend attached to ${session.clientSessionId}`);
+        this.log.info(`cdt: frontend attached to ${session.clientSessionId}`);
     }
 
     /** Tear down the tunnel of one session (plugin unloaded / app gone). */
@@ -119,6 +123,7 @@ export class CdtTunnelManager {
         }
         tunnel.unsubscribeCdt();
         tunnel.app.notifyCdtState(tunnel.session.hostSessionId, false);
-        this.log(`cdt: frontend detached from ${tunnel.session.clientSessionId}`);
+        this.log.info(`cdt: frontend detached from ${tunnel.session.clientSessionId}`);
+        this.onFrontendDetached?.(tunnel.session);
     }
 }

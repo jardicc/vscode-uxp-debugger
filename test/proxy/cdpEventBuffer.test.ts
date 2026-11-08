@@ -95,4 +95,56 @@ describe("CdpEventBuffer", () => {
         expect(buffer.console[0].timestamp).toBe(5);
         expect(buffer.console[buffer.console.length - 1].timestamp).toBe(204);
     });
+
+    it("resolves console and exception locations through the provided source location resolver", () => {
+        const buffer = new CdpEventBuffer(({ url, lineNumber, columnNumber, scriptId }) => {
+            if (url === "uxp://plugin/bundle.js" || scriptId === "7") {
+                return {
+                    url: "file:///project/src/app.ts",
+                    lineNumber: (lineNumber ?? 0) + 10,
+                    columnNumber: (columnNumber ?? 0) + 4,
+                };
+            }
+            return undefined;
+        });
+
+        buffer.captureFromTarget(
+            consoleApiCalled({
+                stackTrace: {
+                    callFrames: [{ scriptId: "7", url: "uxp://plugin/bundle.js", lineNumber: 2, columnNumber: 1 }],
+                },
+            }),
+        );
+        buffer.captureFromTarget(
+            exceptionThrown({
+                exceptionDetails: {
+                    text: "Uncaught",
+                    scriptId: "7",
+                    url: "uxp://plugin/bundle.js",
+                    lineNumber: 5,
+                    columnNumber: 3,
+                    exception: { description: "Error: fail" },
+                    stackTrace: {
+                        callFrames: [
+                            { functionName: "run", scriptId: "7", url: "uxp://plugin/bundle.js", lineNumber: 5, columnNumber: 3 },
+                            { functionName: "rawCaller", url: "uxp://plugin/unmapped.js", lineNumber: 1, columnNumber: 0 },
+                        ],
+                    },
+                },
+            }),
+        );
+
+        expect(buffer.console[0]).toMatchObject({
+            sourceUrl: "file:///project/src/app.ts",
+            line: 12,
+        });
+        expect(buffer.exceptions[0]).toMatchObject({
+            sourceUrl: "file:///project/src/app.ts",
+            line: 15,
+        });
+        expect(buffer.exceptions[0].stackTrace).toBe(
+            "    at run (file:///project/src/app.ts:16:8)\n"
+            + "    at rawCaller (uxp://plugin/unmapped.js:2:1)",
+        );
+    });
 });

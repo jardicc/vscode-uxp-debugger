@@ -85,7 +85,7 @@ async function routeHooksRequest(
             sendJson(res, { status: err.status, body: { ok: false, error: err.message } });
             return;
         }
-        deps.output.appendLine(
+        deps.output.error(
             `[hooks] ${method} ${parsed.pathname} failed: ${err instanceof Error ? err.message : String(err)}`,
         );
         sendJson(res, { status: 500, body: { ok: false, error: "Internal error handling the hook request." } });

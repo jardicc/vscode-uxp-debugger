@@ -34,7 +34,7 @@ export interface RegistryData {
     v: 2;
     plugins: StoredPlugin[];
     scripts: StoredScript[];
-    breakOnLoad: { plugins: boolean; scripts: boolean };
+    breakOnLoad: { plugins: boolean };
     /** Host app id restriction for script runs, or undefined = any. */
     scriptTargetApp?: string;
     /** Hides the secondary detail line(s) on Apps/Plugins/Scripts rows. */
@@ -52,7 +52,7 @@ function emptyData(): RegistryData {
         v: 2,
         plugins: [],
         scripts: [],
-        breakOnLoad: { plugins: false, scripts: false },
+        breakOnLoad: { plugins: false },
         scriptTargetApp: undefined,
         compactView: false,
     };
@@ -169,7 +169,7 @@ export class PluginRegistry {
     // Settings
     // -------------------------------------------------------------------------
 
-    async setBreakOnLoad(scope: "plugins" | "scripts", value: boolean): Promise<void> {
+    async setBreakOnLoad(scope: "plugins", value: boolean): Promise<void> {
         this.data.breakOnLoad[scope] = value;
         await this.persist();
     }

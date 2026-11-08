@@ -54,6 +54,15 @@ export function stripTypeScript(tsSource: string, tsPathForErrors: string): stri
 }
 
 /**
+ * Converts an absolute filesystem path (Windows `C:\foo` or POSIX `/Users/foo`)
+ * into a canonical `file:///` URL with forward slashes and no duplicate leading
+ * slashes (`file:///C:/foo` or `file:///Users/foo`).
+ */
+export function toFileUrl(absPath: string): string {
+    return "file:///" + absPath.replace(/\\/g, "/").replace(/^\/+/, "");
+}
+
+/**
  * Builds a minimal source map that maps every generated line 1:1 onto the
  * same line (column 0) of `sourceAbsolutePath` — valid because
  * `ts-blank-space` never repositions surviving source characters. The
@@ -62,7 +71,7 @@ export function stripTypeScript(tsSource: string, tsPathForErrors: string): stri
  * downstream (see `sourceMapRewriter.ts`).
  */
 export function buildIdentitySourceMap(lineCount: number, sourceAbsolutePath: string): string {
-    const sourceUrl = "file:///" + path.resolve(sourceAbsolutePath).replace(/\\/g, "/");
+    const sourceUrl = toFileUrl(path.resolve(sourceAbsolutePath));
     // VLQ segments: [genColumn=0, sourceIndexDelta=0, sourceLineDelta, sourceColumn=0].
     // First line's fields are absolute (0,0,0,0) = "AAAA"; every following line
     // only advances the source line by 1 relative to the previous one = "AACA".

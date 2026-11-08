@@ -42,3 +42,43 @@ export function isDevModeEnabled(settingsPath: string = getDevSettingsPath()): b
         return false;
     }
 }
+
+export interface ElevationCommand {
+    command: string;
+    args: string[];
+}
+
+/**
+ * Build the OS-specific command and arguments that invoke Adobe's elevated
+ * developer-mode script (`native/devtools-scripts/{win32.bat,mac.sh}`).
+ */
+export function buildElevationCommand(
+    extensionPath: string,
+    platform: NodeJS.Platform = process.platform,
+): ElevationCommand {
+    const pathMod = platform === "win32" ? path.win32 : path.posix;
+    const scriptsDir = pathMod.join(extensionPath, "native", "devtools-scripts");
+
+    if (platform === "win32") {
+        const batPath = pathMod.join(scriptsDir, "win32.bat");
+        const escapedBatPath = batPath.replace(/'/g, "''");
+        return {
+            command: "powershell.exe",
+            args: [
+                "-NoProfile",
+                "-Command",
+                `Start-Process -FilePath '${escapedBatPath}' -ArgumentList 'true' -Verb runas -Wait`,
+            ],
+        };
+    }
+    if (platform === "darwin") {
+        const shPath = pathMod.join(scriptsDir, "mac.sh");
+        const shSingleQuoted = `'${shPath.replace(/'/g, "'\\''")}'`;
+        const appleScriptEscaped = shSingleQuoted.replace(/\\/g, "\\\\").replace(/"/g, "\\\"");
+        return {
+            command: "osascript",
+            args: ["-e", `do shell script "sh ${appleScriptEscaped} true" with administrator privileges`],
+        };
+    }
+    throw new Error(`UXP developer mode is not supported on platform "${platform}"`);
+}

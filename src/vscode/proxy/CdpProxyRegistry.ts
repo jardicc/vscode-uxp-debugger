@@ -24,7 +24,7 @@ export class CdpProxyRegistry {
     /** In-flight `acquire()`s, so concurrent acquires can't create two proxies for one session. */
     private readonly acquiresInFlight = new Map<string, Promise<{ proxy: CdpProxyServer; port: number }>>();
 
-    constructor(private readonly log: vscode.OutputChannel) {}
+    constructor(private readonly log: vscode.LogOutputChannel) {}
 
     /** The running proxy for a session, if any (does not create one). */
     peek(clientSessionId: string): { proxy: CdpProxyServer; port: number } | undefined {
@@ -108,7 +108,7 @@ export class CdpProxyRegistry {
                 // the proxy logs and ignores it otherwise.
                 existing.proxy.setBreakOnStartPending(true);
             }
-            this.log.appendLine(
+            this.log.info(
                 `[CDP] Reusing proxy for session ${clientSessionId} (refs: ${String(existing.refs)}).`,
             );
             return { proxy: existing.proxy, port: existing.port };
@@ -123,7 +123,7 @@ export class CdpProxyRegistry {
         );
         const port = await proxy.start();
         this.entries.set(clientSessionId, { proxy, port, refs: 1 });
-        this.log.appendLine(
+        this.log.info(
             `[CDP] Proxy for session ${clientSessionId} listening on port ${String(port)}.`,
         );
         return { proxy, port };
@@ -137,13 +137,13 @@ export class CdpProxyRegistry {
         }
         entry.refs--;
         if (entry.refs > 0) {
-            this.log.appendLine(
+            this.log.info(
                 `[CDP] Released proxy ref for session ${clientSessionId} (refs left: ${String(entry.refs)}).`,
             );
             return;
         }
         this.entries.delete(clientSessionId);
-        this.log.appendLine(`[CDP] Stopping proxy for session ${clientSessionId}.`);
+        this.log.info(`[CDP] Stopping proxy for session ${clientSessionId}.`);
         await this.stopTracked(clientSessionId, entry.proxy);
     }
 

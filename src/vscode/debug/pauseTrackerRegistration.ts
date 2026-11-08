@@ -11,23 +11,15 @@
  * in the window (e.g. an unrelated Node.js debug session) is left untouched.
  */
 
+import type { DebugProtocol } from "@vscode/debugprotocol";
 import * as vscode from "vscode";
 import { sleep } from "../../core/sleep";
 import type { PauseFrame, PauseSnapshot, PauseTracker } from "./pauseTracker";
 import { findUxpClientSessionId } from "./uxpSessionChain";
 
-interface StoppedEventBody {
-    reason?: string;
-    threadId: number;
-}
-
-interface DapResponseLike {
-    type?: string;
-    event?: string;
-    body?: unknown;
-    command?: string;
-    success?: boolean;
-}
+type StoppedEventBody = DebugProtocol.StoppedEvent["body"];
+type StackTraceBody = DebugProtocol.StackTraceResponse["body"];
+type DapProtocolMessage = Partial<DebugProtocol.Event & DebugProtocol.Response>;
 
 /**
  * DAP requests that resume execution. Per the DAP spec a `continued` EVENT is
@@ -75,7 +67,7 @@ function withTimeout<T>(thenable: Thenable<T>, ms: number): Promise<TimedResult<
     });
 }
 
-export function registerPauseTracker(tracker: PauseTracker, output: vscode.OutputChannel): vscode.Disposable {
+export function registerPauseTracker(tracker: PauseTracker, output: vscode.LogOutputChannel): vscode.Disposable {
     return vscode.debug.registerDebugAdapterTrackerFactory("*", {
         createDebugAdapterTracker(session: vscode.DebugSession) {
             // Match via the parentSession chain: js-debug delegates the actual
@@ -87,26 +79,33 @@ export function registerPauseTracker(tracker: PauseTracker, output: vscode.Outpu
             if (clientSessionId === undefined) {
                 return undefined;
             }
-            output.appendLine(
+            output.debug(
                 `[pauseTracker] tracking session=${session.id}${session.parentSession ? " (js-debug child)" : ""} client=${clientSessionId}`,
             );
+            let sessionEnded = false;
             return {
-                onDidSendMessage: (msg: DapResponseLike) => {
+                onWillStopSession: () => {
+                    sessionEnded = true;
+                },
+                onDidSendMessage: (msg: DapProtocolMessage) => {
                     void (async () => {
                         if (msg.type === "event" && msg.event === "stopped") {
-                            const reason = (msg.body as StoppedEventBody | undefined)?.reason;
+                            const body = msg.body as Partial<StoppedEventBody> | undefined;
+                            const reason = body?.reason;
                             if (reason === "instrumentation") {
                                 // js-debug's own pauseForSourceMap bookkeeping pause (binds
                                 // startup breakpoints/source maps, then resumes on its own) —
-                                // not a real pause the agent should react to (see cdpProxy.ts's
-                                // handleBreakOnStartMessage doc comment).
-                                output.appendLine(`[pauseTracker] client=${clientSessionId} ignored "instrumentation" stopped event`);
+                                // not a real pause the agent should react to.
+                                output.debug(`[pauseTracker] client=${clientSessionId} ignored "instrumentation" stopped event`);
                                 return;
                             }
                             try {
-                                const snapshot = await buildSnapshot(session, (msg.body as StoppedEventBody).threadId);
-                                output.appendLine(
-                                    `[pauseTracker] client=${clientSessionId} PAUSED reason=${reason} threadId=${String(snapshot.threadId)} frames=${String(snapshot.frames.length)}`,
+                                const snapshot = await buildSnapshot(session, body?.threadId ?? 0, () => sessionEnded);
+                                if (!snapshot) {
+                                    return;
+                                }
+                                output.info(
+                                    `[pauseTracker] client=${clientSessionId} PAUSED reason=${String(reason)} threadId=${String(snapshot.threadId)} frames=${String(snapshot.frames.length)}`,
                                 );
                                 tracker.recordPause(clientSessionId, snapshot);
                             }
@@ -114,14 +113,14 @@ export function registerPauseTracker(tracker: PauseTracker, output: vscode.Outpu
                                 // All stackTrace retries failed — the pause itself is NOT lost:
                                 // uxp_wait_for_pause/uxp_resume fall back to probePauseSnapshot(),
                                 // which re-queries the (still paused) adapter on demand.
-                                output.appendLine(
+                                output.error(
                                     `[pauseTracker] client=${clientSessionId} failed to build a pause snapshot: ${String(err)}`,
                                 );
                                 console.error("[UXP pauseTracker] Failed to build a pause snapshot:", err);
                             }
                         }
                         else if (msg.type === "event" && msg.event === "continued") {
-                            output.appendLine(`[pauseTracker] client=${clientSessionId} RESUMED (continued event)`);
+                            output.debug(`[pauseTracker] client=${clientSessionId} RESUMED (continued event)`);
                             tracker.recordContinued(clientSessionId);
                         }
                         else if (
@@ -130,12 +129,12 @@ export function registerPauseTracker(tracker: PauseTracker, output: vscode.Outpu
                             && typeof msg.command === "string"
                             && RESUME_COMMANDS.has(msg.command)
                         ) {
-                            output.appendLine(`[pauseTracker] client=${clientSessionId} RESUMED (${msg.command} response)`);
+                            output.debug(`[pauseTracker] client=${clientSessionId} RESUMED (${msg.command} response)`);
                             tracker.recordContinued(clientSessionId);
                         }
                     })().catch((err: unknown) => {
                         // Bookkeeping must never surface as an unhandled rejection.
-                        output.appendLine(
+                        output.error(
                             `[pauseTracker] client=${clientSessionId} unexpected error: ${String(err)}`,
                         );
                     });
@@ -145,12 +144,25 @@ export function registerPauseTracker(tracker: PauseTracker, output: vscode.Outpu
     });
 }
 
-async function buildSnapshot(session: vscode.DebugSession, threadId: number): Promise<PauseSnapshot> {
+async function buildSnapshot(
+    session: vscode.DebugSession,
+    threadId: number,
+    isEnded: () => boolean,
+): Promise<PauseSnapshot | undefined> {
     let lastFailure = "";
     for (let attempt = 1; attempt <= STACK_TRACE_ATTEMPTS; attempt++) {
-        const result = await withTimeout(session.customRequest("stackTrace", { threadId }), REQUEST_TIMEOUT_MS);
+        if (isEnded()) {
+            return undefined;
+        }
+        const result = await withTimeout(
+            session.customRequest("stackTrace", { threadId }),
+            REQUEST_TIMEOUT_MS,
+        );
+        if (isEnded()) {
+            return undefined;
+        }
         if (result.kind === "ok") {
-            return toSnapshot(threadId, result.value as Record<string, unknown>);
+            return toSnapshot(threadId, result.value);
         }
         lastFailure = result.kind === "timeout" ? `no reply within ${String(REQUEST_TIMEOUT_MS)}ms` : String(result.error);
         if (attempt < STACK_TRACE_ATTEMPTS) {
@@ -160,16 +172,16 @@ async function buildSnapshot(session: vscode.DebugSession, threadId: number): Pr
     throw new Error(`stackTrace failed after ${String(STACK_TRACE_ATTEMPTS)} attempts (last: ${lastFailure})`);
 }
 
-function toSnapshot(threadId: number, stack: Record<string, unknown>): PauseSnapshot {
+function toSnapshot(threadId: number, stack: Partial<StackTraceBody>): PauseSnapshot {
     // Malformed adapter replies must not throw — treat a missing list as "no frames".
-    const rawFrames = Array.isArray(stack.stackFrames)
-        ? (stack.stackFrames as Record<string, unknown>[])
+    const rawFrames: DebugProtocol.StackFrame[] = Array.isArray(stack.stackFrames)
+        ? stack.stackFrames
         : [];
     const frames: PauseFrame[] = rawFrames.map((f) => ({
-        id: f.id as number,
-        name: f.name as string,
-        sourcePath: (f.source as Record<string, unknown> | undefined)?.path as string | undefined,
-        line: f.line as number,
+        id: f.id,
+        name: f.name,
+        sourcePath: f.source?.path,
+        line: f.line,
     }));
     return { threadId, frames };
 }
@@ -185,18 +197,27 @@ function toSnapshot(threadId: number, stack: Record<string, unknown>): PauseSnap
  * waiting for the next `stopped` event as before.
  */
 export async function probePauseSnapshot(session: vscode.DebugSession): Promise<PauseSnapshot | undefined> {
-    const threadsResult = await withTimeout(session.customRequest("threads"), REQUEST_TIMEOUT_MS);
+    const threadsResult = await withTimeout(
+        session.customRequest("threads"),
+        REQUEST_TIMEOUT_MS,
+    );
     if (threadsResult.kind !== "ok") {
         return undefined;
     }
-    const threads = (threadsResult.value as { threads?: { id?: unknown }[] } | undefined)?.threads;
-    const threadId = threads?.[0]?.id;
+    const threadId = threadsResult.value.threads?.[0]?.id;
     if (typeof threadId !== "number") {
         return undefined;
     }
-    const stackResult = await withTimeout(session.customRequest("stackTrace", { threadId }), REQUEST_TIMEOUT_MS);
+    const stackResult = await withTimeout(
+        session.customRequest("stackTrace", { threadId }),
+        REQUEST_TIMEOUT_MS,
+    );
     if (stackResult.kind !== "ok") {
         return undefined;
     }
-    return toSnapshot(threadId, stackResult.value as Record<string, unknown>);
+    const snapshot = toSnapshot(threadId, stackResult.value);
+    if (snapshot.frames.length === 0) {
+        return undefined;
+    }
+    return snapshot;
 }

@@ -3,14 +3,10 @@ import type { Duplex } from "stream";
 import * as vscode from "vscode";
 import type { Protocol } from "devtools-protocol";
 import WebSocket, { WebSocketServer } from "ws";
+import { isAllowedPanelUpgrade, isBrowserOriginRequest, isLoopbackHost } from "../../core/httpSecurity";
 import type { CdpEventBuffer } from "./cdpEventBuffer";
 import { CdpMessageRewriter } from "./cdpMessageRewriter";
 import type { CdpMessage, CdpPayload } from "./cdpTypes";
-
-interface CdpDiscoveryEntry {
-    id?: unknown;
-    webSocketDebuggerUrl?: unknown;
-}
 
 // ---------------------------------------------------------------------------
 // CDP Proxy Server
@@ -60,10 +56,12 @@ export class CdpProxyServer {
 
     private readonly targetWsUrl: string;
     private readonly targetLabel: string;
-    private readonly log: vscode.OutputChannel;
+    private readonly log: vscode.LogOutputChannel;
+    private readonly wss = new WebSocketServer({ noServer: true });
     private httpServer: http.Server | undefined;
     private targetWs: WebSocket | undefined;
     private clientWs: WebSocket | undefined;
+    private reconnectTimer: ReturnType<typeof setTimeout> | undefined;
 
     /** Connected DevTools-panel clients (HTML inspector webviews). */
     private readonly panelClients = new Set<WebSocket>();
@@ -122,16 +120,6 @@ export class CdpProxyServer {
    */
     private breakOnStartPending: boolean;
 
-    /**
-   * Set once the instrumentation breakpoint was armed. UXP's own
-   * break-on-start fires on the *first statement executed* — typically one
-   * of js-debug's `Runtime.evaluate` probes, not plugin code. That spurious
-   * pause (and its `Debugger.resumed`) is swallowed and auto-resumed; the
-   * flag clears on the first instrumentation pause, which js-debug handles
-   * itself (see `breakOnStartPending`).
-   */
-    private awaitingBreakOnStartPause = false;
-
     /** Request id of the internal `Debugger.setInstrumentationBreakpoint` (reply logging). */
     private instrumentationRequestId: number | undefined;
 
@@ -145,23 +133,6 @@ export class CdpProxyServer {
    */
     private instrumentationBreakpointId: string | undefined;
 
-    /**
-   * scriptIds seen in a `Debugger.scriptParsed` whose (pre-rewrite) `url` is
-   * neither one of js-debug's own `eval-*.cdp` probes nor a
-   * `uxp://uxp-internal/...` host script — i.e. real plugin/script code.
-   * Confirmed via a live trace (2026-08-19): UXP's instrumentation
-   * breakpoint does NOT reliably pause before the entry script's own
-   * top-level code runs, so a `debugger;` statement (or a user breakpoint)
-   * hit inside it was being misclassified as the expected "spurious /
-   * pre-context" pause and silently swallowed — see `handleBreakOnStartMessage`.
-   * A pause whose top frame is in this set is never spurious, regardless of
-   * `reason`.
-   */
-    private readonly realScriptIds = new Set<string>();
-
-    /** js-debug's own dynamic probe/REPL evals (`//# sourceURL=eval-<hex>.cdp`) — never real plugin code. */
-    private static readonly EVAL_PROBE_URL = /^eval-[0-9a-f]+\.cdp$/;
-
     /** Max number of reconnect attempts before giving up. */
     private static readonly MAX_RECONNECT_ATTEMPTS = 20;
 
@@ -172,7 +143,7 @@ export class CdpProxyServer {
         targetWsUrl: string,
         targetLabel: string,
         pluginDir: string,
-        log: vscode.OutputChannel,
+        log: vscode.LogOutputChannel,
         breakOnStartPending = false,
     ) {
         this.targetWsUrl = targetWsUrl;
@@ -211,20 +182,9 @@ export class CdpProxyServer {
    * The proxy will accept exactly one WebSocket connection from js-debug,
    * and forward traffic to/from the UXP target.
    */
-    async start(): Promise<number> {
-    // Determine target ID based on connection type.
-        let targetId: string;
-        if (this.targetWsUrl.includes("/socket/cdt/")) {
-            // Broker CDT endpoint – extract session ID from URL path.
-            // /json/list is not available on the broker port (returns {}).
-            targetId = this.targetWsUrl.split("/").pop() ?? "uxp-target";
-            this.log.appendLine(`Broker CDT mode – using session ID as target: ${targetId}`);
-        }
-        else {
-            // Direct plugin port – fetch real target ID from /json/list.
-            targetId = await this.fetchTargetId();
-        }
-        this.log.appendLine(`Using target ID: ${targetId}`);
+    start(): Promise<number> {
+        const targetId = this.targetWsUrl.split("/").pop() ?? "uxp-target";
+        this.log.info(`Using target ID: ${targetId}`);
 
         const startServerRes = new Promise<number>((resolve, reject) => {
             this.httpServer = http.createServer((req, res) => {
@@ -263,7 +223,7 @@ export class CdpProxyServer {
     setBreakOnStartPending(pending: boolean): void {
         if (this.targetOpen || this.targetConnecting) {
             if (pending) {
-                this.log.appendLine(
+                this.log.debug(
                     "[CDP] Ignoring breakOnStart request — target connection already established.",
                 );
             }
@@ -304,6 +264,10 @@ export class CdpProxyServer {
    */
     async stop(): Promise<void> {
         this.stopping = true;
+        if (this.reconnectTimer) {
+            clearTimeout(this.reconnectTimer);
+            this.reconnectTimer = undefined;
+        }
         this.rewriter.dispose();
         this.clientWs?.close();
         for (const panelWs of this.panelClients) {
@@ -312,6 +276,7 @@ export class CdpProxyServer {
         this.panelClients.clear();
         this.panelPendingRequests.clear();
         this.targetWs?.close();
+        this.wss.close();
         return new Promise<void>((resolve) => {
             if (this.httpServer) {
                 this.httpServer.close(() => {
@@ -337,6 +302,11 @@ export class CdpProxyServer {
         res: http.ServerResponse,
         targetId: string,
     ): void {
+        if (!isLoopbackHost(req) || isBrowserOriginRequest(req)) {
+            res.writeHead(403, { "Content-Type": "application/json", Connection: "close" });
+            res.end(JSON.stringify({ ok: false, error: "Forbidden." }));
+            return;
+        }
         const url = req.url ?? "/";
         res.writeHead(200, { "Content-Type": "application/json" });
 
@@ -397,12 +367,19 @@ export class CdpProxyServer {
             return;
         }
 
-        // Create a WebSocket server just for this single connection
-        const wss = new WebSocketServer({ noServer: true });
+        if (!isLoopbackHost(_req) || isBrowserOriginRequest(_req)) {
+            this.log.warn("[CDP] Rejected WebSocket upgrade with non-loopback Host or browser Origin.");
+            socket.write("HTTP/1.1 403 Forbidden\r\n\r\n");
+            socket.destroy();
+            return;
+        }
 
-        wss.handleUpgrade(_req, socket, head, (clientWs) => {
+        this.wss.handleUpgrade(_req, socket, head, (clientWs) => {
+            if (this.clientWs && this.clientWs !== clientWs) {
+                this.clientWs.close();
+            }
             this.clientWs = clientWs;
-            this.log.appendLine("js-debug connected to CDP proxy.");
+            this.log.info("js-debug connected to CDP proxy.");
             this.rewriter.markNewClient();
 
             // A "Restart" (debug-toolbar / F5-while-attached) closes js-debug's
@@ -419,7 +396,7 @@ export class CdpProxyServer {
             // Runtime.evaluate probes fail with "Cannot find default execution
             // context" until the churn happened to settle.
             if (this.targetOpen || this.targetConnecting) {
-                this.log.appendLine("[CDP] Reusing existing UXP target connection for new client.");
+                this.log.info("[CDP] Reusing existing UXP target connection for new client.");
             }
             else {
                 this.connectToTarget();
@@ -427,6 +404,11 @@ export class CdpProxyServer {
 
             // ------ Forward: js-debug (client) → UXP target ------
             clientWs.on("message", (data) => {
+                // Ignore any buffered frames from a previous client socket that was
+                // already replaced by a newer js-debug connection (e.g. during Restart).
+                if (this.clientWs !== clientWs) {
+                    return;
+                }
                 // WebSocket.RawData provides a meaningful text conversion for received frames.
                 // eslint-disable-next-line @typescript-eslint/no-base-to-string
                 const raw = data.toString();
@@ -441,7 +423,7 @@ export class CdpProxyServer {
                     try {
                         const msg = JSON.parse(raw) as CdpMessage;
                         if (msg.id !== undefined) {
-                            this.log.appendLine(
+                            this.log.debug(
                                 "[CDP] Adopting js-debug's setInstrumentationBreakpoint — replying with the armed id.",
                             );
                             clientWs.send(
@@ -471,7 +453,10 @@ export class CdpProxyServer {
             });
 
             clientWs.on("close", () => {
-                this.log.appendLine("js-debug WebSocket closed.");
+                if (this.clientWs === clientWs) {
+                    this.clientWs = undefined;
+                }
+                this.log.info("js-debug WebSocket closed.");
                 // Do NOT close the UXP target connection here — a "Restart" swaps
                 // js-debug's client WebSocket but expects the same target/session
                 // to still be there afterwards (see the comment above, in
@@ -483,7 +468,7 @@ export class CdpProxyServer {
             });
 
             clientWs.on("error", (err) => {
-                this.log.appendLine(`js-debug client WS error: ${err.message}`);
+                this.log.error(`js-debug client WS error: ${err.message}`);
             });
         });
     }
@@ -503,15 +488,23 @@ export class CdpProxyServer {
         socket: Duplex,
         head: Buffer,
     ): void {
-        const wss = new WebSocketServer({ noServer: true });
-        wss.handleUpgrade(req, socket, head, (panelWs) => {
+        if (!isAllowedPanelUpgrade(req)) {
+            this.log.warn(
+                `[CDP][panel] Rejected WebSocket upgrade from unauthorized origin "${req.headers.origin ?? ""}".`,
+            );
+            socket.write("HTTP/1.1 403 Forbidden\r\n\r\n");
+            socket.destroy();
+            return;
+        }
+
+        this.wss.handleUpgrade(req, socket, head, (panelWs) => {
             this.panelClients.add(panelWs);
-            this.log.appendLine(
+            this.log.info(
                 `Inspector panel connected to CDP proxy (${String(this.panelClients.size)} panel client(s)).`,
             );
 
             if (this.targetOpen || this.targetConnecting) {
-                this.log.appendLine("[CDP] Reusing existing UXP target connection for the inspector panel.");
+                this.log.info("[CDP] Reusing existing UXP target connection for the inspector panel.");
             }
             else {
                 this.connectToTarget();
@@ -531,11 +524,11 @@ export class CdpProxyServer {
                         this.panelPendingRequests.delete(forwardId);
                     }
                 }
-                this.log.appendLine("Inspector panel WebSocket closed.");
+                this.log.info("Inspector panel WebSocket closed.");
             });
 
             panelWs.on("error", (err) => {
-                this.log.appendLine(`Inspector panel WS error: ${err.message}`);
+                this.log.error(`Inspector panel WS error: ${err.message}`);
             });
         });
     }
@@ -552,13 +545,13 @@ export class CdpProxyServer {
             msg = JSON.parse(raw) as CdpMessage;
         }
         catch {
-            this.log.appendLine("[CDP][panel] Dropped unparseable message from the inspector panel.");
+            this.log.warn("[CDP][panel] Dropped unparsable message from the inspector panel.");
             return;
         }
 
         const method = typeof msg.method === "string" ? msg.method : undefined;
         if (method !== undefined && CdpProxyServer.isPanelMethodDenied(method)) {
-            this.log.appendLine(`[CDP][panel] Denied method (answered locally): ${method}`);
+            this.log.debug(`[CDP][panel] Denied method (answered locally): ${method}`);
             if (typeof msg.id === "number" && panelWs.readyState === WebSocket.OPEN) {
                 panelWs.send(
                     JSON.stringify({
@@ -590,7 +583,7 @@ export class CdpProxyServer {
                 params.uniqueContextId = this.rewriter.executionContextUniqueId;
             }
             else if (typeof msg.id === "number" && panelWs.readyState === WebSocket.OPEN) {
-                this.log.appendLine(
+                this.log.debug(
                     `[CDP][panel] ${String(method)} — no execution context yet, answering locally.`,
                 );
                 panelWs.send(
@@ -660,7 +653,7 @@ export class CdpProxyServer {
                     const cachedContext = this.rewriter.getLastExecutionContextCreatedRaw();
                     if (cachedContext) {
                         this.panelContextReplayed.add(pending.ws);
-                        this.log.appendLine(
+                        this.log.debug(
                             "[CDP][panel] Replaying cached execution context after Runtime.enable ack.",
                         );
                         pending.ws.send(cachedContext);
@@ -689,12 +682,16 @@ export class CdpProxyServer {
    * operations like `location.reload()` don't kill the debug session.
    */
     private connectToTarget(): void {
+        if (this.reconnectTimer) {
+            clearTimeout(this.reconnectTimer);
+            this.reconnectTimer = undefined;
+        }
         this.targetOpen = false;
         this.targetConnecting = true;
         this.targetWs = new WebSocket(this.targetWsUrl);
 
         this.targetWs.on("open", () => {
-            this.log.appendLine(`Connected to UXP target: ${this.targetWsUrl}`);
+            this.log.info(`Connected to UXP target: ${this.targetWsUrl}`);
             this.targetOpen = true;
             this.targetConnecting = false;
 
@@ -731,8 +728,7 @@ export class CdpProxyServer {
             // breakpoints during that pause (see `breakOnStartPending`).
             if (this.breakOnStartPending) {
                 this.breakOnStartPending = false;
-                this.awaitingBreakOnStartPause = true;
-                this.log.appendLine(
+                this.log.info(
                     "[CDP] breakOnStart session — arming an instrumentation breakpoint before resuming the runtime.",
                 );
                 const debuggerEnableId = this.rewriter.allocateInternalId("Debugger.enable");
@@ -757,7 +753,7 @@ export class CdpProxyServer {
         this.targetWs.on("message", (data) => {
             // WebSocket.RawData provides a meaningful text conversion for received frames.
             // eslint-disable-next-line @typescript-eslint/no-base-to-string
-            let raw: string | null = data.toString();
+            const raw: string | null = data.toString();
 
             // Replies to inspector-panel requests are consumed here; events are
             // broadcast to panel clients and continue to js-debug below.
@@ -765,14 +761,7 @@ export class CdpProxyServer {
                 return;
             }
 
-            this.trackRealScriptId(raw);
-
-            if (this.awaitingBreakOnStartPause) {
-                raw = this.handleBreakOnStartMessage(raw);
-                if (raw === null) {
-                    return; // swallowed (spurious pause / its resumed event)
-                }
-            }
+            this.captureInstrumentationReply(raw);
 
             const rewritten = this.rewriter.rewriteFromTarget(raw);
             if (rewritten !== null) {
@@ -788,7 +777,7 @@ export class CdpProxyServer {
         });
 
         this.targetWs.on("close", () => {
-            this.log.appendLine("UXP target WebSocket closed.");
+            this.log.info("UXP target WebSocket closed.");
             this.targetOpen = false;
             this.targetConnecting = false;
             this.rewriter.resetContextState();
@@ -798,34 +787,8 @@ export class CdpProxyServer {
         });
 
         this.targetWs.on("error", (err) => {
-            this.log.appendLine(`UXP target WS error: ${err.message}`);
+            this.log.error(`UXP target WS error: ${err.message}`);
         });
-    }
-
-    /**
-   * Records `scriptId`s belonging to real plugin/script code (as opposed to
-   * js-debug's own `eval-*.cdp` probes) from `Debugger.scriptParsed` events —
-   * see `realScriptIds`. Called unconditionally (not just during
-   * break-on-start) since it's cheap and the set is only ever consulted
-   * during that phase.
-   */
-    private trackRealScriptId(raw: string): void {
-        try {
-            const msg = JSON.parse(raw) as CdpMessage;
-            const params: CdpPayload<Protocol.Debugger.ScriptParsedEvent> | undefined = msg.params;
-            if (
-                msg.method === "Debugger.scriptParsed"
-                && typeof params?.url === "string"
-                && typeof params.scriptId === "string"
-                && !CdpProxyServer.EVAL_PROBE_URL.test(params.url)
-                && !params.url.startsWith("uxp://uxp-internal/")
-            ) {
-                this.realScriptIds.add(params.scriptId);
-            }
-        }
-        catch {
-            // Not parseable — nothing to track.
-        }
     }
 
     /**
@@ -842,73 +805,28 @@ export class CdpProxyServer {
     }
 
     /**
-   * Target-message handling while the break-on-start startup phase is
-   * active (see `awaitingBreakOnStartPause`).
-   *
-   *  - The first pause with reason "instrumentation", a hit user breakpoint,
-   *    or whose top frame belongs to real plugin/script code (`realScriptIds`
-   *    — e.g. a `debugger;` statement in the entry script) ends the phase
-   *    and is forwarded. The last case was added 2026-08-19 after a live
-   *    trace showed UXP does not always actually pause on
-   *    "beforeScriptWithSourceMapExecution" before the entry script's own
-   *    top-level code runs — without it, a `debugger;` statement (or a real
-   *    breakpoint) hit inside that code was wrongly swallowed as spurious.
-   *  - Any earlier pause is UXP's own break-on-start firing on the first
-   *    statement executed (typically a js-debug `Runtime.evaluate` probe);
-   *    it is swallowed and auto-resumed, as is its `Debugger.resumed`.
-   *
-   * Returns the message, or `null` to swallow it.
+   * Records the breakpoint id from the reply to the proxy's internal
+   * `Debugger.setInstrumentationBreakpoint` request (see
+   * `instrumentationBreakpointId`) and logs it verbatim so missing host
+   * support (an error reply) is diagnosable. The reply itself is swallowed
+   * later as an internal response by the rewriter.
    */
-    private handleBreakOnStartMessage(raw: string): string | null {
+    private captureInstrumentationReply(raw: string): void {
+        if (this.instrumentationRequestId === undefined) {
+            return;
+        }
         try {
             const msg = JSON.parse(raw) as CdpMessage;
-
-            if (msg.id !== undefined && msg.id === this.instrumentationRequestId) {
-                // Reply is swallowed as internal by the rewriter; log it verbatim so
-                // missing host support (an error reply) is diagnosable.
+            if (msg.id === this.instrumentationRequestId) {
                 const result:
                     CdpPayload<Protocol.Debugger.SetInstrumentationBreakpointResponse> | undefined = msg.result;
                 this.instrumentationBreakpointId = result?.breakpointId;
-                this.log.appendLine(`[CDP] Instrumentation breakpoint reply: ${raw}`);
-                return raw;
-            }
-
-            if (msg.method === "Debugger.paused") {
-                const params: CdpPayload<Protocol.Debugger.PausedEvent> | undefined = msg.params;
-                const hitUserBp
-                    = Array.isArray(params?.hitBreakpoints) && params.hitBreakpoints.length > 0;
-                const topScriptId = params?.callFrames?.[0]?.location?.scriptId;
-                const inRealScript = typeof topScriptId === "string" && this.realScriptIds.has(topScriptId);
-                if (params?.reason === "instrumentation" || hitUserBp || inRealScript) {
-                    this.awaitingBreakOnStartPause = false;
-                    this.log.appendLine(
-                        inRealScript && params?.reason !== "instrumentation" && !hitUserBp
-                            ? "[CDP] Pause inside real plugin/script code (e.g. a debugger; statement) — handing over to js-debug."
-                            : "[CDP] Startup instrumentation pause — handing over to js-debug.",
-                    );
-                    return raw;
-                }
-                // Spurious pause — swallow it and resume so execution reaches the
-                // plugin's sourcemapped scripts, where the instrumentation
-                // breakpoint is waiting.
-                this.log.appendLine("[CDP] Swallowed spurious break-on-start pause — auto-resuming.");
-                const resumeId = this.rewriter.allocateInternalId("Debugger.resume");
-                this.targetWs?.send(
-                    JSON.stringify({ id: resumeId, method: "Debugger.resume", params: {} }),
-                );
-                return null;
-            }
-
-            if (msg.method === "Debugger.resumed") {
-                // Follows a swallowed spurious pause — js-debug never saw the pause,
-                // so hide the resume as well.
-                return null;
+                this.log.debug(`[CDP] Instrumentation breakpoint reply: ${raw}`);
             }
         }
         catch {
-            // Not parseable — forward as-is.
+            // Not parseable — nothing to capture.
         }
-        return raw;
     }
 
     /**
@@ -920,7 +838,7 @@ export class CdpProxyServer {
             return;
         }
         if (attempt > CdpProxyServer.MAX_RECONNECT_ATTEMPTS) {
-            this.log.appendLine(
+            this.log.error(
                 `[CDP] Gave up reconnecting after ${String(CdpProxyServer.MAX_RECONNECT_ATTEMPTS)} attempts.`,
             );
             vscode.window.showErrorMessage(
@@ -933,13 +851,17 @@ export class CdpProxyServer {
             return;
         }
 
-        this.log.appendLine(
+        this.log.warn(
             `[CDP] Reconnect attempt ${String(attempt)}/${String(CdpProxyServer.MAX_RECONNECT_ATTEMPTS)} `
             + `in ${String(CdpProxyServer.RECONNECT_DELAY_MS)}ms…`,
         );
 
-        setTimeout(() => {
-            if (this.stopping) {
+        if (this.reconnectTimer) {
+            clearTimeout(this.reconnectTimer);
+        }
+        this.reconnectTimer = setTimeout(() => {
+            this.reconnectTimer = undefined;
+            if (this.stopping || this.targetOpen || this.targetConnecting) {
                 return;
             }
             this.connectToTarget();
@@ -951,7 +873,7 @@ export class CdpProxyServer {
             // the counter increments properly.
             currentWs?.removeAllListeners("close");
             currentWs?.on("close", () => {
-                this.log.appendLine("UXP target WebSocket closed.");
+                this.log.info("UXP target WebSocket closed.");
                 // Capture before clearing — reaching OPEN means this attempt succeeded.
                 const reachedOpen = this.targetOpen;
                 this.targetOpen = false;
@@ -968,62 +890,6 @@ export class CdpProxyServer {
     }
 
     // -----------------------------------------------------------------------
-    // Target ID fetching
-    // -----------------------------------------------------------------------
-
-    /**
-   * Fetch `/json/list` from the real UXP host and return the `id` of the
-   * matching target entry. Rejects if the ID cannot be determined.
-   */
-    private fetchTargetId(): Promise<string> {
-        const parsed = new URL(this.targetWsUrl);
-        const listUrl = `http://${parsed.hostname}:${parsed.port}/json/list`;
-
-        return new Promise<string>((resolve, reject) => {
-            const req = http.get(listUrl, { timeout: 2000 }, (res) => {
-                if (res.statusCode !== 200) {
-                    res.resume();
-                    reject(new Error(`/json/list returned HTTP ${String(res.statusCode)}`));
-                    return;
-                }
-                const chunks: Buffer[] = [];
-                res.on("data", (chunk: Buffer) => chunks.push(chunk));
-                res.on("end", () => {
-                    try {
-                        const entries = JSON.parse(Buffer.concat(chunks).toString("utf-8")) as unknown;
-                        if (Array.isArray(entries)) {
-                            // Try to find the entry whose webSocketDebuggerUrl matches ours
-                            const discoveryEntries = entries.filter(
-                                (entry): entry is CdpDiscoveryEntry => entry !== null && typeof entry === "object",
-                            );
-                            const match = discoveryEntries.find(
-                                (entry) => entry.webSocketDebuggerUrl === this.targetWsUrl,
-                            );
-                            const entry = match ?? discoveryEntries[0];
-                            if (typeof entry.id === "string") {
-                                resolve(entry.id);
-                                return;
-                            }
-                        }
-                    }
-                    catch { /* parse error */ }
-                    reject(new Error("Could not determine target ID from /json/list"));
-                });
-                res.on("error", (err) => {
-                    reject(err);
-                });
-            });
-            req.on("timeout", () => {
-                req.destroy();
-                reject(new Error("/json/list request timed out"));
-            });
-            req.on("error", (err) => {
-                reject(err);
-            });
-        });
-    }
-
-    // -----------------------------------------------------------------------
     // Diagnostic logging
     // -----------------------------------------------------------------------
 
@@ -1033,6 +899,6 @@ export class CdpProxyServer {
     private logTraffic(direction: string, raw: string): void {
         const maxLen = 500;
         const truncated = raw.length > maxLen ? raw.slice(0, maxLen) + "…" : raw;
-        this.log.appendLine(`[CDP] ${direction}: ${truncated}`);
+        this.log.debug(`[CDP] ${direction}: ${truncated}`);
     }
 }

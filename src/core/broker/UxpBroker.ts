@@ -12,9 +12,12 @@
  */
 
 import * as http from "http";
+import * as path from "path";
 import type { Duplex } from "stream";
 import { WebSocketServer } from "ws";
 import { TypedEvent } from "../events";
+import { type Logger, NOOP_LOGGER } from "../logFormat";
+import { foldPathCase } from "../pathCase";
 import { sleep } from "../sleep";
 import {
     HostReplyError,
@@ -29,6 +32,7 @@ import { type AppInfo, CDT_SOCKET_PREFIX, type UxpPluginManifest } from "../prot
 import { AppConnection, DEFAULT_TIMEOUTS, type HostLogEvent, type TimeoutConfig } from "./AppConnection";
 import { CdtTunnelManager } from "./CdtTunnel";
 import { BROKER_SERVICE_MARKER, type BrokerIdentity, IDENTIFY_PATH } from "./identify";
+import { isBrowserOriginRequest, isLoopbackHost } from "../httpSecurity";
 import { type PluginSession, SessionRegistry } from "./SessionRegistry";
 import { TAKEOVER_PATH } from "./takeover";
 
@@ -40,7 +44,7 @@ export interface ConnectedApp {
 
 export interface UxpBrokerOptions {
     announcer: IPortAnnouncer;
-    log?: (message: string) => void;
+    log?: Logger;
     /** Override protocol timeouts (tests). Defaults to Adobe's constants. */
     timeouts?: TimeoutConfig;
     /**
@@ -98,7 +102,7 @@ export class UxpBroker {
     readonly onTakenOver = new TypedEvent<void>();
 
     private readonly announcer: IPortAnnouncer;
-    private readonly log: (message: string) => void;
+    private readonly log: Logger;
     private readonly timeouts: TimeoutConfig;
     private readonly validateBeforeLoad: boolean;
     private readonly appSettleMs: number;
@@ -121,14 +125,20 @@ export class UxpBroker {
 
     constructor(options: UxpBrokerOptions) {
         this.announcer = options.announcer;
-        this.log = options.log ?? (() => undefined);
+        this.log = options.log ?? NOOP_LOGGER;
         this.timeouts = options.timeouts ?? DEFAULT_TIMEOUTS;
         this.validateBeforeLoad = options.validateBeforeLoad ?? true;
         this.appSettleMs = options.appSettleMs ?? DEFAULT_APP_SETTLE_MS;
         this.extensionVersion = options.extensionVersion ?? "0.0.0";
         this.onBeforeTakeoverStop = options.onBeforeTakeoverStop;
         this.extraRequestHandler = options.extraRequestHandler;
-        this.tunnels = new CdtTunnelManager(this.log);
+        this.tunnels = new CdtTunnelManager(this.log, (session) => {
+            // UXP has no `Plugin/unload` for scripts, so once the script's
+            // CDT frontend detaches, the one-shot script session is over.
+            if (session.kind === "script" && this.sessions.byClientId(session.clientSessionId)) {
+                this.endSession(session, /* notifyApp */ false);
+            }
+        });
     }
 
     // -------------------------------------------------------------------------
@@ -184,7 +194,7 @@ export class UxpBroker {
         this.port_ = typeof address === "object" && address ? address.port : port;
         this.httpServer = server;
         this.wss = wss;
-        this.log(`broker listening on ws://127.0.0.1:${String(this.port_)}`);
+        this.log.info(`broker listening on ws://127.0.0.1:${String(this.port_)}`);
 
         this.announcer.announce(this.port_);
         return this.port_;
@@ -237,7 +247,7 @@ export class UxpBroker {
             }
         }
         catch (err) {
-            this.log(`announcer withdraw failed: ${String(err instanceof Error ? err.message : err)}`);
+            this.log.warn(`announcer withdraw failed: ${String(err instanceof Error ? err.message : err)}`);
         }
 
         this.tunnels.closeAll();
@@ -252,7 +262,7 @@ export class UxpBroker {
             resolve();
         }));
         this.port_ = undefined;
-        this.log("broker stopped");
+        this.log.info("broker stopped");
     }
 
     // -------------------------------------------------------------------------
@@ -325,13 +335,13 @@ export class UxpBroker {
                     throw err;
                 }
                 if (err instanceof RequestTimeoutError) {
-                    this.log(
+                    this.log.info(
                         "Plugin/validate was not answered by the host — proceeding with load "
                         + "(this host app version likely does not implement validate)",
                     );
                 }
                 else if (err instanceof HostReplyError) {
-                    this.log(`Plugin/validate replied with an error — proceeding with load (${err.hostError})`);
+                    this.log.warn(`Plugin/validate replied with an error — proceeding with load (${err.hostError})`);
                 }
                 else {
                     throw err;
@@ -340,6 +350,21 @@ export class UxpBroker {
         }
 
         const hostSessionId = await connection.loadPlugin(pluginPath, breakOnStart);
+        // Evict any superseded session for the same plugin in this host app so a
+        // duplicate `loadPlugin` (without an intervening unload) never leaves a
+        // ghost entry behind in `SessionRegistry`.
+        const manifestKey = foldPathCase(path.normalize(manifestPath));
+        for (const existing of this.sessions.list()) {
+            if (existing.appConnectionId !== connection.id) {
+                continue;
+            }
+            const sameManifest
+                = existing.manifestPath !== undefined
+                    && foldPathCase(path.normalize(existing.manifestPath)) === manifestKey;
+            if (existing.hostSessionId === hostSessionId || sameManifest) {
+                this.endSession(existing, /* notifyApp */ false);
+            }
+        }
         return this.sessions.add({
             hostSessionId,
             kind: "plugin",
@@ -359,8 +384,17 @@ export class UxpBroker {
         const reply = await connection.reloadPlugin(session.hostSessionId);
         // Some hosts may hand back a fresh host session id on reload; re-bind it
         // under the stable client id so debuggers keep working.
-        if (typeof reply.pluginSessionId === "string" && reply.pluginSessionId.length > 0) {
+        if (
+            typeof reply.pluginSessionId === "string"
+            && reply.pluginSessionId.length > 0
+            && reply.pluginSessionId !== session.hostSessionId
+        ) {
             session.hostSessionId = reply.pluginSessionId;
+            // Re-announce `Plugin/cdtConnected` for the new `hostSessionId` if a
+            // debugger/inspector tunnel is already attached to this session.
+            if (this.tunnels.hasTunnel(clientSessionId)) {
+                connection.notifyCdtState(session.hostSessionId, true);
+            }
         }
     }
 
@@ -384,6 +418,19 @@ export class UxpBroker {
         await this.waitForAppSettle(connection);
 
         const hostSessionId = await connection.runScript(scriptDir, fileName, userArgs);
+        // Evict any earlier unattached pseudo-session for the same script in this
+        // host app before registering the new run.
+        const scriptKey = foldPathCase(path.normalize(sourcePath ?? path.join(scriptDir, fileName)));
+        for (const existing of this.sessions.list()) {
+            if (existing.appConnectionId !== connection.id) {
+                continue;
+            }
+            const existingPath = existing.scriptSourcePath ?? path.join(existing.pluginPath, existing.name);
+            const sameScript = existing.kind === "script" && foldPathCase(path.normalize(existingPath)) === scriptKey;
+            if (existing.hostSessionId === hostSessionId || sameScript) {
+                this.endSession(existing, /* notifyApp */ false);
+            }
+        }
         return this.sessions.add({
             hostSessionId,
             kind: "script",
@@ -402,7 +449,17 @@ export class UxpBroker {
     // -------------------------------------------------------------------------
 
     private handleHttpRequest(req: http.IncomingMessage, res: http.ServerResponse): void {
+        if (!isLoopbackHost(req)) {
+            res.writeHead(403, { "Content-Type": "application/json", Connection: "close" });
+            res.end(JSON.stringify({ ok: false, error: "Forbidden Host header." }));
+            return;
+        }
         const url = req.url ?? "/";
+        if (!url.startsWith("/__uxp_debugger__/inspector/") && isBrowserOriginRequest(req)) {
+            res.writeHead(403, { "Content-Type": "application/json", Connection: "close" });
+            res.end(JSON.stringify({ ok: false, error: "Cross-origin requests are not allowed." }));
+            return;
+        }
         if (req.method === "POST" && url.startsWith(TAKEOVER_PATH)) {
             void this.handleTakeoverRequest(res);
             return;
@@ -446,7 +503,7 @@ export class UxpBroker {
    * so `stop()`'s own `server.close()` callback resolves promptly too.
    */
     private async handleTakeoverRequest(res: http.ServerResponse): Promise<void> {
-        this.log("takeover requested by another window — stopping");
+        this.log.info("takeover requested by another window — stopping");
         await this.onBeforeTakeoverStop?.();
         const stopped = this.stop();
         res.writeHead(200, { "Content-Type": "application/json", Connection: "close" });
@@ -461,6 +518,13 @@ export class UxpBroker {
         socket: Duplex,
         head: Buffer,
     ): void {
+        if (!isLoopbackHost(req) || isBrowserOriginRequest(req)) {
+            this.log.warn("upgrade: rejected WebSocket upgrade with non-loopback Host or browser Origin");
+            socket.write("HTTP/1.1 403 Forbidden\r\n\r\n");
+            socket.destroy();
+            return;
+        }
+
         const url = req.url ?? "/";
 
         if (url.startsWith(CDT_SOCKET_PREFIX)) {
@@ -468,7 +532,7 @@ export class UxpBroker {
             const session = this.sessions.byClientId(clientSessionId);
             const connection = session ? this.connections.get(session.appConnectionId) : undefined;
             if (!session || !connection) {
-                this.log(`cdt: rejected frontend for unknown session "${clientSessionId}"`);
+                this.log.warn(`cdt: rejected frontend for unknown session "${clientSessionId}"`);
                 socket.write("HTTP/1.1 404 Not Found\r\n\r\n");
                 socket.destroy();
                 return;
@@ -493,7 +557,7 @@ export class UxpBroker {
 
     private registerAppConnection(connection: AppConnection): void {
         this.connections.set(connection.id, connection);
-        this.log(`app connection #${String(connection.id)} opened`);
+        this.log.info(`app connection #${String(connection.id)} opened`);
 
         connection.onReady.on((info) => {
             this.onAppConnected.emit({ connectionId: connection.id, info });
@@ -522,7 +586,7 @@ export class UxpBroker {
                     info: connection.appInfo,
                 });
             }
-            this.log(`app connection #${String(connection.id)} closed`);
+            this.log.info(`app connection #${String(connection.id)} closed`);
         });
     }
 
@@ -564,7 +628,7 @@ export class UxpBroker {
         }
         const remaining = this.appSettleMs - (Date.now() - connection.readyAtMs);
         if (remaining > 0) {
-            this.log(
+            this.log.info(
                 `waiting ${String(remaining)} ms for ${connection.appInfo?.appId ?? "app"} to finish `
                 + "initialising its devtools layer (connected moments ago)",
             );

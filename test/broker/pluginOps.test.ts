@@ -1,3 +1,4 @@
+import WebSocket from "ws";
 import { afterEach, describe, expect, it } from "vitest";
 import {
     RequestTimeoutError,
@@ -7,6 +8,14 @@ import {
 } from "../../src/core/errors";
 import type { UxpPluginManifest } from "../../src/core/protocol/types";
 import { type BrokerHarness, startBrokerHarness, waitForEvent } from "../fixtures/brokerHarness";
+
+function connectFrontend(port: number, clientSessionId: string): Promise<WebSocket> {
+    return new Promise((resolve, reject) => {
+        const ws = new WebSocket(`ws://127.0.0.1:${port}/socket/cdt/${clientSessionId}`);
+        ws.once("open", () => resolve(ws));
+        ws.once("error", reject);
+    });
+}
 
 const MANIFEST: UxpPluginManifest = {
     id: "com.example.demo",
@@ -292,5 +301,102 @@ describe("plugin operations", () => {
         expect(params.provider.path).toBe("C:\\scripts");
         expect(params.fileName).toBe("resize.psjs");
         expect(params.userArgs).toEqual([1920, { keepRatio: true }]);
+    });
+
+    it("replaces an existing session on duplicate loadPlugin for the same app and manifest", async () => {
+        harness = await startBrokerHarness();
+        const { app, connected } = await harness.connectApp();
+
+        const first = await harness.broker.loadPlugin(
+            connected.connectionId,
+            PLUGIN_DIR,
+            MANIFEST_PATH,
+            MANIFEST,
+        );
+        expect(harness.broker.liveSessions).toHaveLength(1);
+
+        const ended = waitForEvent(harness.broker.onSessionEnded);
+        const second = await harness.broker.loadPlugin(
+            connected.connectionId,
+            PLUGIN_DIR,
+            MANIFEST_PATH,
+            MANIFEST,
+        );
+        const endedSession = await ended;
+
+        expect(endedSession.clientSessionId).toBe(first.clientSessionId);
+        expect(second.clientSessionId).not.toBe(first.clientSessionId);
+        expect(harness.broker.liveSessions).toHaveLength(1);
+        expect(harness.broker.sessionsForManifest(MANIFEST_PATH)).toEqual([second]);
+
+        // Unloading the surviving session leaves zero ghost sessions behind.
+        app.sendUnloaded(second.hostSessionId);
+        await waitForEvent(harness.broker.onSessionEnded);
+        expect(harness.broker.liveSessions).toHaveLength(0);
+    });
+
+    it("re-notifies Plugin/cdtConnected when reloadPlugin returns a new hostSessionId while a tunnel is attached", async () => {
+        harness = await startBrokerHarness();
+        const { app, connected } = await harness.connectApp({
+            behaviors: { reload: () => ({ pluginSessionId: "fresh-host-id" }) },
+        });
+        const session = await harness.broker.loadPlugin(
+            connected.connectionId,
+            PLUGIN_DIR,
+            MANIFEST_PATH,
+            MANIFEST,
+        );
+
+        const frontend = await connectFrontend(harness.port, session.clientSessionId);
+        await app.waitForFrame(
+            (f) =>
+                f.command === "Plugin"
+                && f.action === "cdtConnected"
+                && f.pluginSessionId === session.hostSessionId,
+        );
+
+        await harness.broker.reloadPlugin(session.clientSessionId);
+
+        const reNotified = await app.waitForFrame(
+            (f) =>
+                f.command === "Plugin"
+                && f.action === "cdtConnected"
+                && f.pluginSessionId === "fresh-host-id",
+        );
+        expect(reNotified.pluginSessionId).toBe("fresh-host-id");
+
+        frontend.close();
+    });
+
+    it("ends a script session when its CDT frontend detaches or when the same script is re-run", async () => {
+        harness = await startBrokerHarness();
+        const { connected } = await harness.connectApp();
+
+        const firstRun = await harness.broker.runScript(
+            connected.connectionId,
+            "C:\\scripts",
+            "resize.psjs",
+            [],
+        );
+        expect(harness.broker.liveSessions).toHaveLength(1);
+
+        // Re-running the same script before attach replaces the previous session.
+        const secondRun = await harness.broker.runScript(
+            connected.connectionId,
+            "C:\\scripts",
+            "resize.psjs",
+            [],
+        );
+        expect(secondRun.clientSessionId).not.toBe(firstRun.clientSessionId);
+        expect(harness.broker.liveSessions).toEqual([secondRun]);
+
+        // Attaching and then detaching the CDT frontend ends the one-shot script session.
+        const frontend = await connectFrontend(harness.port, secondRun.clientSessionId);
+        const ended = waitForEvent(harness.broker.onSessionEnded);
+        frontend.close();
+
+        const endedSession = await ended;
+        expect(endedSession.clientSessionId).toBe(secondRun.clientSessionId);
+        expect(harness.broker.liveSessions).toHaveLength(0);
     });
 });

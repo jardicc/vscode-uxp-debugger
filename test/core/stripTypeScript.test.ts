@@ -8,6 +8,7 @@ import {
     cleanupAllStrippedScripts,
     stripTypeScript,
     stripTypeScriptFile,
+    toFileUrl,
 } from "../../src/core/stripTypeScript";
 
 describe("stripTypeScript", () => {
@@ -57,6 +58,18 @@ describe("stripTypeScript", () => {
         const js = "console.log(\"hello\");";
 
         expect(stripTypeScript(js, "test.ts").replace(/\r?\n$/, "")).toBe(js);
+    });
+});
+
+describe("toFileUrl", () => {
+    it("formats Windows drive paths with three slashes and forward slashes", () => {
+        expect(toFileUrl("A:\\plugins\\p\\original.ts")).toBe("file:///A:/plugins/p/original.ts");
+        expect(toFileUrl("A:/plugins/p/original.ts")).toBe("file:///A:/plugins/p/original.ts");
+    });
+
+    it("formats POSIX absolute paths with three slashes (not four)", () => {
+        expect(toFileUrl("/Users/alice/plugins/p/original.ts")).toBe("file:///Users/alice/plugins/p/original.ts");
+        expect(toFileUrl("///Users/alice/plugins/p/original.ts")).toBe("file:///Users/alice/plugins/p/original.ts");
     });
 });
 

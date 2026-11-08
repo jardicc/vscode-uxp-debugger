@@ -10,8 +10,31 @@ import * as fs from "fs";
 import type * as http from "http";
 import * as path from "path";
 import { URL } from "url";
+// import {
+//     injectInspectorClipboardShim,
+//     INSPECTOR_CLIPBOARD_SHIM_FILENAME,
+//     INSPECTOR_CLIPBOARD_SHIM_SCRIPT,
+// } from "./inspectorClipboardShim";
 
 export const INSPECTOR_STATIC_PATH_PREFIX = "/__uxp_debugger__/inspector/";
+export const INSPECTOR_ENTRYPOINT_HTML = "uxp_inspector_app.html";
+
+/**
+ * Content-Security-Policy served on bundled DevTools frontend responses.
+ * Strips external Google domains (`appspot.com`, `googleapis.com`) and
+ * wildcard `frame-src *` from the upstream DevTools HTML entrypoint so the
+ * self-hosted inspector can only execute local scripts and connect to loopback
+ * CDP WebSocket endpoints.
+ */
+export const INSPECTOR_CSP = [
+    "default-src 'self' devtools: data:;",
+    "style-src 'self' 'unsafe-inline' devtools:;",
+    "object-src 'none';",
+    "script-src 'self';",
+    "img-src 'self' data: blob:;",
+    "frame-src 'self' data:;",
+    "connect-src 'self' data: devtools: ws://127.0.0.1:*;",
+].join(" ");
 
 const CONTENT_TYPES: Record<string, string> = {
     ".html": "text/html; charset=utf-8",
@@ -40,14 +63,18 @@ export function createInspectorStaticHandler(
             res.writeHead(405).end();
             return true;
         }
-        serveFile(normalizedRoot, url, res);
+        serveFile(normalizedRoot, url, res, req.method);
         return true;
     };
 }
 
-function serveFile(rootDir: string, url: string, res: http.ServerResponse): void {
+function serveFile(rootDir: string, url: string, res: http.ServerResponse, method?: string): void {
     const parsed = new URL(url, "http://127.0.0.1");
     const relative = decodeURIComponent(parsed.pathname.slice(INSPECTOR_STATIC_PATH_PREFIX.length));
+    // if (relative === INSPECTOR_CLIPBOARD_SHIM_FILENAME) {
+    //     sendBuffer(res, CONTENT_TYPES[".js"], Buffer.from(INSPECTOR_CLIPBOARD_SHIM_SCRIPT, "utf8"), method);
+    //     return;
+    // }
     const filePath = path.normalize(path.join(rootDir, relative));
     // Reject path traversal outside rootDir (OWASP A01 — broken access control).
     if (filePath !== rootDir && !filePath.startsWith(rootDir + path.sep)) {
@@ -60,13 +87,38 @@ function serveFile(rootDir: string, url: string, res: http.ServerResponse): void
             return;
         }
         const contentType = CONTENT_TYPES[path.extname(filePath).toLowerCase()] ?? "application/octet-stream";
+        if (relative === INSPECTOR_ENTRYPOINT_HTML) {
+            fs.readFile(filePath, "utf8", (readErr, html) => {
+                if (readErr) {
+                    res.writeHead(500).end();
+                    return;
+                }
+                sendBuffer(res, contentType, Buffer.from(/* injectInspectorClipboardShim( */ html /* ) */, "utf8"), method);
+            });
+            return;
+        }
         // This build is edited/replaced in place during development (no versioned URLs) —
         // never let the webview's HTTP cache serve a stale copy across panel reopens.
         res.writeHead(200, {
             "Content-Type": contentType,
             "Content-Length": stat.size,
             "Cache-Control": "no-store",
+            "Content-Security-Policy": INSPECTOR_CSP,
         });
+        if (method === "HEAD") {
+            res.end();
+            return;
+        }
         fs.createReadStream(filePath).pipe(res);
     });
+}
+
+function sendBuffer(res: http.ServerResponse, contentType: string, body: Buffer, method?: string): void {
+    res.writeHead(200, {
+        "Content-Type": contentType,
+        "Content-Length": body.length,
+        "Cache-Control": "no-store",
+        "Content-Security-Policy": INSPECTOR_CSP,
+    });
+    res.end(method === "HEAD" ? undefined : body);
 }

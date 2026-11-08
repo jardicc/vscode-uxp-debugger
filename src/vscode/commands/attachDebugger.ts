@@ -18,7 +18,7 @@ import { loadWithDialogs, reportLoadResult } from "./loadPlugin";
 export async function attachDebuggerCommand(
     service: UxpService,
     debugManager: UxpDebugSessionManager,
-    output: vscode.OutputChannel,
+    output: vscode.LogOutputChannel,
     manifestPathArg: string,
     breakOnLoad = false,
 ): Promise<void> {
@@ -39,7 +39,7 @@ export async function attachDebuggerCommand(
     // No confirmation dialog — loadWithDialogs' own retry loop already
     // requires explicit user interaction (Retry / launch-app dialogs) to
     // continue, so this can't turn into an unattended infinite loop.
-        output.appendLine(`[attach] no live session for "${manifestPath}" — loading it automatically`);
+        output.info(`[attach] no live session for "${manifestPath}" — loading it automatically`);
         const result = await loadWithDialogs(service, manifestPath, output, breakOnLoad);
         if (!result) {
             return;

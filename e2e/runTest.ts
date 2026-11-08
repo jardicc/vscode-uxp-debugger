@@ -9,6 +9,15 @@
 
 import * as path from "path";
 import { runTests } from "@vscode/test-electron";
+import {
+    appendLogEntry,
+    createChildOutputStream,
+    createE2eLogFile,
+    E2E_CLI_RUNNER_ENV,
+    E2E_LOG_FILE_ENV,
+    formatLogBanner,
+    installConsoleToFileRedirect,
+} from "./e2eLog";
 
 async function main(): Promise<void> {
     // Cross-platform replacement for `set UXP_E2E_PHOTOSHOP=1` (see `test:e2e:live`);
@@ -25,16 +34,71 @@ async function main(): Promise<void> {
     // Allows the test suite to inspect the real VS Code webview DOM in a live Photoshop plugin session.
     const rendererCdpPort = process.env.UXP_E2E_RENDERER_CDP_PORT ?? "9333";
 
+    const logFilePath = createE2eLogFile(repoRoot);
+    process.env[E2E_LOG_FILE_ENV] = logFilePath;
+    process.env[E2E_CLI_RUNNER_ENV] = "1";
+
+    const writeTerminalLine = (line: string): void => {
+        process.stdout.write(`${line}\n`);
+    };
+    const writeTerminalError = (line: string): void => {
+        process.stderr.write(`${line}\n`);
+    };
+
+    const startBanner = formatLogBanner("start", logFilePath);
+    writeTerminalLine(startBanner);
+    appendLogEntry(
+        logFilePath,
+        `[e2e] E2E test run started (live=${process.env.UXP_E2E_PHOTOSHOP === "1"})`,
+        "info",
+    );
+    appendLogEntry(logFilePath, startBanner, "info");
+
+    let sawMochaOutput = false;
+    const stdoutStream = createChildOutputStream({
+        logFilePath,
+        defaultLevel: "info",
+        sourceTag: "vscode",
+        onTerminalLine: (line) => {
+            sawMochaOutput = true;
+            writeTerminalLine(line);
+        },
+    });
+    const stderrStream = createChildOutputStream({
+        logFilePath,
+        defaultLevel: "warn",
+        sourceTag: "vscode:stderr",
+        onTerminalLine: (line) => {
+            sawMochaOutput = true;
+            writeTerminalLine(line);
+        },
+    });
+
+    const restoreConsole = installConsoleToFileRedirect(logFilePath);
     try {
         await runTests({
             extensionDevelopmentPath,
             extensionTestsPath,
             launchArgs: [workspacePath, "--disable-extensions", `--remote-debugging-port=${rendererCdpPort}`],
+            stdout: stdoutStream,
+            stderr: stderrStream,
         });
     }
     catch (err) {
-        console.error("[e2e] test run failed:", err);
+        const errText = err instanceof Error ? err.stack ?? err.message : String(err);
+        appendLogEntry(logFilePath, `[e2e] test run failed: ${errText}`, "error");
+        if (!sawMochaOutput as boolean) {
+            writeTerminalError(`[e2e] test run failed before Mocha output: ${errText}`);
+        }
         process.exitCode = 1;
+    }
+    finally {
+        stdoutStream.flush();
+        stderrStream.flush();
+        restoreConsole();
+        const endBanner = formatLogBanner("end", logFilePath);
+        appendLogEntry(logFilePath, endBanner, "info");
+        writeTerminalLine(endBanner);
     }
 }
 
