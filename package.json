@@ -848,7 +848,7 @@
     "@types/ws": "^8.18.2",
     "@vscode/debugprotocol": "1.68.0",
     "@vscode/test-electron": "3.1.0",
-    "@vscode/vsce": "^3.9.2",
+    "@vscode/vsce": "^4.1.0",
     "devtools-protocol": "^0.0.1684464",
     "esbuild": "^0.28.2",
     "eslint": "^10.12.0",
