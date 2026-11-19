@@ -1,5 +1,13 @@
 # Changelog
 
+## [2.4.0](https://github.com/jardicc/vscode-uxp-debugger/compare/v2.3.0...v2.4.0) (2026-11-19)
+
+
+### New Features
+
+* add After Effects support to UXP Debugger and update documentation ([2491c47](https://github.com/jardicc/vscode-uxp-debugger/commit/2491c47d91ac3c0707784204da64a0590e05008d))
+* add After Effects support to UXP Debugger and update documentation ([6cfc279](https://github.com/jardicc/vscode-uxp-debugger/commit/6cfc2796eba1aed55260931040735f49414ac335))
+
 ## [2.3.0](https://github.com/jardicc/vscode-uxp-debugger/compare/v2.2.0...v2.3.0) (2026-11-08)
 
 
