@@ -855,7 +855,7 @@
     "mocha": "11.7.6",
     "typescript": "^6.0.3",
     "typescript-eslint": "^8.71.1",
-    "vitest": "^4.1.11"
+    "vitest": "^5.1.0"
   },
   "dependencies": {
     "@jridgewell/trace-mapping": "0.3.31",
