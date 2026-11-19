@@ -143,7 +143,7 @@ when **no host application at all** connected, then waits another `500 ms`. It d
 `false -> true` as a refresh mechanism.
 
 The same native module also exposes a separate `VulcanControlAdapter`, created lazily for installed
-application discovery and host-app launch. Photoshop, InDesign, Premiere Pro, and Media Encoder are
+application discovery and host-app launch. Photoshop, InDesign, Premiere Pro, Media Encoder, and After Effects are
 represented by the current host catalog. Both adapters follow a one-instance-per-process lifetime
 rule.
 
@@ -380,7 +380,7 @@ the external-client limitation are documented in [`UI-DEBUGGING.md`](UI-DEBUGGIN
 - Newly installed host-app versions may not appear until VS Code is restarted because native
   installed-app discovery is cached for the process lifetime.
 - Photoshop stable/beta SAP codes were confirmed from a real Vulcan specifier dump; the current
-  InDesign and Premiere Pro beta SAP codes are educated but unverified catalog entries. When more
+  InDesign, Premiere Pro, and After Effects beta SAP codes are educated but unverified catalog entries. When more
   than one channel/version is installed, launch selects the numerically newest candidate even when
   that candidate is a beta build.
 - Type-stripped TypeScript support is limited to one erasable script file; TypeScript plugins and

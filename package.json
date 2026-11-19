@@ -2,7 +2,7 @@
   "name": "uxpdebugger",
   "displayName": "UXP Debugger",
   "description": "Load, reload and debug Adobe UXP plugins and scripts (Photoshop, InDesign, …) directly from VS Code — no Adobe UXP Developer Tools required.",
-  "version": "2.3.0",
+  "version": "2.4.0",
   "author": "Jaroslav Bereza",
   "publisher": "JaroslavBereza",
   "pricing": "Free",
@@ -152,7 +152,7 @@
         "toolReferenceName": "uxpListInstalledApps",
         "canBeReferencedInPrompt": true,
         "icon": "$(list-unordered)",
-        "modelDescription": "Lists which cataloged Adobe host applications (Photoshop, InDesign, Premiere Pro) are installed on this machine and their versions, which are currently running as an OS process (even if not yet connected to the broker), and which are currently connected to the UXP broker. Use uxp_launch_host_app to start one that isn't running.",
+        "modelDescription": "Lists which cataloged Adobe host applications (Photoshop, InDesign, Premiere Pro, Media Encoder, After Effects) are installed on this machine and their versions, which are currently running as an OS process (even if not yet connected to the broker), and which are currently connected to the UXP broker. Use uxp_launch_host_app to start one that isn't running.",
         "inputSchema": {
           "type": "object",
           "properties": {}
