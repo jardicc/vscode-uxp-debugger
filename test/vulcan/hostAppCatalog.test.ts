@@ -43,6 +43,13 @@ describe("findCatalogHostApp / canonicalAppId / isSameHostApp", () => {
         expect(getUICodeByValue("ID")).toBe("ID");
         expect(getUICodeByValue("indesign")).toBe("ID");
         expect(getUICodeByValue("premierepro")).toBe("PR");
+        expect(getUICodeByValue("aftereffects")).toBe("AE");
+    });
+
+    it("includes After Effects in the catalog", () => {
+        expect(findCatalogHostApp("AfterEffects")?.value).toBe("aftereffects");
+        expect(isDebuggableApp("aftereffects", "27.0.0")).toBe(false);
+        expect(isDebuggableApp("aftereffects", "27.1.0")).toBe(true);
     });
 });
 

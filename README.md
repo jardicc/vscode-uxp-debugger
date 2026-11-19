@@ -2,7 +2,7 @@
 
 [#StandWithUkraine 🇺🇦](https://github.com/vshymanskyy/StandWithUkraine/blob/main/docs/README.md)
 
-Load, reload and debug **Adobe UXP plugins and scripts** (Photoshop, InDesign, Premiere Pro, Media Encoder) directly from VS Code — with full source-map support and **no Adobe UXP Developer Tools (UDT) required**.
+Load, reload and debug **Adobe UXP plugins and scripts** (Photoshop, InDesign, Premiere Pro, Media Encoder, After Effects) directly from VS Code — with full source-map support and **no Adobe UXP Developer Tools (UDT) required**.
 
 The extension hosts its own UDT-compatible service broker inside VS Code and announces it to Adobe applications over Vulcan IPC. Host applications connect straight to VS Code, which then loads your plugin and tunnels the Chrome DevTools Protocol to the built-in JS debugger.
 
@@ -25,7 +25,7 @@ Watch on YouTube: <https://www.youtube.com/watch?v=_f5EdNuN7YQ>
 ## Requirements
 
 - **VS Code** 1.99 or newer (desktop; Windows x64, macOS x64, or macOS Apple silicon)
-- An Adobe host application with UXP support: **Photoshop 23.2+**, **InDesign 18.5+**, **Premiere Pro 25.6+**, or **Media Encoder 27.0+**
+- An Adobe host application with UXP support: **Photoshop 23.2+**, **InDesign 18.5+**, **Premiere Pro 25.6+**, **Media Encoder 27.0+**, or **After Effects 27.1+**
 - **Adobe UXP Developer Tools app is NOT needed** — close it if it is running (it occupies port 14001)
 - Administrator rights once, to enable Adobe's machine-global developer mode (see below)
 

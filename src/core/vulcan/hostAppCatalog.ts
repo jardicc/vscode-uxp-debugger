@@ -42,8 +42,8 @@ export const HOST_APPS: readonly HostAppDescriptor[] = [
     { name: "InDesign Server", value: "IDS", uiCode: "IDS", sapCodes: ["AIS", "AISBETA"], minVersion: "18.5.0", scriptExtensions: [".idjs"], appIdAliases: ["indesignserver"] },
     { name: "Premiere Pro", value: "premierepro", uiCode: "PR", sapCodes: ["PPRO", "PPROBETA"], minVersion: "25.6.0" },
     { name: "Media Encoder", value: "ame", uiCode: "ME", sapCodes: ["AME", "AMEBETA"], minVersion: "27.0.0" },
+    { name: "After Effects", value: "aftereffects", uiCode: "AE", sapCodes: ["AEFT", "AEFTBETA"], minVersion: "27.1.0" },
 
-    // { name: "After Effects", value: "aftereffects", uiCode: "AE", sapCodes: ["AEFT", "AEFTBETA"], minVersion: "26.5.0" },
     // { name: "Lightroom Classic", value: "lightroomclassic", uiCode: "LRC", sapCodes: ["LTRM", "LTRMBETA"], minVersion: "15.4.1" },
     // { name: "Lightroom", value: "lightroom", uiCode: "LR", sapCodes: ["LRCC", "LRCCBETA"], minVersion: "9.4.1" },
     // { name: "Bridge", value: "adobebridge", uiCode: "BR", sapCodes: ["KBRG", "KBRGBETA"], minVersion: "7.0.0" },

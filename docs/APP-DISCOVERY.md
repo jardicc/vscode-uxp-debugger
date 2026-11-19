@@ -105,6 +105,7 @@ catalog contains:
 | InDesign | `ID` | `IDSN`, `IDSNBETA` |
 | Premiere Pro | `premierepro` | `PPRO`, `PPROBETA` |
 | Media Encoder | `ame` | `AME`, `AMEBETA` |
+| After Effects | `aftereffects` | `AEFT`, `AEFTBETA` |
 
 Adobe XD is not in the current catalog.
 
